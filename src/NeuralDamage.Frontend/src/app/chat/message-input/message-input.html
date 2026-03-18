@@ -1,0 +1,32 @@
+<div class="border-t border-border p-4">
+  <!-- Reply preview -->
+  @if (replyingTo(); as reply) {
+    <div hlmCard class="mb-2 flex items-center justify-between px-3 py-2 text-xs">
+      <span class="text-muted-foreground">
+        Replying to <span class="font-medium text-foreground">{{ reply.senderName }}</span>
+      </span>
+      <button hlmBtn variant="ghost" size="icon" class="h-5 w-5" (click)="onCancelReply()">✕</button>
+    </div>
+  }
+
+  <!-- Mention suggestions -->
+  @if (mentionSuggestions().length > 0) {
+    <div hlmCard class="mb-2 p-1 shadow-md">
+      @for (member of mentionSuggestions(); track member.id) {
+        <button hlmBtn variant="ghost" class="w-full justify-start text-sm">
+          {{ member.displayName }}
+        </button>
+      }
+    </div>
+  }
+
+  <!-- Input -->
+  <textarea
+    hlmTextarea
+    rows="1"
+    placeholder="Type a message..."
+    [ngModel]="content()"
+    (ngModelChange)="content.set($event)"
+    (keydown)="onKeydown($event)"
+  ></textarea>
+</div>

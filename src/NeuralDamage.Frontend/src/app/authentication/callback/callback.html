@@ -1,0 +1,13 @@
+<div class="flex h-screen items-center justify-center bg-background">
+  @if (error()) {
+    <div class="text-center">
+      <p class="text-destructive">{{ error() }}</p>
+      <a hlmBtn variant="link" routerLink="/login" class="mt-4">Back to login</a>
+    </div>
+  } @else {
+    <div class="flex items-center gap-2">
+      <hlm-spinner />
+      <p class="text-muted-foreground">Authenticating...</p>
+    </div>
+  }
+</div>

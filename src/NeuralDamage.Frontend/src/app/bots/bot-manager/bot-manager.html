@@ -1,0 +1,69 @@
+<div class="flex h-full flex-col border-l border-border bg-card">
+  <!-- Header -->
+  <div class="flex items-center justify-between p-4">
+    <h3 class="text-lg font-semibold text-foreground">Manage Members</h3>
+    <button hlmBtn variant="ghost" size="icon" (click)="close.emit()">✕</button>
+  </div>
+
+  <hlm-separator />
+
+  <div class="flex-1 overflow-y-auto p-4">
+    <!-- Users in chat -->
+    <section class="mb-6">
+      <h4 class="mb-2 text-sm font-medium text-muted-foreground">Users</h4>
+      @for (member of usersInChat(); track member.id) {
+        <div class="flex items-center justify-between py-2">
+          <span class="text-sm text-foreground">{{ member.displayName }}</span>
+        </div>
+      }
+    </section>
+
+    <!-- Bots in chat -->
+    <section class="mb-6">
+      <h4 class="mb-2 text-sm font-medium text-muted-foreground">Bots in Chat</h4>
+      @for (member of botsInChat(); track member.id) {
+        <div class="flex items-center justify-between py-2">
+          <span class="text-sm text-foreground">{{ member.displayName }}</span>
+          <button hlmBtn variant="destructive" size="sm" (click)="removeBot(member.id)">Remove</button>
+        </div>
+      } @empty {
+        <p class="text-xs text-muted-foreground">No bots in this chat</p>
+      }
+    </section>
+
+    <hlm-separator />
+
+    <!-- Available bots -->
+    <section class="mt-4">
+      <div class="mb-2 flex items-center justify-between">
+        <h4 class="text-sm font-medium text-muted-foreground">Available Bots</h4>
+        <button hlmBtn variant="outline" size="sm" (click)="openBotForm()">+ Create</button>
+      </div>
+      <input
+        hlmInput
+        class="mb-2 w-full"
+        placeholder="Search bots..."
+        [value]="searchQuery()"
+        (input)="searchQuery.set($any($event.target).value)"
+      />
+      @for (bot of availableBots(); track bot.id) {
+        <div class="flex items-center justify-between py-2">
+          <div>
+            <span class="text-sm text-foreground">{{ bot.name }}</span>
+            <span class="ml-2 text-xs text-muted-foreground">{{ bot.modelId }}</span>
+          </div>
+          <div class="flex gap-1">
+            <button hlmBtn variant="default" size="sm" (click)="addBot(bot.id)">Add</button>
+            <button hlmBtn variant="ghost" size="sm" (click)="openBotForm(bot)">Edit</button>
+            <button hlmBtn variant="destructive" size="sm" (click)="deleteBot(bot.id)">Delete</button>
+          </div>
+        </div>
+      }
+    </section>
+  </div>
+
+  <!-- Bot form dialog -->
+  @if (showBotForm()) {
+    <app-bot-form [bot]="editingBot()" (saved)="closeBotForm()" (cancel)="closeBotForm()" />
+  }
+</div>

@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/@openapitools/openapi-generator-cli/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.11.0",
+    "generators": {
+      "neuraldamage-api": {
+        "generatorName": "typescript-angular",
+        "inputSpec": "http://localhost:5012/swagger/v1/swagger.json",
+        "output": "#{cwd}/src/app/api"
+      }
+    }
+  }
+}

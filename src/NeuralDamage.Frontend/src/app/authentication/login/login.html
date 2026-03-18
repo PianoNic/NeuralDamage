@@ -1,0 +1,18 @@
+<div class="flex h-screen items-center justify-center bg-background">
+  <div hlmCard class="w-full max-w-sm">
+    <div hlmCardHeader class="text-center">
+      <h1 hlmCardTitle>NeuralDamage</h1>
+      <p hlmCardDescription>Sign in to continue</p>
+    </div>
+    <div hlmCardContent>
+      <button hlmBtn class="w-full" [disabled]="loading()" (click)="login()">
+        @if (loading()) {
+          <hlm-spinner class="mr-2" />
+          Signing in...
+        } @else {
+          Sign in with Pocket ID
+        }
+      </button>
+    </div>
+  </div>
+</div>

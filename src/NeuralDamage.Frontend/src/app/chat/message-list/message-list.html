@@ -1,0 +1,9 @@
+<div class="flex h-full flex-col-reverse overflow-y-auto px-4 py-2">
+  @for (message of messages(); track message.id) {
+    <app-message-bubble [message]="message" (reply)="onReply($event)" />
+  } @empty {
+    <div class="flex flex-1 items-center justify-center">
+      <p class="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+    </div>
+  }
+</div>

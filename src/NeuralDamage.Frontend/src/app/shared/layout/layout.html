@@ -1,0 +1,25 @@
+<div class="flex h-screen overflow-hidden bg-background">
+  <!-- Mobile overlay -->
+  @if (sidebarOpen()) {
+    <div class="fixed inset-0 z-20 bg-black/50 md:hidden" (click)="closeSidebar()"></div>
+  }
+
+  <!-- Sidebar -->
+  <app-sidebar
+    class="z-30 transition-transform duration-200 md:translate-x-0"
+    [class.max-md:-translate-x-full]="!sidebarOpen()"
+    [class.max-md:translate-x-0]="sidebarOpen()"
+  />
+
+  <!-- Main content -->
+  <main class="flex flex-1 flex-col overflow-hidden">
+    <!-- Mobile header -->
+    <div class="flex items-center border-b border-border p-2 md:hidden">
+      <button hlmBtn variant="ghost" size="icon" (click)="toggleSidebar()">
+        <span class="text-lg">☰</span>
+      </button>
+    </div>
+
+    <router-outlet />
+  </main>
+</div>

@@ -1,0 +1,43 @@
+<div class="group flex gap-3 px-2 py-1.5 hover:bg-accent/50">
+  <!-- Avatar -->
+  <hlm-avatar class="h-8 w-8">
+    <span hlmAvatarFallback class="text-xs">{{ senderInitial() }}</span>
+  </hlm-avatar>
+
+  <div class="min-w-0 flex-1">
+    <!-- Sender info -->
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-medium text-foreground">{{ message().senderName }}</span>
+      @if (isBot()) {
+        <span hlmBadge variant="secondary" class="text-[10px]">BOT</span>
+      }
+      <span class="text-xs text-muted-foreground">{{ message().createdAt }}</span>
+    </div>
+
+    <!-- Reply quote -->
+    @if (hasReply()) {
+      <div hlmCard class="mt-1 border-l-2 border-primary/50 px-2 py-1 text-xs text-muted-foreground">
+        <span class="font-medium">{{ message().replyTo!.senderName }}</span>:
+        {{ message().replyTo!.content }}
+      </div>
+    }
+
+    <!-- Message content -->
+    <p class="mt-0.5 text-sm text-foreground">{{ message().content }}</p>
+
+    <!-- Reactions -->
+    @if (hasReactions()) {
+      <app-reaction-bar
+        class="mt-1"
+        [reactions]="message().reactions"
+        (toggleReaction)="toggleReaction($event)"
+      />
+    }
+
+    <!-- Hover actions -->
+    <div class="invisible mt-0.5 flex gap-1 group-hover:visible">
+      <button hlmBtn variant="ghost" size="sm" class="h-6 px-2 text-xs" (click)="onReply()">Reply</button>
+      <button hlmBtn variant="ghost" size="sm" class="h-6 px-2 text-xs">React</button>
+    </div>
+  </div>
+</div>

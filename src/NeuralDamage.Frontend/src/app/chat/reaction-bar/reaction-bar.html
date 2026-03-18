@@ -1,0 +1,8 @@
+<div class="flex flex-wrap gap-1">
+  @for (reaction of reactions(); track reaction.emoji) {
+    <button hlmBtn variant="outline" size="sm" class="h-6 rounded-full px-2 text-xs" (click)="onToggle(reaction.emoji)">
+      <span>{{ reaction.emoji }}</span>
+      <span class="text-muted-foreground">{{ reaction.count }}</span>
+    </button>
+  }
+</div>
