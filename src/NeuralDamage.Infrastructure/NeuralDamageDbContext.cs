@@ -8,6 +8,11 @@ namespace NeuralDamage.Infrastructure;
 public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> options) : DbContext(options), INeuralDamageDbContext
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<Bot> Bots => Set<Bot>();
+    public DbSet<Chat> Chats => Set<Chat>();
+    public DbSet<ChatMember> ChatMembers => Set<ChatMember>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<Reaction> Reactions => Set<Reaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(NeuralDamageDbContext).Assembly);
 
