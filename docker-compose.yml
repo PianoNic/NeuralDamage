@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: changeme
       POSTGRES_DB: neuraldamage
     volumes:
-      - db-data:/var/lib/postgresql
+      - ./data/postgres:/var/lib/postgresql
     ports:
       - "5432:5432"
     healthcheck:
@@ -39,5 +39,3 @@ services:
     depends_on:
       - api
 
-volumes:
-  db-data:

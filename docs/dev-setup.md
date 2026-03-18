@@ -30,6 +30,16 @@ dotnet tool install --global dotnet-ef
 docker compose -f compose.dev.yml up -d
 ```
 
+This starts a PostgreSQL 18 instance with the following credentials:
+
+| Setting  | Value          |
+|----------|----------------|
+| Host     | `localhost`    |
+| Port     | `5434`         |
+| Database | `neuraldamage` |
+| Username | `postgres`     |
+| Password | `postgres`     |
+
 #### Option B: Local PostgreSQL
 
 Create a database named `neuraldamage` in your existing PostgreSQL installation.
@@ -41,7 +51,7 @@ Create a database named `neuraldamage` in your existing PostgreSQL installation.
 ```bash
 cd src/NeuralDamage.API
 dotnet user-secrets init
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=neuraldamage;Username=postgres;Password=postgres"
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5434;Database=neuraldamage;Username=postgres;Password=postgres"
 dotnet user-secrets set "Oidc:Authority" "https://your-oidc-provider.com"
 dotnet user-secrets set "Oidc:ClientId" "your-client-id"
 dotnet user-secrets set "Oidc:RedirectUri" "http://localhost:4200/callback"
@@ -57,7 +67,7 @@ Right-click on `NeuralDamage.API` project in Solution Explorer, select **Manage 
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=neuraldamage;Username=postgres;Password=postgres"
+    "DefaultConnection": "Host=localhost;Port=5434;Database=neuraldamage;Username=postgres;Password=postgres"
   },
   "Oidc": {
     "Authority": "https://your-oidc-provider.com",
@@ -76,7 +86,7 @@ Create a `.env` file in the project root:
 
 ```env
 # Database
-ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=neuraldamage;Username=postgres;Password=postgres
+ConnectionStrings__DefaultConnection=Host=localhost;Port=5434;Database=neuraldamage;Username=postgres;Password=postgres
 
 # OIDC Provider
 Oidc__Authority=https://your-oidc-provider.com
@@ -227,7 +237,7 @@ The backend follows **Clean Architecture**:
 
 - Backend default: 5012 (change in `Properties/launchSettings.json`)
 - Frontend default: 4200
-- Database default: 5432
+- Database default: 5434 (mapped from container port 5432)
 
 ## Additional Resources
 

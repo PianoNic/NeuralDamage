@@ -22,9 +22,6 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
         else
             logger.LogWarning(exception, "Handled exception: {ExceptionType} - {Message}", exception.GetType().Name, exception.Message);
 
-        string? correlationId = httpContext.Items["CorrelationId"]?.ToString();
-        if (correlationId is not null) problemDetails.Extensions["correlationId"] = correlationId;
-
         httpContext.Response.StatusCode = problemDetails.Status!.Value;
         await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
         return true;

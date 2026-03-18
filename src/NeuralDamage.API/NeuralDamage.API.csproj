@@ -6,7 +6,8 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 		<DockerfileContext>.</DockerfileContext>
-	</PropertyGroup>
+	  <UserSecretsId>38313c8e-e3a5-45ff-be0f-e5779ace5caa</UserSecretsId>
+  </PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="FluentValidation" Version="12.1.1" />
