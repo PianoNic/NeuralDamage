@@ -1,0 +1,15 @@
+services:
+  dev-db:
+    image: postgres:18
+    container_name: neuraldamage-postgres-dev
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: neuraldamage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data-dev:/var/lib/postgresql
+
+volumes:
+  postgres-data-dev:

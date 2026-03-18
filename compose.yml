@@ -1,13 +1,13 @@
 services:
   db:
-    image: postgres:18
+    image: postgres:17
     container_name: neuraldamage-db
     environment:
       POSTGRES_USER: neuraldamage
       POSTGRES_PASSWORD: changeme
       POSTGRES_DB: neuraldamage
     volumes:
-      - db-data:/var/lib/postgresql
+      - db-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
