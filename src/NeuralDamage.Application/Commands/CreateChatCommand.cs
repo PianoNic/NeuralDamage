@@ -1,5 +1,4 @@
 using Mediator;
-using NeuralDamage.Application.Dtos;
 using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Application.Mappers;
 using NeuralDamage.Application.Models;
@@ -8,11 +7,11 @@ using NeuralDamage.Domain.Enums;
 
 namespace NeuralDamage.Application.Commands;
 
-public record CreateChatCommand(string Name, Guid CreatedById) : ICommand<Result<ChatDto>>;
+public record CreateChatCommand(string Name, Guid CreatedById) : ICommand<Result>;
 
-public class CreateChatHandler(INeuralDamageDbContext db) : ICommandHandler<CreateChatCommand, Result<ChatDto>>
+public class CreateChatHandler(INeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<CreateChatCommand, Result>
 {
-    public async ValueTask<Result<ChatDto>> Handle(CreateChatCommand request, CancellationToken cancellationToken)
+    public async ValueTask<Result> Handle(CreateChatCommand request, CancellationToken cancellationToken)
     {
         var chat = new Chat { Name = request.Name, CreatedById = request.CreatedById };
         db.Chats.Add(chat);
@@ -22,6 +21,7 @@ public class CreateChatHandler(INeuralDamageDbContext db) : ICommandHandler<Crea
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result<ChatDto>.Success(chat.ToDto());
+        await notifications.NotifyUserChatCreated(request.CreatedById, chat.ToDto());
+        return Result.Success();
     }
 }

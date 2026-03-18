@@ -16,7 +16,7 @@ public class MessagesController(ISender sender, IUserResolverService userResolve
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new SendMessageCommand(chatId, userId, request.Content, request.ReplyToId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpGet]

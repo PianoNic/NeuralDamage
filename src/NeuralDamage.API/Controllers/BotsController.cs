@@ -16,7 +16,7 @@ public class BotsController(ISender sender, IUserResolverService userResolver) :
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new CreateBotCommand(request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.AvatarUrl, request.Aliases, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpGet]
@@ -38,7 +38,7 @@ public class BotsController(ISender sender, IUserResolverService userResolver) :
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new UpdateBotCommand(botId, userId, request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.AvatarUrl, request.Aliases, request.IsActive), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpDelete("{botId:guid}")]
@@ -46,7 +46,7 @@ public class BotsController(ISender sender, IUserResolverService userResolver) :
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new DeleteBotCommand(botId, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpGet("models")]

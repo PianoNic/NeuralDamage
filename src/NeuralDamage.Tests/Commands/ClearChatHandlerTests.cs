@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
+using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
+using NSubstitute;
 
 namespace NeuralDamage.Tests.Commands;
 
@@ -22,7 +24,7 @@ public class ClearChatHandlerTests
         db.Messages.Add(new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "msg 3" });
         await db.SaveChangesAsync();
 
-        var handler = new ClearChatHandler(db);
+        var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new ClearChatCommand(chat.Id, user.Id), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -43,7 +45,7 @@ public class ClearChatHandlerTests
         db.Messages.Add(new Message { ChatId = chat.Id, SenderUserId = owner.Id, Content = "msg" });
         await db.SaveChangesAsync();
 
-        var handler = new ClearChatHandler(db);
+        var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new ClearChatCommand(chat.Id, member.Id), CancellationToken.None);
 
         Assert.True(result.IsFailure);

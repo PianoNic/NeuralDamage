@@ -7,18 +7,12 @@ using NeuralDamage.Application.Interfaces;
 namespace NeuralDamage.API.Hubs;
 
 [Authorize]
-public class ChatHub(IConnectionTracker connectionTracker, INeuralDamageDbContext db) : Hub<IChatClient>
+public class ChatHub(INeuralDamageDbContext db) : Hub<IChatClient>
 {
     public override async Task OnConnectedAsync()
     {
         var userId = GetUserId();
-        if (userId == null)
-        {
-            Context.Abort();
-            return;
-        }
-
-        connectionTracker.TrackConnection(Context.ConnectionId, userId.Value);
+        if (userId == null) { Context.Abort(); return; }
 
         var chatIds = await db.ChatMembers
             .Where(cm => cm.UserId == userId.Value)
@@ -29,12 +23,6 @@ public class ChatHub(IConnectionTracker connectionTracker, INeuralDamageDbContex
             await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
 
         await base.OnConnectedAsync();
-    }
-
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        connectionTracker.RemoveConnection(Context.ConnectionId);
-        await base.OnDisconnectedAsync(exception);
     }
 
     public async Task JoinChat(Guid chatId)
@@ -51,7 +39,6 @@ public class ChatHub(IConnectionTracker connectionTracker, INeuralDamageDbContex
     {
         var sub = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? Context.User?.FindFirstValue("sub");
-
         return Guid.TryParse(sub, out var id) ? id : null;
     }
 }

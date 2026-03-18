@@ -14,7 +14,7 @@ public class ChatActionsController(ISender sender, IUserResolverService userReso
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new ClearChatCommand(chatId, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpPost("kick/{botId:guid}")]
@@ -22,6 +22,6 @@ public class ChatActionsController(ISender sender, IUserResolverService userReso
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new KickBotCommand(chatId, botId, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 }

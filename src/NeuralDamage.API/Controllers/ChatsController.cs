@@ -16,7 +16,7 @@ public class ChatsController(ISender sender, IUserResolverService userResolver) 
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new CreateChatCommand(request.Name, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpGet]
@@ -40,7 +40,7 @@ public class ChatsController(ISender sender, IUserResolverService userResolver) 
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new UpdateChatCommand(chatId, request.Name, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpDelete("{chatId:guid}")]
@@ -48,6 +48,6 @@ public class ChatsController(ISender sender, IUserResolverService userResolver) 
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new DeleteChatCommand(chatId, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 }

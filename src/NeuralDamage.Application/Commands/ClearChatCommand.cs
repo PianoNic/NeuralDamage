@@ -8,7 +8,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record ClearChatCommand(Guid ChatId, Guid RequestingUserId) : ICommand<Result>;
 
-public class ClearChatHandler(INeuralDamageDbContext db) : ICommandHandler<ClearChatCommand, Result>
+public class ClearChatHandler(INeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<ClearChatCommand, Result>
 {
     public async ValueTask<Result> Handle(ClearChatCommand request, CancellationToken cancellationToken)
     {
@@ -20,6 +20,7 @@ public class ClearChatHandler(INeuralDamageDbContext db) : ICommandHandler<Clear
         db.Messages.RemoveRange(messages);
         await db.SaveChangesAsync(cancellationToken);
 
+        await notifications.NotifyChatCleared(request.ChatId);
         return Result.Success();
     }
 }

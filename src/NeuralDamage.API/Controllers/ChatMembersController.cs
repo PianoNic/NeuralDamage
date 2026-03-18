@@ -15,7 +15,7 @@ public class ChatMembersController(ISender sender, IUserResolverService userReso
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new AddMemberCommand(chatId, request.UserId, request.BotId, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
     [HttpDelete("{memberId:guid}")]
@@ -23,6 +23,6 @@ public class ChatMembersController(ISender sender, IUserResolverService userReso
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new RemoveMemberCommand(chatId, memberId, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 }

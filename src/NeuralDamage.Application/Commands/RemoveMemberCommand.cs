@@ -27,10 +27,15 @@ public class RemoveMemberHandler(INeuralDamageDbContext db, IChatNotificationSer
         if (member.Role == ChatMemberRole.Owner)
             return Result.Failure("Cannot remove the chat owner.");
 
+        var removedUserId = member.UserId;
         db.ChatMembers.Remove(member);
         await db.SaveChangesAsync(cancellationToken);
 
         await notifications.NotifyMemberRemoved(request.ChatId, request.MemberId);
+
+        if (removedUserId is not null)
+            await notifications.NotifyUserChatLeft(removedUserId.Value, request.ChatId);
+
         return Result.Success();
     }
 }

@@ -153,6 +153,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NeuralDamage.API.Hubs.ChatHub>("/hubs/chat");
+app.MapHub<NeuralDamage.API.Hubs.UserHub>("/hubs/user");
 
 if (!app.Environment.IsDevelopment())
 {

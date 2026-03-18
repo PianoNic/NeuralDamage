@@ -4,8 +4,15 @@ namespace NeuralDamage.Application.Interfaces;
 
 public interface IChatNotificationService
 {
+    // User-level (via UserHub)
+    Task NotifyUserChatCreated(Guid userId, ChatDto chat);
+    Task NotifyUserChatJoined(Guid userId, ChatDetailDto chat);
+    Task NotifyUserChatLeft(Guid userId, Guid chatId);
+
+    // Chat group (via ChatHub)
     Task NotifyChatUpdated(Guid chatId, ChatDto chat);
     Task NotifyChatDeleted(Guid chatId);
+    Task NotifyChatCleared(Guid chatId);
     Task NotifyMessageNew(Guid chatId, MessageDto message);
     Task NotifyMemberAdded(Guid chatId, ChatMemberDto member);
     Task NotifyMemberRemoved(Guid chatId, Guid memberId);

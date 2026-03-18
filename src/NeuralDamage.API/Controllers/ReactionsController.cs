@@ -14,6 +14,6 @@ public class ReactionsController(ISender sender, IUserResolverService userResolv
     {
         var userId = await userResolver.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new ToggleReactionCommand(chatId, messageId, emoji, userId), ct);
-        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 }
