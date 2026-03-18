@@ -20,6 +20,7 @@ builder.Services.AddScoped<INeuralDamageDbContext>(sp => sp.GetRequiredService<N
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IUserSyncService, UserSyncService>();
+builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 
 // Mediator & Validation
 builder.Services.AddMediator(options => { options.ServiceLifetime = ServiceLifetime.Scoped; });
