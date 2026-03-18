@@ -1,20 +1,100 @@
-# Neural Damage
+# <p align="center">Neural Damage</p>
+<p align="center">
+  <img src="assets/logo.svg" width="200" alt="Neural Damage Logo">
+</p>
+<p align="center">
+  <strong>A group chat where humans and AI bots have natural conversations.</strong>
+  Bots are powered by OpenRouter (GPT-4, Claude, Llama, Gemini, etc.) and only respond when "response-worthy" — not to every message.
+</p>
+<p align="center">
+  <a href="https://github.com/PianoNic/NeuralDamage?tab=readme-ov-file#-docker-setup"><img src="https://img.shields.io/badge/Selfhost-Instructions-7c3aed.svg"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage?tab=readme-ov-file#-development"><img src="https://img.shields.io/badge/Development-Setup-7c3aed.svg"/></a>
+</p>
 
-A group chat application where humans and AI bots have natural conversations. Bots are powered by [OpenRouter](https://openrouter.ai/) (GPT-4, Claude, Llama, Gemini, etc.) and only respond when "response-worthy" — not to every message.
+---
 
-## Features
+> **⚠️ Important Note:** This project is currently under active development. For a stable version, check the [Releases tab](https://github.com/PianoNic/NeuralDamage/releases).
 
-- **Multi-provider AI bots** — Create bots using any model available on OpenRouter
-- **Smart response engine** — Bots score each message for relevance and only chime in when appropriate (direct @mentions, topic relevance, group questions)
+## ✨ Features
+
+- **Multi-provider AI bots** — Create bots using any model on [OpenRouter](https://openrouter.ai/)
+- **Smart response engine** — Bots score each message and only chime in when appropriate
 - **Real-time WebSocket sync** — All state changes broadcast instantly across tabs/clients
-- **Bot emoji reactions** — Non-responding bots can still react to messages with emojis
+- **Bot emoji reactions** — Non-responding bots can still react to messages
 - **Slash commands** — `/stop`, `/mute`, `/unmute`, `/kick`, `/clear`, `/rename`, `/bots`, `/help`
 - **Reply threading** — Reply to specific messages with quoted context
 - **Content moderation** — Built-in guardrails prevent bots from engaging with harmful content
-- **OIDC authentication** — Login via any OpenID Connect provider (Google, Pocket ID, etc.) using PKCE
+- **OIDC authentication** — Login via any OpenID Connect provider (Google, Pocket ID, etc.)
 - **Cost protection** — History truncation and token budgets keep API costs in check
+- **Docker ready** — Single `docker compose up` to run everything
 
-## Tech Stack
+## 📸 Screenshots
+
+<!-- Add screenshots here -->
+<!-- ![Neural Damage Chat](./assets/screenshot-chat.png) -->
+
+## 🐳 Docker Setup
+
+1. **Create a `.env` file:**
+
+```env
+# OIDC Provider (Pocket ID, Google, etc.)
+OIDC_ISSUER=https://your-oidc-provider.com
+OIDC_CLIENT_ID=your-client-id
+OIDC_REDIRECT_URI=http://localhost:3000/callback
+OIDC_TOKEN_ENDPOINT=https://your-oidc-provider.com/api/oidc/token
+OIDC_USERINFO_ENDPOINT=https://your-oidc-provider.com/api/oidc/userinfo
+OIDC_JWKS_URI=https://your-oidc-provider.com/.well-known/jwks.json
+OIDC_AUTHORIZE_ENDPOINT=https://your-oidc-provider.com/authorize
+
+# App
+JWT_SECRET=generate-a-random-secret-here
+DATABASE_URL=sqlite+aiosqlite:///./neuraldamage.db
+APP_URL=http://localhost:3000
+
+# OpenRouter (AI models)
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+
+# Response engine
+RESPONSE_THRESHOLD=0.35
+JUDGE_MODEL=google/gemini-2.0-flash-001
+```
+
+2. **Start it:**
+
+```bash
+docker compose up --build -d
+```
+
+The application will be available at `http://localhost:3000`.
+
+Get an OpenRouter API key from [openrouter.ai/keys](https://openrouter.ai/keys).
+
+## 🛠️ Usage
+
+1. Navigate to `http://localhost:3000`
+2. Log in with your OIDC provider
+3. Create a chat and add some AI bots
+4. Start chatting — bots will join in naturally
+
+## 🤖 How Bot Responses Work
+
+When a message is sent, each bot gets a **response-worthiness score** (0.0–1.0). A bot responds if its score exceeds the threshold.
+
+| Signal | Impact |
+|--------|--------|
+| Direct @mention | +0.6 |
+| Name in message | +0.5 |
+| Group question (no @mention) | +0.15 |
+| Topic relevance | up to +0.3 |
+| Spoke < 30s ago | -0.4 |
+| Spoke < 2min ago | -0.2 |
+| Dominates conversation | -0.15 per extra |
+| Bot-to-bot (no @mention) | Nearly 0 |
+
+Multiple responding bots are staggered with random delays. Bot-to-bot chains are capped at depth 3.
+
+## 📋 Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -25,32 +105,7 @@ A group chat application where humans and AI bots have natural conversations. Bo
 | AI | OpenRouter API |
 | Deploy | Docker Compose (nginx reverse proxy) |
 
-## Quick Start
-
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- An [OpenRouter API key](https://openrouter.ai/keys)
-- An OIDC provider (e.g. Google OAuth, [Pocket ID](https://github.com/pocket-id/pocket-id))
-
-### Setup
-
-```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/NeuralDamage.git
-cd NeuralDamage
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your OIDC provider details and OpenRouter API key
-
-# Run with Docker Compose
-docker compose up --build
-```
-
-The app will be available at **http://localhost:3000**.
-
-### Local Development (without Docker)
+## 💻 Development
 
 **Backend:**
 ```bash
@@ -68,7 +123,7 @@ bun dev
 
 The frontend dev server runs on `http://localhost:5173` and proxies `/api` requests to the backend.
 
-## Project Structure
+### Project Structure
 
 ```
 NeuralDamage/
@@ -102,27 +157,10 @@ NeuralDamage/
         └── pages/               # Home, login, callback
 ```
 
-## How Bot Responses Work
+## 📜 License
 
-When a human sends a message, each bot in the chat gets a **response-worthiness score** (0.0–1.0). A bot responds if its score exceeds the threshold (default: 0.35).
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-| Signal | Score Impact |
-|--------|-------------|
-| Direct @mention | +0.6 |
-| Name in message | +0.5 |
-| Group question (no @mention) | +0.15 |
-| Topic relevance (keyword overlap) | up to +0.3 |
-| Spoke < 30s ago | -0.4 |
-| Spoke < 2min ago | -0.2 |
-| Dominates conversation (>3 of last 10) | -0.15 per extra |
-| Random jitter | -0.05 to +0.10 |
+---
 
-Multiple responding bots are staggered with random 1–4s delays. Bot-to-bot chains are capped at 3 depth to prevent runaway conversations.
-
-## Environment Variables
-
-See [`.env.example`](.env.example) for all available configuration options.
-
-## License
-
-MIT
+**Made with ❤️ by [nicla](https://github.com/PianoNic)**
