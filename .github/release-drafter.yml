@@ -1,3 +1,4 @@
+# Release Drafter config for NeuralDamage
 name-template: 'v$RESOLVED_VERSION'
 
 categories:
@@ -17,21 +18,6 @@ categories:
 change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
 
 no-changes-template: 'No changes in this release.'
-
-version-resolver:
-  major:
-    labels:
-      - 'major'
-      - 'breaking'
-  minor:
-    labels:
-      - 'feature'
-  patch:
-    labels:
-      - 'bug'
-      - 'refactor'
-      - 'enhancement'
-  default: patch
 
 template: |
   ## What's Changed

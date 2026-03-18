@@ -1,0 +1,18 @@
+name: Setup Labels
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          gh label create "bug" --color "d73a4a" --description "Something isn't working" --repo "$REPO" --force
+          gh label create "enhancement" --color "a2eeef" --description "New feature or request" --repo "$REPO" --force
+          gh label create "feature" --color "0052cc" --description "" --repo "$REPO" --force
+          gh label create "refactor" --color "fbca04" --description "" --repo "$REPO" --force
