@@ -11,6 +11,8 @@ namespace NeuralDamage.Tests.Commands;
 public class SendMessageHandlerTests
 {
     private static IChatNotificationService MockNotifications() => Substitute.For<IChatNotificationService>();
+    private static IBotResponseOrchestrator MockOrchestrator() => Substitute.For<IBotResponseOrchestrator>();
+    private static IBotResponseQueue MockQueue() => Substitute.For<IBotResponseQueue>();
 
     private static async Task<(NeuralDamage.Infrastructure.NeuralDamageDbContext db, User user, Chat chat)> SetupChatWithMember()
     {
@@ -31,7 +33,7 @@ public class SendMessageHandlerTests
         using var _ = db;
         var notifications = MockNotifications();
 
-        var handler = new SendMessageHandler(db, notifications);
+        var handler = new SendMessageHandler(db, notifications, MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Hello world"), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -51,7 +53,7 @@ public class SendMessageHandlerTests
         db.Messages.Add(original);
         await db.SaveChangesAsync();
 
-        var handler = new SendMessageHandler(db, MockNotifications());
+        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Reply", original.Id), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -69,7 +71,7 @@ public class SendMessageHandlerTests
         db.Users.Add(outsider);
         await db.SaveChangesAsync();
 
-        var handler = new SendMessageHandler(db, MockNotifications());
+        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, outsider.Id, "Sneaky"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -82,7 +84,7 @@ public class SendMessageHandlerTests
         var (db, user, chat) = await SetupChatWithMember();
         using var _ = db;
 
-        var handler = new SendMessageHandler(db, MockNotifications());
+        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Reply", Guid.NewGuid()), CancellationToken.None);
 
         Assert.True(result.IsFailure);

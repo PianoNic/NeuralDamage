@@ -5,6 +5,7 @@ using Microsoft.OpenApi;
 using NeuralDamage.API.Middleware;
 using NeuralDamage.API.Services;
 using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Application.Services.BotDecision;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Services;
 using System.Text.Json.Serialization;
@@ -24,6 +25,12 @@ builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IUserResolverService, UserResolverService>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
 builder.Services.AddScoped<IOpenRouterService, SemanticKernelService>();
+builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
+builder.Services.AddScoped<NeuralDamage.Application.Services.BotDecision.Tier3LlmJudge>();
+builder.Services.AddSingleton<BotResponseQueue>();
+builder.Services.AddSingleton<IBotResponseQueue>(sp => sp.GetRequiredService<BotResponseQueue>());
+builder.Services.AddSingleton<IBotResponseOrchestrator, BotResponseOrchestrator>();
+builder.Services.AddHostedService<BotResponseBackgroundService>();
 
 // Mediator & Validation
 builder.Services.AddMediator(options => { options.ServiceLifetime = ServiceLifetime.Scoped; });
