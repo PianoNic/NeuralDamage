@@ -23,6 +23,7 @@ builder.Services.AddScoped<IUserSyncService, UserSyncService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IUserResolverService, UserResolverService>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
+builder.Services.AddScoped<IOpenRouterService, SemanticKernelService>();
 
 // Mediator & Validation
 builder.Services.AddMediator(options => { options.ServiceLifetime = ServiceLifetime.Scoped; });
