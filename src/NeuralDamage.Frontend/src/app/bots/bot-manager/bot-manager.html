@@ -113,12 +113,20 @@
       </button>
     </section>
   </div>
-
-  <!-- Bot form dialog -->
-  @if (showBotForm()) {
-    <app-bot-form [bot]="editingBot()" (saved)="onBotSaved()" (cancel)="closeBotForm()" />
-  }
 </div>
+
+<!-- Bot form dialog -->
+<hlm-dialog [state]="showBotForm() ? 'open' : 'closed'" (closed)="closeBotForm()">
+  <hlm-dialog-content *hlmDialogPortal="let ctx" class="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+    <hlm-dialog-header>
+      <h2 hlmDialogTitle>@if (editingBot()) { Edit Bot } @else { Create Bot }</h2>
+      <p hlmDialogDescription>Configure your bot's behavior and personality.</p>
+    </hlm-dialog-header>
+    @if (showBotForm()) {
+      <app-bot-form [bot]="editingBot()" (saved)="onBotSaved(); ctx.close()" (cancel)="ctx.close()" />
+    }
+  </hlm-dialog-content>
+</hlm-dialog>
 
 <!-- Delete Bot Confirmation -->
 <hlm-alert-dialog [state]="showDeleteBotDialog() ? 'open' : 'closed'" (closed)="showDeleteBotDialog.set(false)">

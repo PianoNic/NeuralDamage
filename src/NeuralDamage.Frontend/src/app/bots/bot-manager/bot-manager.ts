@@ -3,6 +3,7 @@ import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmSeparator } from '@spartan-ng/helm/separator';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
+import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { NgIcon, provideIcons } from '@ng-icons/core';
@@ -17,7 +18,7 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-bot-manager',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmButton, HlmInput, HlmSeparator, HlmAlertDialogImports, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, HlmBadge, NgIcon, BotFormComponent],
+  imports: [HlmButton, HlmInput, HlmSeparator, HlmAlertDialogImports, HlmDialogImports, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, HlmBadge, NgIcon, BotFormComponent],
   viewProviders: [provideIcons({ lucideX, lucidePlus, lucidePencil, lucideTrash2, lucideUsers, lucideBot })],
   templateUrl: './bot-manager.html',
 })

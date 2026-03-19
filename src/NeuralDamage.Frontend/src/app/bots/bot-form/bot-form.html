@@ -1,58 +1,60 @@
-<hlm-dialog>
-  <hlm-dialog-content class="w-full max-w-md">
-    <hlm-dialog-header>
-      <h3 hlmDialogTitle>
-        @if (isEditing()) { Edit Bot } @else { Create Bot }
-      </h3>
-      <p hlmDialogDescription>Configure your bot's behavior and personality.</p>
-    </hlm-dialog-header>
+<div class="space-y-4">
+  <!-- Name -->
+  <div class="space-y-1">
+    <label hlmLabel>Name</label>
+    <input hlmInput class="w-full" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="Bot name" />
+  </div>
 
-    <div class="mt-4 space-y-4">
-      <!-- Name -->
-      <div class="space-y-1">
-        <label hlmLabel>Name</label>
-        <input hlmInput class="w-full" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="Bot name" />
-      </div>
+  <!-- Model -->
+  <div class="space-y-1">
+    <label hlmLabel>Model</label>
+    <hlm-autocomplete [(value)]="selectedModel" [(search)]="modelSearch" [itemToString]="modelToString">
+      <hlm-autocomplete-input placeholder="Search models..." />
+      <hlm-autocomplete-content *hlmAutocompletePortal>
+        <hlm-autocomplete-empty>No models found.</hlm-autocomplete-empty>
+        <div hlmAutocompleteList>
+          @for (model of filteredModels(); track model.id) {
+            <hlm-autocomplete-item [value]="model">
+              <div class="flex flex-col">
+                <span class="text-sm">{{ model.name }}</span>
+                <span class="text-xs text-muted-foreground">{{ model.id }}</span>
+              </div>
+            </hlm-autocomplete-item>
+          }
+        </div>
+      </hlm-autocomplete-content>
+    </hlm-autocomplete>
+  </div>
 
-      <!-- Model -->
-      <div class="space-y-1">
-        <label hlmLabel>Model</label>
-        <brn-select [ngModel]="modelId()" (ngModelChange)="modelId.set($event)">
-          <hlm-select-trigger class="w-full">
-            <hlm-select-value placeholder="Select a model" />
-          </hlm-select-trigger>
-          <hlm-select-content>
-            @for (model of availableModels(); track model.id) {
-              <hlm-option [value]="model.id">{{ model.name }}</hlm-option>
-            }
-          </hlm-select-content>
-        </brn-select>
-      </div>
+  <!-- System prompt -->
+  <div class="space-y-1">
+    <label hlmLabel>System Prompt</label>
+    <textarea hlmTextarea rows="3" class="w-full" [ngModel]="systemPrompt()" (ngModelChange)="systemPrompt.set($event)" placeholder="Instructions for the bot..."></textarea>
+  </div>
 
-      <!-- System prompt -->
-      <div class="space-y-1">
-        <label hlmLabel>System Prompt</label>
-        <textarea hlmTextarea rows="3" [ngModel]="systemPrompt()" (ngModelChange)="systemPrompt.set($event)" placeholder="Instructions for the bot..."></textarea>
-      </div>
+  <!-- Personality -->
+  <div class="space-y-1">
+    <label hlmLabel>Personality (optional)</label>
+    <input hlmInput class="w-full" [ngModel]="personality()" (ngModelChange)="personality.set($event)" placeholder="e.g., friendly, formal, sarcastic" />
+  </div>
 
-      <!-- Personality -->
-      <div class="space-y-1">
-        <label hlmLabel>Personality (optional)</label>
-        <input hlmInput class="w-full" [ngModel]="personality()" (ngModelChange)="personality.set($event)" placeholder="e.g., friendly, formal, sarcastic" />
-      </div>
+  <!-- Aliases -->
+  <div class="space-y-1">
+    <label hlmLabel>Aliases (optional)</label>
+    <input hlmInput class="w-full" [ngModel]="aliases()" (ngModelChange)="aliases.set($event)" placeholder="e.g., gpt, chatgpt (comma-separated)" />
+  </div>
 
-      <!-- Temperature -->
-      <div class="space-y-1">
-        <label hlmLabel>Temperature: {{ temperature() }}</label>
-        <hlm-slider [min]="0" [max]="2" [step]="0.1" [value]="[temperature()]" (valueChange)="temperature.set($event[0])" />
-      </div>
-    </div>
+  <!-- Temperature -->
+  <div class="space-y-1">
+    <label hlmLabel>Temperature: {{ temperature().toFixed(1) }}</label>
+    <hlm-slider [min]="0" [max]="2" [step]="0.1" [value]="[temperature()]" (valueChange)="temperature.set($event[0])" />
+  </div>
 
-    <hlm-dialog-footer class="mt-6">
-      <button hlmDialogClose hlmBtn variant="outline">Cancel</button>
-      <button hlmBtn [disabled]="loading()" (click)="onSave()">
-        @if (isEditing()) { Save } @else { Create }
-      </button>
-    </hlm-dialog-footer>
-  </hlm-dialog-content>
-</hlm-dialog>
+  <!-- Actions -->
+  <div class="flex justify-end gap-2 pt-2">
+    <button hlmBtn variant="outline" (click)="onCancel()">Cancel</button>
+    <button hlmBtn [disabled]="loading() || !name().trim() || !selectedModel()" (click)="onSave()">
+      @if (isEditing()) { Save } @else { Create }
+    </button>
+  </div>
+</div>

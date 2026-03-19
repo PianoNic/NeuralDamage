@@ -36,17 +36,31 @@
     }
   </div>
 
-  <hlm-separator />
-
   <!-- User profile -->
-  <div class="flex items-center gap-3 px-4 py-3">
-    <hlm-avatar class="h-8 w-8 shrink-0">
-      @if (avatarUrl()) {
-        <img hlmAvatarImage [src]="avatarUrl()" [alt]="displayName()" />
-      }
-      <span hlmAvatarFallback class="text-xs font-semibold">{{ displayName().charAt(0).toUpperCase() }}</span>
-    </hlm-avatar>
-    <span class="flex-1 truncate text-sm font-medium text-foreground">{{ displayName() }}</span>
+  <div class="flex items-center gap-3 border-t border-border px-4 py-3">
+    <hlm-popover>
+      <button hlmPopoverTrigger class="flex items-center gap-3 rounded-md px-0 py-0 hover:opacity-80">
+        <hlm-avatar class="h-8 w-8 shrink-0">
+          @if (avatarUrl()) {
+            <img hlmAvatarImage [src]="avatarUrl()" [alt]="displayName()" />
+          }
+          <span hlmAvatarFallback class="text-xs font-semibold">{{ displayName().charAt(0).toUpperCase() }}</span>
+        </hlm-avatar>
+        <span class="truncate text-sm font-medium text-foreground">{{ displayName() }}</span>
+      </button>
+      <hlm-popover-content class="w-56 p-3" *hlmPopoverPortal>
+        <div class="space-y-1">
+          <p class="text-sm font-semibold text-foreground">{{ displayName() }}</p>
+          <p class="text-xs text-muted-foreground">{{ user()?.email }}</p>
+        </div>
+        <hlm-separator class="my-2" />
+        <button hlmBtn variant="ghost" size="sm" class="w-full justify-start gap-2" (click)="toggleTheme()">
+          <ng-icon [name]="isDark() ? 'lucideSun' : 'lucideMoon'" class="size-4" />
+          @if (isDark()) { Light Mode } @else { Dark Mode }
+        </button>
+      </hlm-popover-content>
+    </hlm-popover>
+    <div class="flex-1"></div>
     <button hlmBtn variant="ghost" size="icon-sm" (click)="logout()" title="Logout" class="text-muted-foreground hover:text-destructive">
       <ng-icon name="lucideLogOut" class="size-4" />
     </button>

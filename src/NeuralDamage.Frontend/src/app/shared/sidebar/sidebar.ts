@@ -7,8 +7,9 @@ import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/a
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
+import { HlmPopoverImports } from '@spartan-ng/helm/popover';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucidePlus, lucideTrash2, lucideLogOut, lucideMessageSquare } from '@ng-icons/lucide';
+import { lucidePlus, lucideTrash2, lucideLogOut, lucideMessageSquare, lucideSun, lucideMoon } from '@ng-icons/lucide';
 import { AuthService } from '@app/shared/auth/auth.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
@@ -23,9 +24,10 @@ import { firstValueFrom } from 'rxjs';
     HlmButton, HlmSeparator, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, HlmInput,
     HlmDialogImports,
     HlmAlertDialogImports,
+    HlmPopoverImports,
     NgIcon,
   ],
-  viewProviders: [provideIcons({ lucidePlus, lucideTrash2, lucideLogOut, lucideMessageSquare })],
+  viewProviders: [provideIcons({ lucidePlus, lucideTrash2, lucideLogOut, lucideMessageSquare, lucideSun, lucideMoon })],
   templateUrl: './sidebar.html',
 })
 export class SidebarComponent implements OnInit, OnDestroy {
@@ -43,6 +45,21 @@ export class SidebarComponent implements OnInit, OnDestroy {
   readonly newChatName = signal('');
   readonly showDeleteDialog = signal(false);
   readonly deletingChatId = signal<string | null>(null);
+  readonly isDark = signal(
+    localStorage.getItem('theme') === 'dark' ||
+    (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  );
+
+  constructor() {
+    document.documentElement.classList.toggle('dark', this.isDark());
+  }
+
+  toggleTheme() {
+    const dark = !this.isDark();
+    this.isDark.set(dark);
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('theme', dark ? 'dark' : 'light');
+  }
 
   readonly filteredChats = computed(() => {
     const query = this.searchQuery().toLowerCase();

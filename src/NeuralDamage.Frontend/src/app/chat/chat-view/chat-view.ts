@@ -23,6 +23,7 @@ import { firstValueFrom } from 'rxjs';
   imports: [HlmButton, HlmSpinner, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, NgIcon, MessageListComponent, MessageInputComponent, TypingIndicatorComponent, BotManagerComponent],
   viewProviders: [provideIcons({ lucideBot, lucideUsers })],
   templateUrl: './chat-view.html',
+  host: { class: 'flex flex-1' },
 })
 export class ChatViewComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
