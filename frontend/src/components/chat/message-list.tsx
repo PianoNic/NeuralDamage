@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import { MessageBubble } from "./message-bubble"
 import { TypingIndicator } from "./typing-indicator"
 import { useAuthStore } from "@/stores/auth-store"
 import type { Message } from "@/types"
+
+const SCROLL_THRESHOLD = 150 // px from bottom to count as "at bottom"
 
 interface Props {
   messages: Message[]
@@ -13,10 +15,18 @@ interface Props {
 export function MessageList({ messages, onReaction, onReply }: Props) {
   const user = useAuthStore((s) => s.user)
   const containerRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    isNearBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD
+  }, [])
 
   useEffect(() => {
     const el = containerRef.current
-    if (el) {
+    if (el && isNearBottomRef.current) {
       el.scrollTop = el.scrollHeight
     }
   }, [messages.length])
@@ -31,7 +41,7 @@ export function MessageList({ messages, onReaction, onReply }: Props) {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto">
+    <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
       <div className="py-4">
         {messages.length === 0 && (
           <div className="text-center text-muted-foreground py-12">
