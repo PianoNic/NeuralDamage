@@ -6,9 +6,9 @@
 
   <!-- Sidebar -->
   <app-sidebar
-    class="z-30 transition-transform duration-200 md:translate-x-0"
-    [class.max-md:-translate-x-full]="!sidebarOpen()"
-    [class.max-md:translate-x-0]="sidebarOpen()"
+    class="fixed inset-y-0 left-0 z-30 shrink-0 transition-transform duration-200 md:static md:translate-x-0"
+    [class.-translate-x-full]="!sidebarOpen()"
+    [class.translate-x-0]="sidebarOpen()"
   />
 
   <!-- Main content -->
