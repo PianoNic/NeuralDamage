@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     APP_URL: str = "http://localhost:5173"
 
+    # Model price caps (dollars per million tokens, 0 = no limit)
+    MAX_PROMPT_PRICE: float = 0.25
+    MAX_COMPLETION_PRICE: float = 0.60
+
     # Response engine
     RESPONSE_THRESHOLD: float = 0.35
     JUDGE_MODEL: str = "google/gemini-2.0-flash-001"

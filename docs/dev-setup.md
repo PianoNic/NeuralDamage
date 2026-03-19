@@ -95,6 +95,10 @@ Oidc__RedirectUri=http://localhost:4200/callback
 Oidc__PostLogoutRedirectUri=http://localhost:4200/
 Oidc__Scope=openid profile email
 Oidc__RequireHttpsMetadata=false
+
+# Model price caps ($/million tokens, 0 = no limit)
+MAX_PROMPT_PRICE=0.25
+MAX_COMPLETION_PRICE=0.60
 ```
 
 To view all configured secrets:
