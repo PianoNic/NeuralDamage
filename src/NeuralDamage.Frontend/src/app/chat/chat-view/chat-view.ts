@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy
 import { ActivatedRoute } from '@angular/router';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
+import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideBot, lucideUsers } from '@ng-icons/lucide';
 import { Chat, ChatMember, Message } from '@app/models';
 import { AuthService } from '@app/shared/auth/auth.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
@@ -17,7 +20,8 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-chat-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmButton, HlmSpinner, MessageListComponent, MessageInputComponent, TypingIndicatorComponent, BotManagerComponent],
+  imports: [HlmButton, HlmSpinner, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, NgIcon, MessageListComponent, MessageInputComponent, TypingIndicatorComponent, BotManagerComponent],
+  viewProviders: [provideIcons({ lucideBot, lucideUsers })],
   templateUrl: './chat-view.html',
 })
 export class ChatViewComponent implements OnDestroy {
@@ -39,9 +43,12 @@ export class ChatViewComponent implements OnDestroy {
 
   readonly chatName = computed(() => this.chat()?.name ?? '');
   readonly memberCount = computed(() => this.members().length);
+  readonly userCount = computed(() => this.members().filter((m) => m.memberType === 'user').length);
+  readonly botCount = computed(() => this.members().filter((m) => m.memberType === 'bot').length);
+  readonly botMembers = computed(() => this.members().filter((m) => m.memberType === 'bot'));
   readonly replyingTo = signal<Message | null>(null);
 
-  private currentChatId: string | null = null;
+  currentChatId: string | null = null;
 
   private onMessageNew = (msg: Message) => {
     this.messages.update((list) => [...list, msg]);

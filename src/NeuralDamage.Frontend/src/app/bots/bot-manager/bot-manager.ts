@@ -2,6 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, ou
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmSeparator } from '@spartan-ng/helm/separator';
+import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
+import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
+import { HlmBadge } from '@spartan-ng/helm/badge';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideX, lucidePlus, lucidePencil, lucideTrash2, lucideUsers, lucideBot } from '@ng-icons/lucide';
 import { Bot, ChatMember } from '@app/models';
 import { BotFormComponent } from '@app/bots/bot-form/bot-form';
 import { BotsService } from '@app/api/api/bots.service';
@@ -12,7 +17,8 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-bot-manager',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmButton, HlmInput, HlmSeparator, BotFormComponent],
+  imports: [HlmButton, HlmInput, HlmSeparator, HlmAlertDialogImports, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, HlmBadge, NgIcon, BotFormComponent],
+  viewProviders: [provideIcons({ lucideX, lucidePlus, lucidePencil, lucideTrash2, lucideUsers, lucideBot })],
   templateUrl: './bot-manager.html',
 })
 export class BotManagerComponent implements OnInit {
@@ -28,6 +34,8 @@ export class BotManagerComponent implements OnInit {
   readonly searchQuery = signal('');
   readonly showBotForm = signal(false);
   readonly editingBot = signal<Bot | null>(null);
+  readonly showDeleteBotDialog = signal(false);
+  readonly deletingBotId = signal<string | null>(null);
 
   readonly botsInChat = computed(() =>
     this.members().filter((m) => m.memberType === 'bot'),
@@ -68,10 +76,18 @@ export class BotManagerComponent implements OnInit {
     this.editingBot.set(null);
   }
 
-  async deleteBot(botId: string) {
-    if (!confirm('Delete this bot?')) return;
+  confirmDeleteBot(botId: string) {
+    this.deletingBotId.set(botId);
+    this.showDeleteBotDialog.set(true);
+  }
+
+  async executeDeleteBot() {
+    const botId = this.deletingBotId();
+    if (!botId) return;
     await firstValueFrom(this.botsApi.apiBotsBotIdDelete(botId));
     this.allBots.update((list) => list.filter((b) => b.id !== botId));
+    this.showDeleteBotDialog.set(false);
+    this.deletingBotId.set(null);
   }
 
   async onBotSaved() {

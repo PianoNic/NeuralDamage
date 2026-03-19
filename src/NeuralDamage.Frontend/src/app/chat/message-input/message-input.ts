@@ -2,13 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { FormsModule } from '@angular/forms';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmTextarea } from '@spartan-ng/helm/textarea';
-import { HlmCard } from '@spartan-ng/helm/card';
+import { HlmAvatar, HlmAvatarFallback } from '@spartan-ng/helm/avatar';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideX, lucideSendHorizontal } from '@ng-icons/lucide';
 import { ChatMember, Message } from '@app/models';
 
 @Component({
   selector: 'app-message-input',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, HlmButton, HlmTextarea, HlmCard],
+  imports: [FormsModule, HlmButton, HlmTextarea, HlmAvatar, HlmAvatarFallback, NgIcon],
+  viewProviders: [provideIcons({ lucideX, lucideSendHorizontal })],
   templateUrl: './message-input.html',
 })
 export class MessageInputComponent {

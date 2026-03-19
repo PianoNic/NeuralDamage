@@ -1,34 +1,73 @@
-<div class="flex h-full flex-col">
-  <!-- Chat header -->
-  <div class="flex items-center justify-between border-b border-border px-4 py-3">
-    <div>
-      <h2 class="text-lg font-semibold text-foreground">{{ chatName() }}</h2>
-      <p class="text-xs text-muted-foreground">{{ memberCount() }} members</p>
+<div class="flex h-full">
+  <!-- Chat area -->
+  <div class="flex flex-1 flex-col">
+    <!-- Chat header -->
+    <div class="flex items-center justify-between border-b border-border px-6 py-3">
+      <div>
+        <h2 class="text-lg font-bold text-foreground">{{ chatName() }}</h2>
+        <p class="flex items-center gap-1 text-xs text-muted-foreground">
+          <ng-icon name="lucideUsers" class="size-3" />
+          <span>{{ userCount() }}</span>
+          <span class="mx-0.5">&middot;</span>
+          <ng-icon name="lucideBot" class="size-3" />
+          <span>{{ botCount() }}</span>
+        </p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Bot avatar stack -->
+        @if (botMembers().length > 0) {
+          <div class="flex -space-x-2">
+            @for (bot of botMembers().slice(0, 5); track bot.id) {
+              <hlm-avatar class="h-7 w-7 ring-2 ring-background">
+                @if (bot.avatarUrl) {
+                  <img hlmAvatarImage [src]="bot.avatarUrl" [alt]="bot.displayName ?? 'Bot'" />
+                }
+                <span hlmAvatarFallback class="text-[10px] font-semibold">{{ (bot.displayName ?? 'B').charAt(0).toUpperCase() }}</span>
+              </hlm-avatar>
+            }
+          </div>
+        }
+
+        <button hlmBtn variant="outline" size="sm" (click)="toggleBotManager()">
+          <ng-icon name="lucideBot" class="mr-1.5 size-4" />
+          Bots
+        </button>
+      </div>
     </div>
-    <button hlmBtn variant="outline" size="sm" (click)="toggleBotManager()">Bots</button>
+
+    <!-- Messages -->
+    @if (loading()) {
+      <div class="flex flex-1 items-center justify-center">
+        <hlm-spinner />
+      </div>
+    } @else {
+      <app-message-list
+        class="flex-1 overflow-hidden"
+        [messages]="messages()"
+        (replyTo)="setReplyTo($event)"
+      />
+    }
+
+    <!-- Typing indicator -->
+    <app-typing-indicator [typingUsers]="typingUsers()" [typingBots]="typingBots()" />
+
+    <!-- Message input -->
+    <app-message-input
+      [members]="members()"
+      [replyingTo]="replyingTo()"
+      (send)="sendMessage($event)"
+      (cancelReply)="setReplyTo(null)"
+    />
   </div>
 
-  <!-- Messages -->
-  @if (loading()) {
-    <div class="flex flex-1 items-center justify-center">
-      <hlm-spinner />
-    </div>
-  } @else {
-    <app-message-list
-      class="flex-1 overflow-hidden"
-      [messages]="messages()"
-      (replyTo)="setReplyTo($event)"
+  <!-- Bot manager side panel -->
+  @if (botManagerOpen()) {
+    <app-bot-manager
+      class="w-80 shrink-0"
+      [chatId]="currentChatId ?? ''"
+      [members]="members()"
+      (close)="toggleBotManager()"
     />
   }
-
-  <!-- Typing indicator -->
-  <app-typing-indicator [typingUsers]="typingUsers()" [typingBots]="typingBots()" />
-
-  <!-- Message input -->
-  <app-message-input
-    [members]="members()"
-    [replyingTo]="replyingTo()"
-    (send)="sendMessage($event)"
-    (cancelReply)="setReplyTo(null)"
-  />
 </div>

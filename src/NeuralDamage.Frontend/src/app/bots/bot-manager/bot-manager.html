@@ -1,8 +1,13 @@
 <div class="flex h-full flex-col border-l border-border bg-card">
   <!-- Header -->
-  <div class="flex items-center justify-between p-4">
-    <h3 class="text-lg font-semibold text-foreground">Manage Members</h3>
-    <button hlmBtn variant="ghost" size="icon" (click)="close.emit()">✕</button>
+  <div class="flex items-start justify-between p-4">
+    <div>
+      <h3 class="flex items-center gap-2 text-lg font-semibold text-foreground"><ng-icon name="lucideUsers" class="size-5" /> Manage Members</h3>
+      <p class="mt-0.5 text-xs text-muted-foreground">Add or remove bots and users from this chat</p>
+    </div>
+    <button hlmBtn variant="ghost" size="icon" class="shrink-0" (click)="close.emit()">
+      <ng-icon name="lucideX" class="size-4" />
+    </button>
   </div>
 
   <hlm-separator />
@@ -10,24 +15,51 @@
   <div class="flex-1 overflow-y-auto p-4">
     <!-- Users in chat -->
     <section class="mb-6">
-      <h4 class="mb-2 text-sm font-medium text-muted-foreground">Users</h4>
+      <h4 class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <ng-icon name="lucideUsers" class="mr-1 size-3" /> Users ({{ usersInChat().length }})
+      </h4>
       @for (member of usersInChat(); track member.id) {
-        <div class="flex items-center justify-between py-2">
-          <span class="text-sm text-foreground">{{ member.displayName }}</span>
+        <div class="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-accent/50">
+          <hlm-avatar class="h-8 w-8">
+            @if (member.avatarUrl) {
+              <img hlmAvatarImage [src]="member.avatarUrl" [alt]="member.displayName ?? 'User'" />
+            }
+            <span hlmAvatarFallback class="text-xs font-semibold">{{ (member.displayName ?? 'U').charAt(0).toUpperCase() }}</span>
+          </hlm-avatar>
+          <span class="flex-1 truncate text-sm font-medium text-foreground">{{ member.displayName }}</span>
+          @if (member.role === 'owner') {
+            <span hlmBadge variant="outline" class="px-1.5 py-0 text-[10px] font-semibold leading-4">OWNER</span>
+          }
+          @if (member.role !== 'owner') {
+            <button hlmBtn variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-destructive" (click)="removeBot(member.id)">
+              <ng-icon name="lucideX" class="size-3.5" />
+            </button>
+          }
         </div>
       }
     </section>
 
     <!-- Bots in chat -->
     <section class="mb-6">
-      <h4 class="mb-2 text-sm font-medium text-muted-foreground">Bots in Chat</h4>
+      <h4 class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <ng-icon name="lucideBot" class="mr-1 size-3" /> Bots in Chat ({{ botsInChat().length }})
+      </h4>
       @for (member of botsInChat(); track member.id) {
-        <div class="flex items-center justify-between py-2">
-          <span class="text-sm text-foreground">{{ member.displayName }}</span>
-          <button hlmBtn variant="destructive" size="sm" (click)="removeBot(member.id)">Remove</button>
+        <div class="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-accent/50">
+          <hlm-avatar class="h-8 w-8">
+            @if (member.avatarUrl) {
+              <img hlmAvatarImage [src]="member.avatarUrl" [alt]="member.displayName ?? 'Bot'" />
+            }
+            <span hlmAvatarFallback class="text-xs font-semibold">{{ (member.displayName ?? 'B').charAt(0).toUpperCase() }}</span>
+          </hlm-avatar>
+          <span class="flex-1 truncate text-sm font-medium text-foreground">{{ member.displayName }}</span>
+          <span hlmBadge variant="secondary" class="px-1.5 py-0 text-[10px] font-medium leading-4">BOT</span>
+          <button hlmBtn variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-destructive" (click)="removeBot(member.id)">
+            <ng-icon name="lucideX" class="size-3.5" />
+          </button>
         </div>
       } @empty {
-        <p class="text-xs text-muted-foreground">No bots in this chat</p>
+        <p class="px-2 text-xs text-muted-foreground">No bots in this chat</p>
       }
     </section>
 
@@ -35,35 +67,69 @@
 
     <!-- Available bots -->
     <section class="mt-4">
-      <div class="mb-2 flex items-center justify-between">
-        <h4 class="text-sm font-medium text-muted-foreground">Available Bots</h4>
-        <button hlmBtn variant="outline" size="sm" (click)="openBotForm()">+ Create</button>
-      </div>
+      <h4 class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Available Bots ({{ availableBots().length }})
+      </h4>
+
       <input
         hlmInput
-        class="mb-2 w-full"
+        class="mb-3 w-full"
         placeholder="Search bots..."
         [value]="searchQuery()"
         (input)="searchQuery.set($any($event.target).value)"
       />
+
       @for (bot of availableBots(); track bot.id) {
-        <div class="flex items-center justify-between py-2">
-          <div>
-            <span class="text-sm text-foreground">{{ bot.name }}</span>
-            <span class="ml-2 text-xs text-muted-foreground">{{ bot.modelId }}</span>
+        <div class="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-accent/50">
+          <hlm-avatar class="h-8 w-8">
+            @if (bot.avatarUrl) {
+              <img hlmAvatarImage [src]="bot.avatarUrl" [alt]="bot.name" />
+            }
+            <span hlmAvatarFallback class="text-xs font-semibold">{{ bot.name.charAt(0).toUpperCase() }}</span>
+          </hlm-avatar>
+          <div class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium text-foreground">{{ bot.name }}</span>
+            <span class="block truncate text-xs text-muted-foreground">{{ bot.modelId }}</span>
           </div>
-          <div class="flex gap-1">
-            <button hlmBtn variant="default" size="sm" (click)="addBot(bot.id)">Add</button>
-            <button hlmBtn variant="ghost" size="sm" (click)="openBotForm(bot)">Edit</button>
-            <button hlmBtn variant="destructive" size="sm" (click)="deleteBot(bot.id)">Delete</button>
+          <div class="flex shrink-0 gap-1">
+            <button hlmBtn variant="default" size="icon-xs" (click)="addBot(bot.id)" title="Add to chat">
+              <ng-icon name="lucidePlus" class="size-3.5" />
+            </button>
+            <button hlmBtn variant="ghost" size="icon-xs" (click)="openBotForm(bot)" title="Edit bot">
+              <ng-icon name="lucidePencil" class="size-3.5" />
+            </button>
+            <button hlmBtn variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-destructive" (click)="confirmDeleteBot(bot.id)" title="Delete bot">
+              <ng-icon name="lucideTrash2" class="size-3.5" />
+            </button>
           </div>
         </div>
+      } @empty {
+        <p class="px-2 text-xs text-muted-foreground">No available bots</p>
       }
+
+      <button hlmBtn variant="outline" class="mt-4 w-full" (click)="openBotForm()">
+        <ng-icon name="lucidePlus" class="mr-2 size-4" />
+        Create New Bot
+      </button>
     </section>
   </div>
 
   <!-- Bot form dialog -->
   @if (showBotForm()) {
-    <app-bot-form [bot]="editingBot()" (saved)="closeBotForm()" (cancel)="closeBotForm()" />
+    <app-bot-form [bot]="editingBot()" (saved)="onBotSaved()" (cancel)="closeBotForm()" />
   }
 </div>
+
+<!-- Delete Bot Confirmation -->
+<hlm-alert-dialog [state]="showDeleteBotDialog() ? 'open' : 'closed'" (closed)="showDeleteBotDialog.set(false)">
+  <hlm-alert-dialog-content *hlmAlertDialogPortal="let ctx">
+    <hlm-alert-dialog-header>
+      <h2 hlmAlertDialogTitle>Delete Bot</h2>
+      <p hlmAlertDialogDescription>This will permanently delete this bot. Existing messages from this bot will be preserved.</p>
+    </hlm-alert-dialog-header>
+    <hlm-alert-dialog-footer>
+      <button hlmAlertDialogCancel (click)="ctx.close()">Cancel</button>
+      <button hlmAlertDialogAction (click)="executeDeleteBot(); ctx.close()">Delete</button>
+    </hlm-alert-dialog-footer>
+  </hlm-alert-dialog-content>
+</hlm-alert-dialog>

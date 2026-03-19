@@ -1,5 +1,10 @@
 @if (typingText()) {
-  <div class="px-4 py-1 text-xs text-muted-foreground">
-    {{ typingText() }}
+  <div class="flex items-center gap-2 px-4 py-1.5">
+    <div class="flex gap-0.5">
+      <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]"></span>
+      <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]"></span>
+      <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]"></span>
+    </div>
+    <span class="text-xs text-muted-foreground">{{ typingText() }}</span>
   </div>
 }

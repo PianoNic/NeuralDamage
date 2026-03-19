@@ -1,8 +1,10 @@
 <aside class="flex h-full w-64 flex-col border-r border-border bg-card">
   <!-- Header -->
-  <div class="flex items-center justify-between p-4">
-    <h2 class="text-lg font-semibold text-foreground">Chats</h2>
-    <button hlmBtn variant="ghost" size="sm" (click)="createChat()">+ New</button>
+  <div class="flex items-center justify-between px-4 py-3">
+    <h2 class="text-lg font-bold text-foreground">Neural Damage</h2>
+    <button hlmBtn variant="ghost" size="icon-sm" (click)="openCreateDialog()" title="New chat">
+      <ng-icon name="lucidePlus" class="size-4" />
+    </button>
   </div>
 
   <hlm-separator />
@@ -11,28 +13,71 @@
   <div class="flex-1 overflow-y-auto">
     @for (chat of filteredChats(); track chat.id) {
       <a
-        class="flex items-center justify-between px-4 py-3 hover:bg-accent"
+        class="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60"
         [routerLink]="['/chat', chat.id]"
         routerLinkActive="bg-accent"
       >
-        <span class="truncate text-sm text-foreground">{{ chat.name }}</span>
-        <button hlmBtn variant="ghost" size="icon" class="h-6 w-6" (click)="deleteChat(chat.id); $event.preventDefault()">
-          ✕
+        <ng-icon name="lucideMessageSquare" class="size-4 shrink-0 text-muted-foreground" />
+        <span class="flex-1 truncate text-sm font-medium text-foreground">{{ chat.name }}</span>
+        <button
+          hlmBtn variant="ghost" size="icon-xs"
+          class="invisible text-muted-foreground hover:text-destructive group-hover:visible"
+          (click)="confirmDeleteChat(chat.id); $event.preventDefault()"
+          title="Delete chat"
+        >
+          <ng-icon name="lucideTrash2" class="size-3.5" />
         </button>
       </a>
     } @empty {
-      <p class="p-4 text-sm text-muted-foreground">No chats yet</p>
+      <div class="flex flex-col items-center gap-2 px-4 py-8 text-center">
+        <ng-icon name="lucideMessageSquare" class="size-8 text-muted-foreground/50" />
+        <p class="text-sm text-muted-foreground">No chats yet</p>
+      </div>
     }
   </div>
 
   <hlm-separator />
 
   <!-- User profile -->
-  <div class="flex items-center gap-3 p-4">
-    <hlm-avatar class="h-8 w-8">
-      <span hlmAvatarFallback class="text-xs">{{ displayName().charAt(0) }}</span>
+  <div class="flex items-center gap-3 px-4 py-3">
+    <hlm-avatar class="h-8 w-8 shrink-0">
+      @if (avatarUrl()) {
+        <img hlmAvatarImage [src]="avatarUrl()" [alt]="displayName()" />
+      }
+      <span hlmAvatarFallback class="text-xs font-semibold">{{ displayName().charAt(0).toUpperCase() }}</span>
     </hlm-avatar>
-    <span class="flex-1 truncate text-sm text-foreground">{{ displayName() }}</span>
-    <button hlmBtn variant="ghost" size="sm" (click)="logout()">Logout</button>
+    <span class="flex-1 truncate text-sm font-medium text-foreground">{{ displayName() }}</span>
+    <button hlmBtn variant="ghost" size="icon-sm" (click)="logout()" title="Logout" class="text-muted-foreground hover:text-destructive">
+      <ng-icon name="lucideLogOut" class="size-4" />
+    </button>
   </div>
 </aside>
+
+<!-- Create Chat Dialog -->
+<hlm-dialog [state]="showCreateDialog() ? 'open' : 'closed'" (closed)="showCreateDialog.set(false)">
+  <hlm-dialog-content *hlmDialogPortal="let ctx">
+    <hlm-dialog-header>
+      <h2 hlmDialogTitle>New Chat</h2>
+      <p hlmDialogDescription>Give your chat a name to get started.</p>
+    </hlm-dialog-header>
+    <input hlmInput placeholder="Chat name" [ngModel]="newChatName()" (ngModelChange)="newChatName.set($event)" (keydown.enter)="submitCreateChat()" class="w-full" />
+    <hlm-dialog-footer>
+      <button hlmBtn variant="outline" (click)="ctx.close()">Cancel</button>
+      <button hlmBtn (click)="submitCreateChat()" [disabled]="!newChatName().trim()">Create</button>
+    </hlm-dialog-footer>
+  </hlm-dialog-content>
+</hlm-dialog>
+
+<!-- Delete Chat Confirmation -->
+<hlm-alert-dialog [state]="showDeleteDialog() ? 'open' : 'closed'" (closed)="showDeleteDialog.set(false)">
+  <hlm-alert-dialog-content *hlmAlertDialogPortal="let ctx">
+    <hlm-alert-dialog-header>
+      <h2 hlmAlertDialogTitle>Delete Chat</h2>
+      <p hlmAlertDialogDescription>This will permanently delete this chat and all its messages. This action cannot be undone.</p>
+    </hlm-alert-dialog-header>
+    <hlm-alert-dialog-footer>
+      <button hlmAlertDialogCancel (click)="ctx.close()">Cancel</button>
+      <button hlmAlertDialogAction (click)="executeDeleteChat(); ctx.close()">Delete</button>
+    </hlm-alert-dialog-footer>
+  </hlm-alert-dialog-content>
+</hlm-alert-dialog>

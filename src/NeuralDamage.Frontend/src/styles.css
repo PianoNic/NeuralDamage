@@ -4,7 +4,8 @@
 @import 'tailwindcss/utilities.css';
 @import "@spartan-ng/cli/src/generators/ui/style-vega.css";
 
-/* You can add global styles to this file, and also import other style files */
+@source "../libs/ui";
+@source "../node_modules/@spartan-ng";
 
 @import "@spartan-ng/brain/hlm-tailwind-preset.css";
 

@@ -1,8 +1,9 @@
-<div class="flex h-full flex-col-reverse overflow-y-auto px-4 py-2">
+<div class="flex h-full flex-col-reverse overflow-y-auto px-4 py-3">
   @for (message of messages(); track message.id) {
     <app-message-bubble [message]="message" (reply)="onReply($event)" />
   } @empty {
-    <div class="flex flex-1 items-center justify-center">
+    <div class="flex flex-1 flex-col items-center justify-center gap-2">
+      <ng-icon name="lucideMessageSquare" class="size-10 text-muted-foreground/40" />
       <p class="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
     </div>
   }
