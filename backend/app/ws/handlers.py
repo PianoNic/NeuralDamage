@@ -14,7 +14,7 @@ from app.models.bot import Bot
 from app.models.user import User
 from app.models.reaction import Reaction
 from app.services.response_engine import should_bot_respond
-from app.services.bot_service import call_openrouter, format_history_for_bot, maybe_bot_react
+from app.services.bot_service import call_openrouter, format_history_for_bot, maybe_bot_react, strip_reply_metadata
 from app.ws.manager import manager
 
 # Max chain depth for bot-to-bot conversations (prevents infinite loops)
@@ -375,10 +375,10 @@ async def process_bot_responses(chat_id: str, trigger_message_id: str, depth: in
 
 
 def _strip_name_prefix(text: str, bot_name: str) -> str:
-    """Remove [BotName]: prefix and (replying to ...) prefix if the bot copied them."""
+    """Remove [BotName]: prefix and (replying to ...) prefixes the bot copied."""
     import re
-    # Strip (replying to Name: "...") prefix that bots copy from history context
-    text = re.sub(r'^\(replying to [^)]+\)\s*', '', text, flags=re.IGNORECASE)
+    # Strip ALL (replying to ...) metadata anywhere in the text
+    text = strip_reply_metadata(text)
     # Match patterns like [Chef Marco]: or [Tech Bro]: at the start
     pattern = rf'^\[{re.escape(bot_name)}\]:\s*'
     text = re.sub(pattern, '', text, flags=re.IGNORECASE)

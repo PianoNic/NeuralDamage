@@ -1,11 +1,21 @@
+import re
+
 import httpx
 
 from app.config import settings
 from app.models.bot import Bot
 from app.models.message import Message
 
+# Matches "(replying to Name: "...")" including nested parens/quotes
+_REPLY_META_RE = re.compile(r'\(replying to [^"]*(?:"[^"]*"[^"]*)*\)\s*')
+
 # ~4 chars per token; keep input history under ~3000 tokens to save costs
 MAX_HISTORY_CHARS = 12_000
+
+
+def strip_reply_metadata(text: str) -> str:
+    """Remove all (replying to ...) prefixes from text."""
+    return _REPLY_META_RE.sub("", text).strip()
 
 
 def format_history_for_bot(messages: list[Message], current_bot: Bot) -> list[dict]:
@@ -28,8 +38,9 @@ def format_history_for_bot(messages: list[Message], current_bot: Bot) -> list[di
                           else "Unknown")
             prefix = f"(replying to {reply_sender}: \"{reply_msg.content[:80]}\")\n"
 
-        # Truncate very long individual messages to save tokens
-        content_text = msg.content[:1500] + ("..." if len(msg.content) > 1500 else "")
+        # Strip leaked reply metadata from content, then truncate
+        clean_content = strip_reply_metadata(msg.content)
+        content_text = clean_content[:1500] + ("..." if len(clean_content) > 1500 else "")
 
         is_self = msg.sender_bot_id == current_bot.id
         formatted.append({
