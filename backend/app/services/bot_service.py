@@ -1,3 +1,4 @@
+import json as _json
 import httpx
 
 from app.config import settings
@@ -44,6 +45,89 @@ def format_history_for_bot(messages: list[Message], current_bot: Bot) -> list[di
         total_chars -= len(removed["content"])
 
     return formatted
+
+
+def get_sender_name(msg: Message) -> str:
+    """Extract the display name of whoever sent a message."""
+    if msg.sender_user_id:
+        return msg.sender_user.display_name if msg.sender_user else "Unknown"
+    return msg.sender_bot.name if msg.sender_bot else "Unknown"
+
+
+REPLY_TARGET_PROMPT = """You are deciding which message in a group chat a bot is most naturally responding to.
+
+The bot "{bot_name}" just generated this response:
+"{response}"
+
+Here are the last few messages (most recent last), each with an index:
+{candidates}
+
+Which message is the bot's response most naturally a reply to? Consider:
+- If the response directly addresses or quotes someone, pick that message
+- If the response answers a question, pick the question
+- If the response reacts to content, pick that content
+- If unclear, pick the most recent human message
+
+Respond with ONLY a JSON object, no markdown:
+{{"index": <number>}}"""
+
+
+async def pick_reply_target(
+    bot: Bot,
+    response_text: str,
+    candidate_messages: list[Message],
+) -> Message:
+    """Use a cheap LLM call to pick which message a bot response is replying to."""
+    if len(candidate_messages) <= 1:
+        return candidate_messages[-1]
+
+    # Build candidate list (last 6 messages max to keep it cheap)
+    candidates = candidate_messages[-6:]
+    lines = []
+    for i, msg in enumerate(candidates):
+        sender = get_sender_name(msg)
+        sender_type = "bot" if msg.sender_bot_id else "human"
+        lines.append(f"  {i}: [{sender} ({sender_type})]: {msg.content[:120]}")
+
+    prompt = REPLY_TARGET_PROMPT.format(
+        bot_name=bot.name,
+        response=response_text[:200],
+        candidates="\n".join(lines),
+    )
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                    "HTTP-Referer": settings.APP_URL,
+                    "X-Title": "Neural Damage",
+                },
+                json={
+                    "model": settings.JUDGE_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0,
+                    "max_tokens": 20,
+                },
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"]
+            text = text.strip().strip("`").strip()
+            if text.startswith("json"):
+                text = text[4:].strip()
+            result = _json.loads(text)
+            idx = int(result.get("index", len(candidates) - 1))
+            idx = max(0, min(idx, len(candidates) - 1))
+            return candidates[idx]
+    except Exception as e:
+        print(f"[BOT] Reply target pick failed for {bot.name}: {e}", flush=True)
+        # Fallback: reply to the most recent human message, or last message
+        for msg in reversed(candidates):
+            if msg.sender_user_id:
+                return msg
+        return candidates[-1]
 
 
 CHAT_STYLE_WRAPPER = """You are "{bot_name}" in a casual group chat.

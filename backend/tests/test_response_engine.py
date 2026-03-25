@@ -75,6 +75,21 @@ class TestBuildEvaluationPrompt:
         assert "Bot is @mentioned: False" in prompt
         assert "name appears in message text: False" in prompt
 
+    def test_already_responded_included(self):
+        bot = FakeBot()
+        msg = FakeMessage(content="What do you all think?")
+        prompt = _build_evaluation_prompt(msg, bot, [msg], already_responded=["Snoop Dogg", "Andrew Tate"])
+        assert "Snoop Dogg" in prompt
+        assert "Andrew Tate" in prompt
+        assert "Already Responded" in prompt
+        assert "GENUINELY DIFFERENT" in prompt
+
+    def test_no_already_responded_section_when_none(self):
+        bot = FakeBot()
+        msg = FakeMessage(content="Hello")
+        prompt = _build_evaluation_prompt(msg, bot, [msg], already_responded=None)
+        assert "Already Responded" not in prompt
+
 
 class TestConversationSummary:
     def test_formats_user_messages(self):
