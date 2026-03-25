@@ -1,12 +1,22 @@
 import json as _json
+import re
+
 import httpx
 
 from app.config import settings
 from app.models.bot import Bot
 from app.models.message import Message
 
+# Matches "(replying to Name: "...")" including nested parens/quotes
+_REPLY_META_RE = re.compile(r'\(replying to [^"]*(?:"[^"]*"[^"]*)*\)\s*')
+
 # ~4 chars per token; keep input history under ~3000 tokens to save costs
 MAX_HISTORY_CHARS = 12_000
+
+
+def strip_reply_metadata(text: str) -> str:
+    """Remove all (replying to ...) prefixes from text."""
+    return _REPLY_META_RE.sub("", text).strip()
 
 
 def format_history_for_bot(messages: list[Message], current_bot: Bot) -> list[dict]:
@@ -29,8 +39,9 @@ def format_history_for_bot(messages: list[Message], current_bot: Bot) -> list[di
                           else "Unknown")
             prefix = f"(replying to {reply_sender}: \"{reply_msg.content[:80]}\")\n"
 
-        # Truncate very long individual messages to save tokens
-        content_text = msg.content[:1500] + ("..." if len(msg.content) > 1500 else "")
+        # Strip leaked reply metadata from content, then truncate
+        clean_content = strip_reply_metadata(msg.content)
+        content_text = clean_content[:1500] + ("..." if len(clean_content) > 1500 else "")
 
         is_self = msg.sender_bot_id == current_bot.id
         formatted.append({
@@ -186,6 +197,20 @@ async def call_openrouter(bot: Bot, chat_history: list[dict]) -> str:
         *chat_history,
     ]
 
+    payload: dict = {
+        "model": bot.model_id,
+        "messages": messages,
+        "temperature": bot.temperature,
+        "max_tokens": 256,
+    }
+    if settings.MAX_PROMPT_PRICE or settings.MAX_COMPLETION_PRICE:
+        payload["provider"] = {
+            "max_price": {
+                "prompt": settings.MAX_PROMPT_PRICE or 1000,
+                "completion": settings.MAX_COMPLETION_PRICE or 1000,
+            },
+        }
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -194,12 +219,7 @@ async def call_openrouter(bot: Bot, chat_history: list[dict]) -> str:
                 "HTTP-Referer": settings.APP_URL,
                 "X-Title": "Neural Damage",
             },
-            json={
-                "model": bot.model_id,
-                "messages": messages,
-                "temperature": bot.temperature,
-                "max_tokens": 256,
-            },
+            json=payload,
             timeout=60.0,
         )
         resp.raise_for_status()
@@ -260,6 +280,24 @@ async def maybe_bot_react(bot: Bot, message_content: str, sender_name: str) -> s
     return None
 
 
+def _is_within_price_cap(pricing: dict | None) -> bool:
+    """Check if a model's pricing falls within the configured caps."""
+    if not settings.MAX_PROMPT_PRICE and not settings.MAX_COMPLETION_PRICE:
+        return True  # no caps configured
+    if not pricing:
+        return False  # no pricing info → skip to be safe
+    try:
+        prompt_per_m = float(pricing.get("prompt", "0")) * 1_000_000
+        completion_per_m = float(pricing.get("completion", "0")) * 1_000_000
+    except (ValueError, TypeError):
+        return False
+    if settings.MAX_PROMPT_PRICE and prompt_per_m > settings.MAX_PROMPT_PRICE:
+        return False
+    if settings.MAX_COMPLETION_PRICE and completion_per_m > settings.MAX_COMPLETION_PRICE:
+        return False
+    return True
+
+
 async def list_openrouter_models() -> list[dict]:
     async with httpx.AsyncClient() as client:
         resp = await client.get(
@@ -277,4 +315,5 @@ async def list_openrouter_models() -> list[dict]:
                 "pricing": m.get("pricing"),
             }
             for m in data.get("data", [])
+            if _is_within_price_cap(m.get("pricing"))
         ]

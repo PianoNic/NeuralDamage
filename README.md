@@ -25,7 +25,7 @@
 - **Reply threading** — Reply to specific messages with quoted context
 - **Content moderation** — Built-in guardrails prevent bots from engaging with harmful content
 - **OIDC authentication** — Login via any OpenID Connect provider (Google, Pocket ID, etc.)
-- **Cost protection** — History truncation and token budgets keep API costs in check
+- **Cost protection** — Model price caps, history truncation, and token budgets keep API costs in check
 - **Docker ready** — Single `docker compose up` to run everything
 
 ## Tech Stack
@@ -56,6 +56,10 @@ ConnectionStrings__DefaultConnection=Host=db;Database=neuraldamage;Username=neur
 
 # OpenRouter (AI models)
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
+
+# Model price caps ($/million tokens, 0 = no limit)
+MAX_PROMPT_PRICE=0.25
+MAX_COMPLETION_PRICE=0.60
 ```
 
 2. **Start it:**
