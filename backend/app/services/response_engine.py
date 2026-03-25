@@ -77,6 +77,7 @@ def _build_evaluation_prompt(
     message: Message,
     bot: Bot,
     recent_messages: list[Message],
+    already_responded: list[str] | None = None,
 ) -> str:
     mentions = json.loads(message.mentions) if message.mentions else []
     is_mentioned = bot.id in mentions
@@ -104,6 +105,14 @@ def _build_evaluation_prompt(
 
     sender_type = "bot" if message.sender_bot_id else "human"
 
+    # Build the "already responded" section for re-evaluation rounds
+    already_section = ""
+    if already_responded:
+        already_section = f"""
+## Bots That Already Responded
+The following bots have ALREADY replied to this message: {', '.join(already_responded)}
+Their responses are visible in the conversation above. ONLY respond if you have something GENUINELY DIFFERENT to add — do not echo, rephrase, or pile on what was already said. If they covered it, stay quiet (score 0.0-0.2)."""
+
     return f"""## Bot Under Evaluation
 - Name: {bot.name}
 - Personality: {bot.personality or 'not specified'}
@@ -115,6 +124,7 @@ def _build_evaluation_prompt(
 - Seconds since bot last spoke: {bot_last_spoke_seconds or 'never spoke'}
 - Bot messages in last 10: {bot_msg_count}/10
 - Message is from: {sender_type}
+{already_section}
 
 ## Recent Conversation
 {conversation}
@@ -127,13 +137,14 @@ async def should_bot_respond(
     message: Message,
     bot: Bot,
     recent_messages: list[Message],
+    already_responded: list[str] | None = None,
 ) -> tuple[bool, float]:
     """Use a LangChain LLM agent to decide if a bot should respond."""
     try:
         llm = get_judge_llm()
         parser = JsonOutputParser()
 
-        prompt_text = _build_evaluation_prompt(message, bot, recent_messages)
+        prompt_text = _build_evaluation_prompt(message, bot, recent_messages, already_responded)
 
         response = await llm.ainvoke([
             SystemMessage(content=JUDGE_SYSTEM_PROMPT),

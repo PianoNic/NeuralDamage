@@ -14,11 +14,13 @@ from app.models.bot import Bot
 from app.models.user import User
 from app.models.reaction import Reaction
 from app.services.response_engine import should_bot_respond
-from app.services.bot_service import call_openrouter, format_history_for_bot, maybe_bot_react, strip_reply_metadata
+from app.services.bot_service import call_openrouter, format_history_for_bot, maybe_bot_react, pick_reply_target, strip_reply_metadata
 from app.ws.manager import manager
 
 # Max chain depth for bot-to-bot conversations (prevents infinite loops)
 MAX_BOT_CHAIN_DEPTH = 3
+# Max bots that can respond to a single trigger at the same depth
+MAX_RESPONDERS_PER_DEPTH = 3
 
 SLASH_COMMANDS = {
     "/stop": "Stop all bot responses immediately",
@@ -216,11 +218,13 @@ async def handle_message(chat_id: str, user: User, content: str, mentions: list[
 
 
 async def process_bot_responses(chat_id: str, trigger_message_id: str, depth: int = 0, exclude_bot_id: str | None = None):
+    """Interleaved evaluate-generate loop: evaluate all → pick best → generate →
+    re-evaluate remaining with updated context → repeat.  This creates natural
+    conversational threading instead of all bots piling on the same message."""
     if depth >= MAX_BOT_CHAIN_DEPTH:
         print(f"[BOT] Chain depth {depth} reached, stopping.", flush=True)
         return
 
-    # Check if bots are stopped or muted for this chat
     if chat_id in manager.stopped_chats or chat_id in manager.muted_chats:
         print(f"[BOT] Chat {chat_id[:8]} is stopped/muted, skipping.", flush=True)
         return
@@ -247,7 +251,6 @@ async def process_bot_responses(chat_id: str, trigger_message_id: str, depth: in
         )
         recent_messages = list(reversed(result.scalars().all()))
 
-        # The trigger message is the last one
         trigger_msg = recent_messages[-1] if recent_messages else None
         if not trigger_msg:
             return
@@ -259,99 +262,132 @@ async def process_bot_responses(chat_id: str, trigger_message_id: str, depth: in
         elif trigger_msg.sender_bot_id and trigger_msg.sender_bot:
             trigger_sender = trigger_msg.sender_bot.name
 
-        # Score each bot (skip the bot that just spoke to avoid self-replies)
-        responding_bots: list[tuple[Bot, float]] = []
-        non_responding_bots: list[Bot] = []
+        # Build the pool of candidate bots
+        candidate_bots: list[Bot] = []
         for member in bot_members:
             bot = member.bot
             if not bot or not bot.is_active:
                 continue
-            # Don't let a bot respond to its own message
             if bot.id == exclude_bot_id:
                 continue
+            candidate_bots.append(bot)
 
-            print(f"[BOT] Evaluating '{bot.name}' (depth={depth})...", flush=True)
-            should_respond, score = await should_bot_respond(trigger_msg, bot, recent_messages[-10:])
-            print(f"[BOT] '{bot.name}': should_respond={should_respond}, score={score:.2f}", flush=True)
-            if should_respond:
-                responding_bots.append((bot, score))
-            else:
-                non_responding_bots.append(bot)
-
-        # Sort by score descending
-        responding_bots.sort(key=lambda x: x[1], reverse=True)
-
-        # Let ALL approved bots respond at this depth, then chain once at the end
+        # --- Interleaved evaluate-generate loop ---
+        # Each round: evaluate remaining candidates → pick highest scorer →
+        # generate response → re-evaluate with updated context
+        already_responded_names: list[str] = []
+        responded_count = 0
+        non_responding_bots: list[Bot] = []
         last_bot_msg = None
         last_bot_id = None
-        for i, (bot, score) in enumerate(responding_bots):
-            # Check stop/mute between each bot
+
+        while candidate_bots and responded_count < MAX_RESPONDERS_PER_DEPTH:
             if chat_id in manager.stopped_chats or chat_id in manager.muted_chats:
                 print(f"[BOT] Chat {chat_id[:8]} stopped/muted mid-loop, aborting.", flush=True)
                 return
-            if i > 0:
-                await asyncio.sleep(random.uniform(1.0, 4.0))
+
+            # Evaluate all remaining candidates (with awareness of who already spoke)
+            scored: list[tuple[Bot, float]] = []
+            rejected: list[Bot] = []
+            for bot in candidate_bots:
+                print(f"[BOT] Evaluating '{bot.name}' (depth={depth}, round={responded_count})...", flush=True)
+                should, score = await should_bot_respond(
+                    trigger_msg, bot, recent_messages[-10:],
+                    already_responded=already_responded_names if already_responded_names else None,
+                )
+                print(f"[BOT] '{bot.name}': should_respond={should}, score={score:.2f}", flush=True)
+                if should:
+                    scored.append((bot, score))
+                else:
+                    rejected.append(bot)
+
+            # No more bots want to respond — we're done
+            if not scored:
+                non_responding_bots.extend(rejected)
+                non_responding_bots.extend([b for b, _ in scored])
+                break
+
+            # Pick the highest-scoring bot
+            scored.sort(key=lambda x: x[1], reverse=True)
+            winner_bot, winner_score = scored[0]
+            remaining_scored = [b for b, _ in scored[1:]]
+
+            # Stagger delay for natural feel (skip for the first responder)
+            if responded_count > 0:
+                await asyncio.sleep(random.uniform(1.5, 4.0))
 
             # Broadcast typing
             await manager.broadcast(chat_id, {
                 "type": "message.bot_typing",
-                "bot_id": bot.id,
-                "bot_name": bot.name,
+                "bot_id": winner_bot.id,
+                "bot_name": winner_bot.name,
             })
 
             try:
-                # Build context and call OpenRouter
-                history = format_history_for_bot(recent_messages, bot)
-                response_text = await call_openrouter(bot, history)
+                # Generate response with full conversation context
+                history = format_history_for_bot(recent_messages, winner_bot)
+                response_text = await call_openrouter(winner_bot, history)
+                response_text = _strip_name_prefix(response_text, winner_bot.name)
 
-                # Strip any [Name]: prefix the bot might have added
-                response_text = _strip_name_prefix(response_text, bot.name)
-
-                # Decide if bot should reply-to a specific message
-                # Bots reply to the trigger message if it's from someone else
-                bot_reply_to_id = trigger_msg.id
-                bot_reply_to_msg = trigger_msg
+                # Smart reply targeting: pick the most natural reply target
+                # First bot replies to trigger; subsequent bots get LLM-picked target
+                if responded_count == 0:
+                    reply_target_msg = trigger_msg
+                else:
+                    reply_target_msg = await pick_reply_target(
+                        winner_bot, response_text, recent_messages[-6:]
+                    )
 
                 # Save bot message
                 bot_msg = Message(
                     chat_id=chat_id,
-                    sender_bot_id=bot.id,
+                    sender_bot_id=winner_bot.id,
                     content=response_text,
-                    reply_to_id=bot_reply_to_id,
+                    reply_to_id=reply_target_msg.id,
                 )
                 db.add(bot_msg)
                 await db.commit()
                 await db.refresh(bot_msg)
 
-                # Broadcast bot message
+                # Broadcast
                 await manager.broadcast(chat_id, {
                     "type": "message.new",
                     "message": {
                         "id": bot_msg.id,
                         "chat_id": chat_id,
                         "sender_user_id": None,
-                        "sender_bot_id": bot.id,
-                        "sender_name": bot.name,
-                        "sender_avatar": bot.avatar_url,
+                        "sender_bot_id": winner_bot.id,
+                        "sender_name": winner_bot.name,
+                        "sender_avatar": winner_bot.avatar_url,
                         "sender_type": "bot",
                         "content": response_text,
                         "mentions": [],
                         "reactions": [],
-                        "reply_to": _build_reply_to_dict(bot_reply_to_msg),
+                        "reply_to": _build_reply_to_dict(reply_target_msg),
                         "created_at": bot_msg.created_at.isoformat(),
                     },
                 })
 
-                # Add to recent messages for next bot's context
+                # Update context for next round
                 recent_messages.append(bot_msg)
+                already_responded_names.append(winner_bot.name)
                 last_bot_msg = bot_msg
-                last_bot_id = bot.id
+                last_bot_id = winner_bot.id
+                responded_count += 1
 
             except Exception as e:
                 await manager.broadcast(chat_id, {
                     "type": "error",
-                    "detail": f"Bot {bot.name} failed to respond: {str(e)}",
+                    "detail": f"Bot {winner_bot.name} failed to respond: {str(e)}",
                 })
+
+            # Update candidate pool: rejected bots are done, remaining scorers
+            # plus any from previous rejected rounds go back for re-evaluation
+            non_responding_bots.extend(rejected)
+            candidate_bots = remaining_scored
+
+        # Any bots still in candidates that weren't picked are non-responders
+        non_responding_bots.extend(candidate_bots)
 
         # Let non-responding bots potentially react with emoji (only at depth 0)
         if depth == 0 and non_responding_bots:
@@ -366,8 +402,7 @@ async def process_bot_responses(chat_id: str, trigger_message_id: str, depth: in
                 except Exception as e:
                     print(f"[BOT] Reaction failed for {bot.name}: {e}", flush=True)
 
-        # After all bots at this depth have responded, chain once to let
-        # other bots react to the last message (bot-to-bot conversation)
+        # Chain to next depth for bot-to-bot conversation
         if last_bot_msg and depth + 1 < MAX_BOT_CHAIN_DEPTH:
             print(f"[BOT] Depth {depth} done, chaining to depth {depth+1}", flush=True)
             await asyncio.sleep(random.uniform(1.5, 3.0))
