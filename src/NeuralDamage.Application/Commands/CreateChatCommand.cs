@@ -1,7 +1,9 @@
 using Mediator;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Mappers;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 
@@ -9,7 +11,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record CreateChatCommand(string Name, Guid CreatedById) : ICommand<Result>;
 
-public class CreateChatHandler(INeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<CreateChatCommand, Result>
+public class CreateChatHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<CreateChatCommand, Result>
 {
     public async ValueTask<Result> Handle(CreateChatCommand request, CancellationToken cancellationToken)
     {

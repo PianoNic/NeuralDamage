@@ -1,15 +1,17 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Mappers;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Application.Commands;
 
 public record ToggleReactionCommand(Guid ChatId, Guid MessageId, string Emoji, Guid UserId) : ICommand<Result>;
 
-public class ToggleReactionHandler(INeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<ToggleReactionCommand, Result>
+public class ToggleReactionHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<ToggleReactionCommand, Result>
 {
     public async ValueTask<Result> Handle(ToggleReactionCommand request, CancellationToken cancellationToken)
     {

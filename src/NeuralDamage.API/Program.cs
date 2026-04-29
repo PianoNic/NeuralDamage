@@ -2,12 +2,13 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
+using NeuralDamage.API.Extensions;
 using NeuralDamage.API.Middleware;
 using NeuralDamage.API.Services;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Services.BotDecision;
 using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,18 +16,16 @@ builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 
 // Database
 builder.Services.AddDbContext<NeuralDamageDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-builder.Services.AddScoped<INeuralDamageDbContext>(sp => sp.GetRequiredService<NeuralDamageDbContext>());
 
 // Services
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-builder.Services.AddScoped<IUserSyncService, UserSyncService>();
+builder.Services.AddScoped<IOidcService, OidcService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
-builder.Services.AddScoped<IUserResolverService, UserResolverService>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
 builder.Services.AddScoped<IOpenRouterService, SemanticKernelService>();
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
-builder.Services.AddScoped<NeuralDamage.Application.Services.BotDecision.Tier3LlmJudge>();
+builder.Services.AddScoped<Tier3LlmJudge>();
 builder.Services.AddSingleton<BotResponseQueue>();
 builder.Services.AddSingleton<IBotResponseQueue>(sp => sp.GetRequiredService<BotResponseQueue>());
 builder.Services.AddSingleton<IBotResponseOrchestrator, BotResponseOrchestrator>();
@@ -42,7 +41,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Authority = builder.Configuration["Oidc:Authority"];
         options.RequireHttpsMetadata = builder.Configuration.GetValue("Oidc:RequireHttpsMetadata", true);
         options.TokenValidationParameters.NameClaimType = "name";
-        options.TokenValidationParameters.RoleClaimType = "role";
+        options.TokenValidationParameters.RoleClaimType = "groups";
         options.TokenValidationParameters.ValidateAudience = false;
         options.Events = new JwtBearerEvents
         {
@@ -54,7 +53,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return Task.CompletedTask;
             }
         };
-    });
+    })
+    .AddUserSync();
+
 builder.Services.AddAuthorization(options => options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
 // SignalR
@@ -100,12 +101,9 @@ if (builder.Environment.IsDevelopment())
 
 var app = builder.Build();
 
-// Database migration
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
-    dbContext.Database.Migrate();
-}
+// Database
+app.ApplyMigrations();
+await app.ApplySeedsAsync();
 
 // Middleware pipeline
 app.UseExceptionHandler();
@@ -122,7 +120,6 @@ if (app.Environment.IsDevelopment())
         c.OAuthUsePkce();
     });
 
-    // Token proxy to bypass CORS on the OIDC provider's token endpoint
     app.MapPost("/api/oidc/token", async (HttpContext ctx, IHttpClientFactory httpClientFactory, IConfiguration config) =>
     {
         var form = await ctx.Request.ReadFormAsync();
@@ -139,13 +136,9 @@ app.UseStaticFiles();
 
 if (!app.Environment.IsDevelopment())
 {
-    // Don't use HTTPS redirection in production when running behind a reverse proxy
-    // The proxy handles HTTPS termination
-    // app.UseHttpsRedirection();
     app.UseSpaStaticFiles();
 }
 
-// Ensure frontend routes work
 app.UseRouting();
 if (app.Environment.IsDevelopment())
     app.UseCors();

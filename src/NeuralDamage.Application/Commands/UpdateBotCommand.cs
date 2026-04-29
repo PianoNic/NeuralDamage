@@ -1,13 +1,15 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Application.Commands;
 
 public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? AvatarUrl, string? Aliases, bool? IsActive) : ICommand<Result>;
 
-public class UpdateBotHandler(INeuralDamageDbContext db) : ICommandHandler<UpdateBotCommand, Result>
+public class UpdateBotHandler(NeuralDamageDbContext db) : ICommandHandler<UpdateBotCommand, Result>
 {
     public async ValueTask<Result> Handle(UpdateBotCommand request, CancellationToken cancellationToken)
     {

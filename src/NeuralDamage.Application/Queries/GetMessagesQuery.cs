@@ -1,15 +1,17 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Dtos;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Mappers;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Application.Queries;
 
 public record GetMessagesQuery(Guid ChatId, Guid RequestingUserId, int Limit = 50, DateTime? Before = null) : IQuery<Result<List<MessageDto>>>;
 
-public class GetMessagesHandler(INeuralDamageDbContext db) : IQueryHandler<GetMessagesQuery, Result<List<MessageDto>>>
+public class GetMessagesHandler(NeuralDamageDbContext db) : IQueryHandler<GetMessagesQuery, Result<List<MessageDto>>>
 {
     public async ValueTask<Result<List<MessageDto>>> Handle(GetMessagesQuery request, CancellationToken cancellationToken)
     {

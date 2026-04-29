@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;

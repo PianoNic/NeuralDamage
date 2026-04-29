@@ -1,14 +1,16 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain.Enums;
 
 namespace NeuralDamage.Application.Commands;
 
 public record ClearChatCommand(Guid ChatId, Guid RequestingUserId) : ICommand<Result>;
 
-public class ClearChatHandler(INeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<ClearChatCommand, Result>
+public class ClearChatHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<ClearChatCommand, Result>
 {
     public async ValueTask<Result> Handle(ClearChatCommand request, CancellationToken cancellationToken)
     {

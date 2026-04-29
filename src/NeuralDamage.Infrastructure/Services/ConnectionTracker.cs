@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 
 namespace NeuralDamage.Infrastructure.Services;
 

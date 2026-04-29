@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Mappers;
+using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 
@@ -52,7 +52,7 @@ public class MapperTests
     public void Chat_ToDetailDto_IncludesMembers()
     {
         var chat = new Chat { Name = "General", CreatedById = Guid.NewGuid() };
-        var members = new List<NeuralDamage.Application.Dtos.ChatMemberDto>
+        var members = new List<NeuralDamage.Infrastructure.Dtos.ChatMemberDto>
         {
             new(Guid.NewGuid(), chat.Id, Guid.NewGuid(), null, "Owner", DateTime.UtcNow, null, null)
         };

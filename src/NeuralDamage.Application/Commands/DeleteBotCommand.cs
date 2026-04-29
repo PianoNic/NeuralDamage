@@ -1,13 +1,15 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Application.Commands;
 
 public record DeleteBotCommand(Guid BotId, Guid RequestingUserId) : ICommand<Result>;
 
-public class DeleteBotHandler(INeuralDamageDbContext db) : ICommandHandler<DeleteBotCommand, Result>
+public class DeleteBotHandler(NeuralDamageDbContext db) : ICommandHandler<DeleteBotCommand, Result>
 {
     public async ValueTask<Result> Handle(DeleteBotCommand request, CancellationToken cancellationToken)
     {

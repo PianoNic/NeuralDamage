@@ -1,14 +1,16 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain.Enums;
 
 namespace NeuralDamage.Application.Commands;
 
 public record KickBotCommand(Guid ChatId, Guid BotId, Guid RequestingUserId) : ICommand<Result>;
 
-public class KickBotHandler(INeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<KickBotCommand, Result>
+public class KickBotHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<KickBotCommand, Result>
 {
     public async ValueTask<Result> Handle(KickBotCommand request, CancellationToken cancellationToken)
     {

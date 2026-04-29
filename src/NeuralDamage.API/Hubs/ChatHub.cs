@@ -2,12 +2,15 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.API.Hubs;
+using NeuralDamage.Infrastructure;
 
 namespace NeuralDamage.API.Hubs;
 
 [Authorize]
-public class ChatHub(INeuralDamageDbContext db) : Hub<IChatClient>
+public class ChatHub(NeuralDamageDbContext db) : Hub<IChatClient>
 {
     public override async Task OnConnectedAsync()
     {

@@ -1,11 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure;
 
-public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> options) : DbContext(options), INeuralDamageDbContext
+public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Bot> Bots => Set<Bot>();

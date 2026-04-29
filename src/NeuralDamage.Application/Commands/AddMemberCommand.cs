@@ -1,8 +1,10 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Mappers;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 
@@ -10,7 +12,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record AddMemberCommand(Guid ChatId, Guid? UserId, Guid? BotId, Guid RequestingUserId) : ICommand<Result>;
 
-public class AddMemberHandler(INeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<AddMemberCommand, Result>
+public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<AddMemberCommand, Result>
 {
     public async ValueTask<Result> Handle(AddMemberCommand request, CancellationToken cancellationToken)
     {

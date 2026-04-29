@@ -1,15 +1,17 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Mappers;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Application.Commands;
 
 public record SendMessageCommand(Guid ChatId, Guid SenderUserId, string Content, Guid? ReplyToId = null) : ICommand<Result>;
 
-public class SendMessageHandler(INeuralDamageDbContext db, IChatNotificationService notifications, IBotResponseOrchestrator botOrchestrator, IBotResponseQueue botQueue) : ICommandHandler<SendMessageCommand, Result>
+public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IBotResponseOrchestrator botOrchestrator, IBotResponseQueue botQueue) : ICommandHandler<SendMessageCommand, Result>
 {
     public async ValueTask<Result> Handle(SendMessageCommand request, CancellationToken cancellationToken)
     {

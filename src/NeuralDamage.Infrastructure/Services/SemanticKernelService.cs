@@ -2,7 +2,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 
 namespace NeuralDamage.Infrastructure.Services;
 

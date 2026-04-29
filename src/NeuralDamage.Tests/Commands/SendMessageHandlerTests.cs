@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
@@ -41,7 +42,7 @@ public class SendMessageHandlerTests
         Assert.NotNull(msg);
         Assert.Equal("Hello world", msg!.Content);
         Assert.Equal(user.Id, msg.SenderUserId);
-        await notifications.Received(1).NotifyMessageNew(chat.Id, Arg.Any<NeuralDamage.Application.Dtos.MessageDto>());
+        await notifications.Received(1).NotifyMessageNew(chat.Id, Arg.Any<NeuralDamage.Infrastructure.Dtos.MessageDto>());
     }
 
     [Fact]

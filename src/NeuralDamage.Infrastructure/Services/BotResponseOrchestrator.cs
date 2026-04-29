@@ -2,10 +2,11 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using NeuralDamage.Application.Dtos;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Mappers;
-using NeuralDamage.Application.Services;
+using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services;
@@ -24,7 +25,7 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<INeuralDamageDbContext>();
+            var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
             var decisionEngine = scope.ServiceProvider.GetRequiredService<IBotDecisionEngine>();
             var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
             var notifications = scope.ServiceProvider.GetRequiredService<IChatNotificationService>();
