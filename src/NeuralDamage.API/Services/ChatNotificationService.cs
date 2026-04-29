@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.SignalR;
 using NeuralDamage.API.Hubs;
-using NeuralDamage.Application.Dtos;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.API.Hubs;
+using NeuralDamage.Infrastructure;
 
 namespace NeuralDamage.API.Services;
 

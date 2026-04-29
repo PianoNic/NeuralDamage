@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Services.BotDecision;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Tests.BotDecision;

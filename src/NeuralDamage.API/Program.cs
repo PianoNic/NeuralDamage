@@ -5,11 +5,10 @@ using Microsoft.OpenApi;
 using NeuralDamage.API.Extensions;
 using NeuralDamage.API.Middleware;
 using NeuralDamage.API.Services;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Services.BotDecision;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,7 +16,6 @@ builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 
 // Database
 builder.Services.AddDbContext<NeuralDamageDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-builder.Services.AddScoped<INeuralDamageDbContext>(sp => sp.GetRequiredService<NeuralDamageDbContext>());
 
 // Services
 builder.Services.AddHttpContextAccessor();
@@ -27,7 +25,7 @@ builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
 builder.Services.AddScoped<IOpenRouterService, SemanticKernelService>();
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
-builder.Services.AddScoped<NeuralDamage.Application.Services.BotDecision.Tier3LlmJudge>();
+builder.Services.AddScoped<Tier3LlmJudge>();
 builder.Services.AddSingleton<BotResponseQueue>();
 builder.Services.AddSingleton<IBotResponseQueue>(sp => sp.GetRequiredService<BotResponseQueue>());
 builder.Services.AddSingleton<IBotResponseOrchestrator, BotResponseOrchestrator>();

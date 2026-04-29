@@ -19,7 +19,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\NeuralDamage.Application\NeuralDamage.Application.csproj" />
+	  <ProjectReference Include="..\NeuralDamage.Domain\NeuralDamage.Domain.csproj" />
 	</ItemGroup>
 
 </Project>

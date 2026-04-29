@@ -1,5 +1,6 @@
 using NeuralDamage.Application.Commands;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
@@ -26,7 +27,7 @@ public class UpdateChatHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("New Name", chat.Name);
-        await notifications.Received(1).NotifyChatUpdated(chat.Id, Arg.Any<NeuralDamage.Application.Dtos.ChatDto>());
+        await notifications.Received(1).NotifyChatUpdated(chat.Id, Arg.Any<NeuralDamage.Infrastructure.Dtos.ChatDto>());
     }
 
     [Fact]

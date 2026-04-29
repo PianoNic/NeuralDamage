@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Services;
+using NeuralDamage.Infrastructure.Services;
 
 namespace NeuralDamage.Tests.Services;
 

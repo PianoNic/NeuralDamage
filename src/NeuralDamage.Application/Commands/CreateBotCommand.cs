@@ -1,15 +1,17 @@
 using Mediator;
-using NeuralDamage.Application.Dtos;
-using NeuralDamage.Application.Interfaces;
-using NeuralDamage.Application.Mappers;
-using NeuralDamage.Application.Models;
+using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Application.Commands;
 
 public record CreateBotCommand(string Name, string ModelId, string SystemPrompt, string? Personality, double Temperature, string? AvatarUrl, string? Aliases, Guid CreatedById) : ICommand<Result<BotDto>>;
 
-public class CreateBotHandler(INeuralDamageDbContext db) : ICommandHandler<CreateBotCommand, Result<BotDto>>
+public class CreateBotHandler(NeuralDamageDbContext db) : ICommandHandler<CreateBotCommand, Result<BotDto>>
 {
     public async ValueTask<Result<BotDto>> Handle(CreateBotCommand request, CancellationToken cancellationToken)
     {

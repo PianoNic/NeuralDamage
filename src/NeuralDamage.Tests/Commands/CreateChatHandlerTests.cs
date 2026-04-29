@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
@@ -46,6 +47,6 @@ public class CreateChatHandlerTests
         var handler = new CreateChatHandler(db, notifications);
         await handler.Handle(new CreateChatCommand("My Chat", user.Id), CancellationToken.None);
 
-        await notifications.Received(1).NotifyUserChatCreated(user.Id, Arg.Any<NeuralDamage.Application.Dtos.ChatDto>());
+        await notifications.Received(1).NotifyUserChatCreated(user.Id, Arg.Any<NeuralDamage.Infrastructure.Dtos.ChatDto>());
     }
 }

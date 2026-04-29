@@ -1,6 +1,7 @@
-using NeuralDamage.Application.Services;
-using NeuralDamage.Application.Services.BotDecision;
-using NeuralDamage.Application.Interfaces;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NSubstitute;
 

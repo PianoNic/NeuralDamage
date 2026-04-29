@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using NeuralDamage.Application.Dtos;
+using NeuralDamage.Infrastructure.Dtos;
 
 namespace NeuralDamage.API.Controllers;
 
