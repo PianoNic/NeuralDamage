@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using NeuralDamage.Application.Command;
+using NeuralDamage.Application.Commands;
 using NeuralDamage.Domain;
 using NeuralDamage.Tests.Helpers;
 

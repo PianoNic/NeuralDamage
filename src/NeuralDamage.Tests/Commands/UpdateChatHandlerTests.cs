@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Command;
+using NeuralDamage.Application.Commands;
 using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;

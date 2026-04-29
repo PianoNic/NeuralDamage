@@ -4,7 +4,7 @@ using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Application.Models;
 using NeuralDamage.Domain.Enums;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record RemoveMemberCommand(Guid ChatId, Guid MemberId, Guid RequestingUserId) : ICommand<Result>;
 

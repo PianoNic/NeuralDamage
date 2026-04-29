@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Application.Models;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record DeleteBotCommand(Guid BotId, Guid RequestingUserId) : ICommand<Result>;
 

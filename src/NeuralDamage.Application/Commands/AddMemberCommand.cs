@@ -6,7 +6,7 @@ using NeuralDamage.Application.Models;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record AddMemberCommand(Guid ChatId, Guid? UserId, Guid? BotId, Guid RequestingUserId) : ICommand<Result>;
 

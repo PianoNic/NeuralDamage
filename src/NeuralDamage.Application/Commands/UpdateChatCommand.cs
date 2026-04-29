@@ -5,7 +5,7 @@ using NeuralDamage.Application.Mappers;
 using NeuralDamage.Application.Models;
 using NeuralDamage.Domain.Enums;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record UpdateChatCommand(Guid ChatId, string Name, Guid RequestingUserId) : ICommand<Result>;
 

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Application.Models;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? AvatarUrl, string? Aliases, bool? IsActive) : ICommand<Result>;
 

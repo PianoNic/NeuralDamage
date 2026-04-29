@@ -1,5 +1,5 @@
 using FluentValidation;
-using NeuralDamage.Application.Command;
+using NeuralDamage.Application.Commands;
 
 namespace NeuralDamage.Application.Validators;
 

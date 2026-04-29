@@ -5,7 +5,7 @@ using NeuralDamage.Application.Mappers;
 using NeuralDamage.Application.Models;
 using NeuralDamage.Domain;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record CreateBotCommand(string Name, string ModelId, string SystemPrompt, string? Personality, double Temperature, string? AvatarUrl, string? Aliases, Guid CreatedById) : ICommand<Result<BotDto>>;
 

@@ -5,7 +5,7 @@ using NeuralDamage.Application.Mappers;
 using NeuralDamage.Application.Models;
 using NeuralDamage.Domain;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record ToggleReactionCommand(Guid ChatId, Guid MessageId, string Emoji, Guid UserId) : ICommand<Result>;
 

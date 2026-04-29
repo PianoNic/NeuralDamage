@@ -5,7 +5,7 @@ using NeuralDamage.Application.Models;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record CreateChatCommand(string Name, Guid CreatedById) : ICommand<Result>;
 

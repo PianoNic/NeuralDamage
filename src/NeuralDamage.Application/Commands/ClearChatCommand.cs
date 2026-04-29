@@ -4,7 +4,7 @@ using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Application.Models;
 using NeuralDamage.Domain.Enums;
 
-namespace NeuralDamage.Application.Command;
+namespace NeuralDamage.Application.Commands;
 
 public record ClearChatCommand(Guid ChatId, Guid RequestingUserId) : ICommand<Result>;
 
