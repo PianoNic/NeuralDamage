@@ -7,6 +7,7 @@ using NeuralDamage.API.Services;
 using NeuralDamage.Application.Interfaces;
 using NeuralDamage.Application.Services.BotDecision;
 using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
 using System.Text.Json.Serialization;
 

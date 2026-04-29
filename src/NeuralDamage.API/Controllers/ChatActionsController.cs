@@ -1,6 +1,6 @@
 using Mediator;
 using Microsoft.AspNetCore.Mvc;
-using NeuralDamage.Application.Commands;
+using NeuralDamage.Application.Command;
 using NeuralDamage.Application.Interfaces;
 
 namespace NeuralDamage.API.Controllers;
