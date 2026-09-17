@@ -20,6 +20,7 @@
         "angular-auth-oidc-client": "^21.0.1",
         "class-variance-authority": "^0.7.0",
         "clsx": "^2.1.1",
+        "dompurify": "^3.4.15",
         "embla-carousel": ">=8.0.0 <9.0.0",
         "embla-carousel-angular": "^21.0.0",
         "katex": "^0.16.11",
@@ -39,6 +40,7 @@
         "@openapitools/openapi-generator-cli": "^2.30.2",
         "@spartan-ng/cli": "1.4.1",
         "@tailwindcss/postcss": "^4.3.3",
+        "@types/dompurify": "^3.2.0",
         "@types/luxon": "^3.7.5",
         "jsdom": "^27.1.0",
         "ngx-prompt-kit": "^22.1.0",
@@ -998,6 +1000,8 @@
     "@types/d3-zoom": ["@types/d3-zoom@3.0.8", "", { "dependencies": { "@types/d3-interpolate": "*", "@types/d3-selection": "*" } }, "sha512-iqMC4/YlFCSlO8+2Ii1GGGliCAY4XdeG748w5vQUbevlbDu0zSjH/+jojorQVBK/se0j6DUFNPBGSqD3YWYnDw=="],
 
     "@types/deep-eql": ["@types/deep-eql@4.0.2", "", {}, "sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw=="],
+
+    "@types/dompurify": ["@types/dompurify@3.2.0", "", { "dependencies": { "dompurify": "*" } }, "sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg=="],
 
     "@types/eslint": ["@types/eslint@9.6.1", "", { "dependencies": { "@types/estree": "*", "@types/json-schema": "*" } }, "sha512-FXx2pKgId/WyYo2jXw63kk7/+TY7u7AziEJxJAnSFzHlqTAS3Ync6SvgYAN/k4/PQpnnVuzoMuVnByKK2qp0ag=="],
 
