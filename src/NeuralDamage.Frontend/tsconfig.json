@@ -189,6 +189,12 @@
       ],
       "@spartan-ng/helm/popover": [
         "./libs/ui/popover/src/index.ts"
+      ],
+      "@spartan-ng/helm/bubble": [
+        "./libs/ui/bubble/src/index.ts"
+      ],
+      "@spartan-ng/helm/message": [
+        "./libs/ui/message/src/index.ts"
       ]
     }
   },

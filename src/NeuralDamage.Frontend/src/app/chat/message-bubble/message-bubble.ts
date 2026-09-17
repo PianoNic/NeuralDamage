@@ -2,6 +2,8 @@
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { HlmBadge } from '@spartan-ng/helm/badge';
+import { HlmBubbleImports } from '@spartan-ng/helm/bubble';
+import { HlmMessageImports } from '@spartan-ng/helm/message';
 import { Message } from '@app/models';
 import { ReactionBarComponent } from '@app/chat/reaction-bar/reaction-bar';
 import { PkMessageContent } from '@prompt-kit/message';
@@ -17,6 +19,8 @@ import { PkMessageContent } from '@prompt-kit/message';
     HlmBadge,
     ReactionBarComponent,
     PkMessageContent,
+    HlmBubbleImports,
+    HlmMessageImports,
   ],
   host: { class: 'contents' },
   templateUrl: './message-bubble.html',

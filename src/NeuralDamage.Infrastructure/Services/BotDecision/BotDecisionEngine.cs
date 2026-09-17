@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
@@ -47,7 +47,7 @@ public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judg
             var score = Tier2WeightedScore.ComputeScore(context);
 
             if (score >= Tier2WeightedScore.RespondThreshold) { mustRespond.Add(bot.Id); continue; }
-            if (score <= Tier2WeightedScore.SkipThreshold) continue;
+            if (score < Tier2WeightedScore.SkipThreshold) continue;
 
             undecided.Add((bot, score));
         }

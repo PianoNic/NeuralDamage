@@ -1,78 +1,64 @@
-﻿@if (isBot()) {
-  <!-- Bot: left aligned, markdown body, no bubble chrome -->
-  <div class="group flex w-full max-w-[85%] gap-3 self-start">
-    <hlm-avatar class="size-8 shrink-0 self-start">
+<div hlmMessage [align]="isBot() ? 'start' : 'end'" class="group">
+  <!-- WhatsApp only shows the other party's avatar, never your own -->
+  @if (isBot()) {
+    <hlm-avatar hlmMessageAvatar class="size-8 self-start">
       @if (message().senderAvatar) {
         <img hlmAvatarImage [src]="message().senderAvatar" [alt]="message().senderName" />
       }
       <span hlmAvatarFallback class="text-xs font-semibold">{{ senderInitial() }}</span>
     </hlm-avatar>
+  }
 
-    <div class="flex min-w-0 flex-1 flex-col gap-1">
-      <div class="flex items-center gap-2">
-        <span class="text-foreground text-sm font-medium">{{ message().senderName }}</span>
-        <span hlmBadge variant="secondary" class="px-1.5 py-0 text-[10px] leading-4">BOT</span>
-        <span class="text-muted-foreground text-xs">{{ sentAt() }}</span>
+  <div hlmMessageContent class="gap-0">
+    <div hlmBubble [variant]="isBot() ? 'muted' : 'default'" [align]="isBot() ? 'start' : 'end'">
+      <div hlmBubbleContent class="max-w-[min(32rem,85vw)]">
+        <!-- Sender sits inside the bubble, like WhatsApp group chats -->
+        @if (isBot()) {
+          <div class="mb-0.5 flex items-center gap-1.5">
+            <span class="text-primary text-xs font-semibold">{{ message().senderName }}</span>
+            <span hlmBadge variant="secondary" class="px-1 py-0 text-[9px] leading-3">BOT</span>
+          </div>
+        }
+
+        <!-- Quoted reply, also inside the bubble -->
+        @if (hasReply()) {
+          <div class="border-primary/60 bg-foreground/5 mb-1 rounded-sm border-l-[3px] px-2 py-1">
+            <span class="text-primary block text-xs font-semibold">
+              {{ message().replyTo!.senderName }}
+            </span>
+            <span class="line-clamp-2 text-xs opacity-70">{{ message().replyTo!.content }}</span>
+          </div>
+        }
+
+        @if (isBot()) {
+          <pk-message-content class="bg-transparent p-0" [markdown]="true" [content]="message().content" />
+          <div class="mt-0.5 text-right text-[10px] leading-none opacity-60">{{ sentAt() }}</div>
+        } @else {
+          <!-- Float lets short messages tuck the time beside the text, as WhatsApp does -->
+          <span class="whitespace-pre-wrap">{{ message().content }}</span>
+          <span class="float-right mt-1 ml-2 translate-y-0.5 text-[10px] leading-none opacity-60 select-none">
+            {{ sentAt() }}
+          </span>
+        }
       </div>
-
-      @if (hasReply()) {
-        <div class="border-primary/50 bg-muted/50 rounded-sm border-l-2 px-3 py-1.5 text-xs">
-          <span class="text-foreground font-medium">{{ message().replyTo!.senderName }}</span>
-          <p class="text-muted-foreground truncate">{{ message().replyTo!.content }}</p>
-        </div>
-      }
-
-      <pk-message-content
-        class="bg-transparent p-0"
-        [markdown]="true"
-        [content]="message().content"
-      />
 
       @if (hasReactions()) {
-        <app-reaction-bar
-          [reactions]="message().reactions"
-          (toggleReaction)="toggleReaction($event)"
-        />
+        <div hlmBubbleReactions [align]="isBot() ? 'start' : 'end'">
+          <app-reaction-bar
+            [reactions]="message().reactions"
+            (toggleReaction)="toggleReaction($event)"
+          />
+        </div>
       }
-
-      <div class="invisible flex gap-1 group-hover:visible">
-        <button hlmBtn variant="ghost" size="sm" class="h-6 px-2 text-xs" (click)="onReply()">
-          Reply
-        </button>
-      </div>
-    </div>
-  </div>
-} @else {
-  <!-- Human: right aligned, filled bubble -->
-  <div class="group flex w-full max-w-[80%] flex-col items-end gap-1 self-end">
-    <div class="flex items-center gap-2">
-      <span class="text-muted-foreground text-xs">{{ sentAt() }}</span>
-      <span class="text-foreground text-sm font-medium">{{ message().senderName }}</span>
     </div>
 
-    @if (hasReply()) {
-      <div class="border-primary/50 bg-muted/50 max-w-sm rounded-sm border-l-2 px-3 py-1.5 text-xs">
-        <span class="text-foreground font-medium">{{ message().replyTo!.senderName }}</span>
-        <p class="text-muted-foreground truncate">{{ message().replyTo!.content }}</p>
-      </div>
-    }
-
-    <pk-message-content
-      class="bg-primary text-primary-foreground"
-      [content]="message().content"
-    />
-
-    @if (hasReactions()) {
-      <app-reaction-bar
-        [reactions]="message().reactions"
-        (toggleReaction)="toggleReaction($event)"
-      />
-    }
-
-    <div class="invisible flex gap-1 group-hover:visible">
-      <button hlmBtn variant="ghost" size="sm" class="h-6 px-2 text-xs" (click)="onReply()">
+    <div
+      class="invisible flex items-center gap-1 group-hover:visible"
+      [class.justify-end]="!isBot()"
+    >
+      <button hlmBtn variant="ghost" size="sm" class="h-5 px-2 text-[11px]" (click)="onReply()">
         Reply
       </button>
     </div>
   </div>
-}
+</div>

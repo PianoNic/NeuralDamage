@@ -1,10 +1,11 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
 public static class FuzzyNameMatcher
 {
-    private static readonly string[] GroupAddressPatterns = ["everyone", "all bots", "you guys", "you all", "y'all"];
+    private static readonly string[] GroupAddressPatterns =
+        ["everyone", "all bots", "you guys", "you all", "yall", "anyone", "somebody", "someone"];
 
     public static bool IsNameMentioned(string message, string botName, string? aliases)
     {
@@ -51,7 +52,8 @@ public static class FuzzyNameMatcher
 
     public static bool IsGroupAddress(string message)
     {
-        var lower = message.ToLowerInvariant();
+        // Drop apostrophes so "y'all" and "yall" are the same term.
+        var lower = message.ToLowerInvariant().Replace("'", "").Replace("’", "");
         return GroupAddressPatterns.Any(p => lower.Contains(p));
     }
 

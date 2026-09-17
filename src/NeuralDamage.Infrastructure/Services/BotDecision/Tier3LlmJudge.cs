@@ -18,10 +18,18 @@ public class Tier3LlmJudge(IBotRankingService ranking)
             var historyText = string.Join("\n", recentHistory.TakeLast(10).Select(h => $"[{h.Role}]: {h.Content}"));
 
             var systemPrompt = """
-                You decide which bots should respond to a chat message.
+                You decide which bots should respond to a chat message in a group chat.
                 Return ONLY a JSON object: {"responders": ["bot-id-1", "bot-id-2"]}
-                Return an empty array if no bot should respond.
-                Consider: relevance to each bot's personality, whether adding a response adds value, avoid pile-ons.
+
+                Default to letting a bot respond. People expect a reply when they say
+                something to the room, so silence should be the exception, not the norm.
+                Pick a bot when the message is a question, is addressed at the room, or
+                continues a thread that bot was already part of.
+
+                Return an empty array only when replying would clearly be noise: the
+                message is chatter between two other people, or the same bot has just
+                spoken and has nothing to add. With several strong candidates prefer the
+                one or two best fits by personality rather than every bot at once.
                 """;
 
             var prompt = $"""

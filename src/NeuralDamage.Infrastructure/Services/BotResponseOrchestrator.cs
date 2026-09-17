@@ -117,9 +117,10 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
                     .FirstAsync(m => m.Id == botMessage.Id, cts.Token);
                 await notifications.NotifyMessageNew(chatId, loaded.ToDto());
 
-                // Stagger between bots (500ms - 2s)
-                var delay = Random.Shared.Next(500, 2000);
-                await Task.Delay(delay, cts.Token);
+                // Stagger between bots, but never after the last one - a
+                // single-bot chat was paying up to two seconds for nothing.
+                if (!ReferenceEquals(bot, responders[^1]))
+                    await Task.Delay(Random.Shared.Next(400, 1200), cts.Token);
             }
         }
         catch (OperationCanceledException)
