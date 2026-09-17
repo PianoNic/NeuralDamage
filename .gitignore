@@ -493,6 +493,12 @@ downloads/
 eggs/
 .eggs/
 lib/
+
+# Spartan helm components are vendored source, not build output. The blanket
+# lib/ rule above silently excluded every component implementation, leaving
+# barrel files importing nothing and breaking the frontend on a fresh clone.
+!src/NeuralDamage.Frontend/libs/**/lib/
+!src/NeuralDamage.Frontend/libs/**/lib/**
 lib64/
 parts/
 sdist/
