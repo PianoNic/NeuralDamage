@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -11,7 +11,7 @@ namespace NeuralDamage.Tests.Commands;
 
 public class KickBotHandlerTests
 {
-    [Fact]
+    [Test]
     public async Task Handle_OwnerCanKickBot()
     {
         using var db = TestDbContext.Create();
@@ -29,11 +29,11 @@ public class KickBotHandlerTests
         var handler = new KickBotHandler(db, notifications);
         var result = await handler.Handle(new KickBotCommand(chat.Id, bot.Id, user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.False(await db.ChatMembers.AnyAsync(cm => cm.BotId == bot.Id && cm.ChatId == chat.Id));
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.ChatMembers.AnyAsync(cm => cm.BotId == bot.Id && cm.ChatId == chat.Id)).IsFalse();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NonOwnerCannotKick()
     {
         using var db = TestDbContext.Create();
@@ -53,11 +53,11 @@ public class KickBotHandlerTests
         var handler = new KickBotHandler(db, notifications);
         var result = await handler.Handle(new KickBotCommand(chat.Id, bot.Id, member.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.True(await db.ChatMembers.AnyAsync(cm => cm.BotId == bot.Id && cm.ChatId == chat.Id));
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(await db.ChatMembers.AnyAsync(cm => cm.BotId == bot.Id && cm.ChatId == chat.Id)).IsTrue();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_BotNotInChat_ReturnsFailure()
     {
         using var db = TestDbContext.Create();
@@ -72,7 +72,7 @@ public class KickBotHandlerTests
         var handler = new KickBotHandler(db, notifications);
         var result = await handler.Handle(new KickBotCommand(chat.Id, Guid.NewGuid(), user.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("not in this chat", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("not in this chat");
     }
 }

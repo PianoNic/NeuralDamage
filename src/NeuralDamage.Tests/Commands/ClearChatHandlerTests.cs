@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -11,7 +11,7 @@ namespace NeuralDamage.Tests.Commands;
 
 public class ClearChatHandlerTests
 {
-    [Fact]
+    [Test]
     public async Task Handle_OwnerCanClear()
     {
         using var db = TestDbContext.Create();
@@ -28,11 +28,11 @@ public class ClearChatHandlerTests
         var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new ClearChatCommand(chat.Id, user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(0, await db.Messages.CountAsync(m => m.ChatId == chat.Id));
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.Messages.CountAsync(m => m.ChatId == chat.Id)).IsEqualTo(0);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NonOwnerCannotClear()
     {
         using var db = TestDbContext.Create();
@@ -49,7 +49,7 @@ public class ClearChatHandlerTests
         var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new ClearChatCommand(chat.Id, member.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal(1, await db.Messages.CountAsync(m => m.ChatId == chat.Id));
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(await db.Messages.CountAsync(m => m.ChatId == chat.Id)).IsEqualTo(1);
     }
 }

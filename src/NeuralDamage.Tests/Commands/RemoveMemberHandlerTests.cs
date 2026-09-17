@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -13,7 +13,7 @@ public class RemoveMemberHandlerTests
 {
     private static IChatNotificationService MockNotifications() => Substitute.For<IChatNotificationService>();
 
-    [Fact]
+    [Test]
     public async Task Handle_OwnerCanRemoveMember()
     {
         using var db = TestDbContext.Create();
@@ -30,11 +30,11 @@ public class RemoveMemberHandlerTests
         var handler = new RemoveMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new RemoveMemberCommand(chat.Id, userMember.Id, owner.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(1, await db.ChatMembers.CountAsync(cm => cm.ChatId == chat.Id));
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.ChatMembers.CountAsync(cm => cm.ChatId == chat.Id)).IsEqualTo(1);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_MemberCanRemoveSelf()
     {
         using var db = TestDbContext.Create();
@@ -51,10 +51,10 @@ public class RemoveMemberHandlerTests
         var handler = new RemoveMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new RemoveMemberCommand(chat.Id, userMember.Id, member.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
+        await Assert.That(result.IsSuccess).IsTrue();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_CannotRemoveOwner()
     {
         using var db = TestDbContext.Create();
@@ -69,11 +69,11 @@ public class RemoveMemberHandlerTests
         var handler = new RemoveMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new RemoveMemberCommand(chat.Id, ownerMember.Id, owner.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("owner", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("owner");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_RegularMemberCannotRemoveOthers()
     {
         using var db = TestDbContext.Create();
@@ -92,10 +92,10 @@ public class RemoveMemberHandlerTests
         var handler = new RemoveMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new RemoveMemberCommand(chat.Id, m2Member.Id, member1.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
+        await Assert.That(result.IsFailure).IsTrue();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_MemberNotFound_ReturnsFailure()
     {
         using var db = TestDbContext.Create();
@@ -103,7 +103,7 @@ public class RemoveMemberHandlerTests
         var handler = new RemoveMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new RemoveMemberCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("not found", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("not found");
     }
 }

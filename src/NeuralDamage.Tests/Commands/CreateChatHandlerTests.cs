@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -11,7 +11,7 @@ namespace NeuralDamage.Tests.Commands;
 
 public class CreateChatHandlerTests
 {
-    [Fact]
+    [Test]
     public async Task Handle_CreatesChatAndOwnerMember()
     {
         using var db = TestDbContext.Create();
@@ -23,19 +23,19 @@ public class CreateChatHandlerTests
         var handler = new CreateChatHandler(db, notifications);
         var result = await handler.Handle(new CreateChatCommand("General", user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
+        await Assert.That(result.IsSuccess).IsTrue();
 
         var chat = await db.Chats.FirstOrDefaultAsync();
-        Assert.NotNull(chat);
-        Assert.Equal("General", chat!.Name);
+        await Assert.That(chat).IsNotNull();
+        await Assert.That(chat!.Name).IsEqualTo("General");
 
         var member = await db.ChatMembers.FirstOrDefaultAsync(cm => cm.ChatId == chat.Id);
-        Assert.NotNull(member);
-        Assert.Equal(user.Id, member!.UserId);
-        Assert.Equal(ChatMemberRole.Owner, member.Role);
+        await Assert.That(member).IsNotNull();
+        await Assert.That(member!.UserId).IsEqualTo(user.Id);
+        await Assert.That(member.Role).IsEqualTo(ChatMemberRole.Owner);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NotifiesUserViaChatCreated()
     {
         using var db = TestDbContext.Create();

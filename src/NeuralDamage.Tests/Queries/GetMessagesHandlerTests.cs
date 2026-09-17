@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Queries;
+﻿using NeuralDamage.Application.Queries;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
@@ -31,7 +31,7 @@ public class GetMessagesHandlerTests
         return (db, user, chat);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_ReturnsMessagesInChronologicalOrder()
     {
         var (db, user, chat) = await SetupChatWithMessages(5);
@@ -40,13 +40,13 @@ public class GetMessagesHandlerTests
         var handler = new GetMessagesHandler(db);
         var result = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(5, result.Value!.Count);
-        Assert.Equal("Message 0", result.Value[0].Content);
-        Assert.Equal("Message 4", result.Value[4].Content);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Count).IsEqualTo(5);
+        await Assert.That(result.Value[0].Content).IsEqualTo("Message 0");
+        await Assert.That(result.Value[4].Content).IsEqualTo("Message 4");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_RespectsLimit()
     {
         var (db, user, chat) = await SetupChatWithMessages(10);
@@ -55,14 +55,14 @@ public class GetMessagesHandlerTests
         var handler = new GetMessagesHandler(db);
         var result = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, Limit: 3), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(3, result.Value!.Count);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Count).IsEqualTo(3);
         // Should be the 3 most recent
-        Assert.Equal("Message 7", result.Value[0].Content);
-        Assert.Equal("Message 9", result.Value[2].Content);
+        await Assert.That(result.Value[0].Content).IsEqualTo("Message 7");
+        await Assert.That(result.Value[2].Content).IsEqualTo("Message 9");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_CursorPagination_Before()
     {
         var (db, user, chat) = await SetupChatWithMessages(10);
@@ -71,19 +71,19 @@ public class GetMessagesHandlerTests
         var handler = new GetMessagesHandler(db);
         // Get latest 3 first
         var first = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, Limit: 3), CancellationToken.None);
-        Assert.True(first.IsSuccess);
+        await Assert.That(first.IsSuccess).IsTrue();
 
         // Then get 3 before the oldest in that batch
         var before = first.Value![0].CreatedAt;
         var second = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, Limit: 3, Before: before), CancellationToken.None);
 
-        Assert.True(second.IsSuccess);
-        Assert.Equal(3, second.Value!.Count);
+        await Assert.That(second.IsSuccess).IsTrue();
+        await Assert.That(second.Value!.Count).IsEqualTo(3);
         // All should be older than the cursor
-        Assert.True(second.Value.All(m => m.CreatedAt < before));
+        await Assert.That(second.Value.All(m => m.CreatedAt < before)).IsTrue();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NonMember_ReturnsFailure()
     {
         var (db, user, chat) = await SetupChatWithMessages(1);
@@ -92,11 +92,11 @@ public class GetMessagesHandlerTests
         var handler = new GetMessagesHandler(db);
         var result = await handler.Handle(new GetMessagesQuery(chat.Id, Guid.NewGuid()), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("not a member", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("not a member");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_EmptyChat_ReturnsEmptyList()
     {
         var (db, user, chat) = await SetupChatWithMessages(0);
@@ -105,11 +105,11 @@ public class GetMessagesHandlerTests
         var handler = new GetMessagesHandler(db);
         var result = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Empty(result.Value!);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!).IsEmpty();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_ClampsLimitTo100()
     {
         var (db, user, chat) = await SetupChatWithMessages(5);
@@ -118,7 +118,7 @@ public class GetMessagesHandlerTests
         var handler = new GetMessagesHandler(db);
         var result = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, Limit: 999), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(5, result.Value!.Count); // only 5 exist, but limit was clamped to 100
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Count).IsEqualTo(5); // only 5 exist, but limit was clamped to 100
     }
 }

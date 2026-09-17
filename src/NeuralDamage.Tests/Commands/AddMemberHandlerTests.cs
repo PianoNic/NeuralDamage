@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -13,7 +13,7 @@ public class AddMemberHandlerTests
 {
     private static IChatNotificationService MockNotifications() => Substitute.For<IChatNotificationService>();
 
-    [Fact]
+    [Test]
     public async Task Handle_AddsUserMember()
     {
         using var db = TestDbContext.Create();
@@ -28,11 +28,11 @@ public class AddMemberHandlerTests
         var handler = new AddMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new AddMemberCommand(chat.Id, newUser.Id, null, owner.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(2, await db.ChatMembers.CountAsync(cm => cm.ChatId == chat.Id));
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.ChatMembers.CountAsync(cm => cm.ChatId == chat.Id)).IsEqualTo(2);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_AddsBotMember()
     {
         using var db = TestDbContext.Create();
@@ -48,12 +48,12 @@ public class AddMemberHandlerTests
         var handler = new AddMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new AddMemberCommand(chat.Id, null, bot.Id, owner.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
+        await Assert.That(result.IsSuccess).IsTrue();
         var botMember = await db.ChatMembers.FirstOrDefaultAsync(cm => cm.BotId == bot.Id);
-        Assert.NotNull(botMember);
+        await Assert.That(botMember).IsNotNull();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NonOwnerCannotAdd()
     {
         using var db = TestDbContext.Create();
@@ -70,10 +70,10 @@ public class AddMemberHandlerTests
         var handler = new AddMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new AddMemberCommand(chat.Id, newUser.Id, null, member.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
+        await Assert.That(result.IsFailure).IsTrue();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_DuplicateUser_ReturnsFailure()
     {
         using var db = TestDbContext.Create();
@@ -87,11 +87,11 @@ public class AddMemberHandlerTests
         var handler = new AddMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new AddMemberCommand(chat.Id, owner.Id, null, owner.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("already", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("already");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_BothUserAndBot_ReturnsFailure()
     {
         using var db = TestDbContext.Create();
@@ -99,11 +99,11 @@ public class AddMemberHandlerTests
         var handler = new AddMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new AddMemberCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("Only one", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("Only one");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NeitherUserNorBot_ReturnsFailure()
     {
         using var db = TestDbContext.Create();
@@ -111,7 +111,7 @@ public class AddMemberHandlerTests
         var handler = new AddMemberHandler(db, MockNotifications());
         var result = await handler.Handle(new AddMemberCommand(Guid.NewGuid(), null, null, Guid.NewGuid()), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("Either", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("Either");
     }
 }

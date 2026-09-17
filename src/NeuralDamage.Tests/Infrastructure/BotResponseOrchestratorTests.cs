@@ -1,6 +1,4 @@
-using NeuralDamage.Infrastructure.Services;
-using NeuralDamage.Infrastructure.Services.BotDecision;
-using NeuralDamage.Infrastructure.Services;
+﻿using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NSubstitute;
@@ -9,34 +7,34 @@ namespace NeuralDamage.Tests.Infrastructure;
 
 public class BotPromptBuilderTests
 {
-    [Fact]
-    public void BuildSystemPrompt_ContainsBotNameAndParticipants()
+    [Test]
+    public async Task BuildSystemPrompt_ContainsBotNameAndParticipants()
     {
         var bot = new Bot { Name = "GPT", ModelId = "test", SystemPrompt = "Be helpful", Personality = "Friendly", CreatedById = Guid.NewGuid() };
         var participants = new List<string> { "Alice", "GPT", "Claude" };
 
         var prompt = BotPromptBuilder.BuildSystemPrompt(bot, participants);
 
-        Assert.Contains("GPT", prompt);
-        Assert.Contains("Alice", prompt);
-        Assert.Contains("Claude", prompt);
-        Assert.Contains("Be helpful", prompt);
-        Assert.Contains("Friendly", prompt);
-        Assert.Contains("1-3 sentences", prompt);
+        await Assert.That(prompt).Contains("GPT");
+        await Assert.That(prompt).Contains("Alice");
+        await Assert.That(prompt).Contains("Claude");
+        await Assert.That(prompt).Contains("Be helpful");
+        await Assert.That(prompt).Contains("Friendly");
+        await Assert.That(prompt).Contains("1-3 sentences");
     }
 
-    [Fact]
-    public void BuildSystemPrompt_OmitsPersonalityWhenNull()
+    [Test]
+    public async Task BuildSystemPrompt_OmitsPersonalityWhenNull()
     {
         var bot = new Bot { Name = "GPT", ModelId = "test", SystemPrompt = "Be helpful", CreatedById = Guid.NewGuid() };
 
         var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"]);
 
-        Assert.DoesNotContain("Additional personality", prompt);
+        await Assert.That(prompt).DoesNotContain("Additional personality");
     }
 
-    [Fact]
-    public void BuildHistory_TruncatesLongMessages()
+    [Test]
+    public async Task BuildHistory_TruncatesLongMessages()
     {
         var botId = Guid.NewGuid();
         var longContent = new string('x', 2000);
@@ -47,13 +45,13 @@ public class BotPromptBuilderTests
 
         var history = BotPromptBuilder.BuildHistory(messages, botId);
 
-        Assert.Single(history);
-        Assert.Contains("...", history[0].Content);
-        Assert.True(history[0].Content.Length < 2000);
+        await Assert.That(history).HasSingleItem();
+        await Assert.That(history[0].Content).Contains("...");
+        await Assert.That(history[0].Content.Length < 2000).IsTrue();
     }
 
-    [Fact]
-    public void BuildHistory_AssignsCorrectRoles()
+    [Test]
+    public async Task BuildHistory_AssignsCorrectRoles()
     {
         var botId = Guid.NewGuid();
         var messages = new List<Message>
@@ -65,14 +63,14 @@ public class BotPromptBuilderTests
 
         var history = BotPromptBuilder.BuildHistory(messages, botId);
 
-        Assert.Equal(3, history.Count);
-        Assert.Equal("user", history[0].Role);      // human
-        Assert.Equal("assistant", history[1].Role);  // current bot
-        Assert.Equal("user", history[2].Role);       // other bot
+        await Assert.That(history.Count).IsEqualTo(3);
+        await Assert.That(history[0].Role).IsEqualTo("user");      // human
+        await Assert.That(history[1].Role).IsEqualTo("assistant");  // current bot
+        await Assert.That(history[2].Role).IsEqualTo("user");       // other bot
     }
 
-    [Fact]
-    public void BuildHistory_RespectsCharLimit()
+    [Test]
+    public async Task BuildHistory_RespectsCharLimit()
     {
         var botId = Guid.NewGuid();
         var messages = new List<Message>();
@@ -90,14 +88,14 @@ public class BotPromptBuilderTests
         var history = BotPromptBuilder.BuildHistory(messages, botId);
 
         var totalChars = history.Sum(h => h.Content.Length);
-        Assert.True(totalChars <= 12_000);
-        Assert.True(history.Count < 100);
+        await Assert.That(totalChars <= 12_000).IsTrue();
+        await Assert.That(history.Count < 100).IsTrue();
     }
 }
 
 public class BotResponseCancellationTests
 {
-    [Fact]
+    [Test]
     public void CancelPendingResponses_DoesNotThrow_WhenNoPending()
     {
         // Just verify it doesn't throw — no scope factory needed for this

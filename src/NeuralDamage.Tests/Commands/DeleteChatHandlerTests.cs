@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -11,7 +11,7 @@ namespace NeuralDamage.Tests.Commands;
 
 public class DeleteChatHandlerTests
 {
-    [Fact]
+    [Test]
     public async Task Handle_OwnerCanDelete()
     {
         using var db = TestDbContext.Create();
@@ -26,12 +26,12 @@ public class DeleteChatHandlerTests
         var handler = new DeleteChatHandler(db, notifications);
         var result = await handler.Handle(new DeleteChatCommand(chat.Id, user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Null(await db.Chats.FirstOrDefaultAsync(c => c.Id == chat.Id));
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.Chats.FirstOrDefaultAsync(c => c.Id == chat.Id)).IsNull();
         await notifications.Received(1).NotifyChatDeleted(chat.Id);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NonOwnerCannotDelete()
     {
         using var db = TestDbContext.Create();
@@ -48,7 +48,7 @@ public class DeleteChatHandlerTests
         var handler = new DeleteChatHandler(db, notifications);
         var result = await handler.Handle(new DeleteChatCommand(chat.Id, other.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.NotNull(await db.Chats.FirstOrDefaultAsync(c => c.Id == chat.Id));
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(await db.Chats.FirstOrDefaultAsync(c => c.Id == chat.Id)).IsNotNull();
     }
 }

@@ -1,70 +1,70 @@
-using NeuralDamage.Infrastructure.Services.BotDecision;
+﻿using NeuralDamage.Infrastructure.Services.BotDecision;
 
 namespace NeuralDamage.Tests.BotDecision;
 
 public class FuzzyNameMatcherTests
 {
-    [Theory]
-    [InlineData("hey gpt what do you think?", "GPT-4o", null, true)]
-    [InlineData("ask sarah about it", "Sassy Sarah", null, true)]
-    [InlineData("einstein would know this", "Professor Einstein", null, true)]
-    [InlineData("claude can you help?", "Claude Helper", null, true)]
-    [InlineData("What does ND think?", "Neural Damage Bot", "ND", true)]
-    [InlineData("yo prof help me out", "Professor Einstein", "prof", true)]
-    public void IsNameMentioned_Matches(string message, string botName, string? aliases, bool expected)
+    [Test]
+    [Arguments("hey gpt what do you think?", "GPT-4o", null, true)]
+    [Arguments("ask sarah about it", "Sassy Sarah", null, true)]
+    [Arguments("einstein would know this", "Professor Einstein", null, true)]
+    [Arguments("claude can you help?", "Claude Helper", null, true)]
+    [Arguments("What does ND think?", "Neural Damage Bot", "ND", true)]
+    [Arguments("yo prof help me out", "Professor Einstein", "prof", true)]
+    public async Task IsNameMentioned_Matches(string message, string botName, string? aliases, bool expected)
     {
-        Assert.Equal(expected, FuzzyNameMatcher.IsNameMentioned(message, botName, aliases));
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned(message, botName, aliases)).IsEqualTo(expected);
     }
 
-    [Theory]
-    [InlineData("I like claudette's work", "Claude Helper", null)]
-    [InlineData("the algorithm is smart", "Al Bot", "algo")]
-    [InlineData("what a damaged reputation", "Reporter Bot", null)]
-    public void IsNameMentioned_DoesNotFalsePositive(string message, string botName, string? aliases)
+    [Test]
+    [Arguments("I like claudette's work", "Claude Helper", null)]
+    [Arguments("the algorithm is smart", "Al Bot", "algo")]
+    [Arguments("what a damaged reputation", "Reporter Bot", null)]
+    public async Task IsNameMentioned_DoesNotFalsePositive(string message, string botName, string? aliases)
     {
-        Assert.False(FuzzyNameMatcher.IsNameMentioned(message, botName, aliases));
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned(message, botName, aliases)).IsFalse();
     }
 
-    [Fact]
-    public void IsNameMentioned_EmptyMessage_ReturnsFalse()
+    [Test]
+    public async Task IsNameMentioned_EmptyMessage_ReturnsFalse()
     {
-        Assert.False(FuzzyNameMatcher.IsNameMentioned("", "Bot", null));
-        Assert.False(FuzzyNameMatcher.IsNameMentioned("  ", "Bot", null));
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned("", "Bot", null)).IsFalse();
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned("  ", "Bot", null)).IsFalse();
     }
 
-    [Fact]
-    public void IsNameMentioned_SingleCharNameWord_Skipped()
+    [Test]
+    public async Task IsNameMentioned_SingleCharNameWord_Skipped()
     {
         // Bot name "A Bot" — the "A" word should be skipped (too short)
         // but "Bot" should still match
-        Assert.True(FuzzyNameMatcher.IsNameMentioned("hey bot", "A Bot", null));
-        Assert.False(FuzzyNameMatcher.IsNameMentioned("a message", "A Bot", null));
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned("hey bot", "A Bot", null)).IsTrue();
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned("a message", "A Bot", null)).IsFalse();
     }
 
-    [Fact]
-    public void IsNameMentioned_MultipleAliases()
+    [Test]
+    public async Task IsNameMentioned_MultipleAliases()
     {
-        Assert.True(FuzzyNameMatcher.IsNameMentioned("ask chatgpt", "GPT Model", "gpt,chatgpt,openai"));
-        Assert.True(FuzzyNameMatcher.IsNameMentioned("hey openai", "GPT Model", "gpt,chatgpt,openai"));
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned("ask chatgpt", "GPT Model", "gpt,chatgpt,openai")).IsTrue();
+        await Assert.That(FuzzyNameMatcher.IsNameMentioned("hey openai", "GPT Model", "gpt,chatgpt,openai")).IsTrue();
     }
 
-    [Fact]
-    public void FindNameMatch_ReturnsMatchedTerm()
+    [Test]
+    public async Task FindNameMatch_ReturnsMatchedTerm()
     {
         var (matched, term) = FuzzyNameMatcher.FindNameMatch("hey sarah", "Sassy Sarah", null);
-        Assert.True(matched);
-        Assert.Equal("sarah", term, StringComparer.OrdinalIgnoreCase);
+        await Assert.That(matched).IsTrue();
+        await Assert.That(term).IsEqualTo("sarah", StringComparer.OrdinalIgnoreCase);
     }
 
-    [Theory]
-    [InlineData("hey everyone", true)]
-    [InlineData("all bots respond", true)]
-    [InlineData("you guys are smart", true)]
-    [InlineData("y'all need to chill", true)]
-    [InlineData("just a normal message", false)]
-    [InlineData("what do you think?", false)]
-    public void IsGroupAddress_DetectsCorrectly(string message, bool expected)
+    [Test]
+    [Arguments("hey everyone", true)]
+    [Arguments("all bots respond", true)]
+    [Arguments("you guys are smart", true)]
+    [Arguments("y'all need to chill", true)]
+    [Arguments("just a normal message", false)]
+    [Arguments("what do you think?", false)]
+    public async Task IsGroupAddress_DetectsCorrectly(string message, bool expected)
     {
-        Assert.Equal(expected, FuzzyNameMatcher.IsGroupAddress(message));
+        await Assert.That(FuzzyNameMatcher.IsGroupAddress(message)).IsEqualTo(expected);
     }
 }

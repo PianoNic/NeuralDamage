@@ -1,5 +1,4 @@
-using NeuralDamage.Infrastructure.Services;
-using NeuralDamage.Infrastructure.Services.BotDecision;
+﻿using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
@@ -28,7 +27,7 @@ public class BotDecisionEngineTests
         return (db, user, chat, bot1, bot2);
     }
 
-    [Fact]
+    [Test]
     public async Task MentionedBot_AlwaysResponds_SkipsTier2And3()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
@@ -44,14 +43,13 @@ public class BotDecisionEngineTests
         var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
 
         // GPT was mentioned — must be in responders regardless of Tier 2/3
-        Assert.Contains(bot1.Id, responders);
+        await Assert.That(responders).Contains(bot1.Id);
     }
 
-    [Fact]
+    [Test]
     public async Task GroupAddress_AllBotsRespond()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        using var _ = db;
         var openRouter = Substitute.For<IOpenRouterService>();
         var judge = new Tier3LlmJudge(openRouter);
         var engine = new BotDecisionEngine(db, judge);
@@ -62,15 +60,14 @@ public class BotDecisionEngineTests
 
         var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
 
-        Assert.Contains(bot1.Id, responders);
-        Assert.Contains(bot2.Id, responders);
+        await Assert.That(responders).Contains(bot1.Id);
+        await Assert.That(responders).Contains(bot2.Id);
     }
 
-    [Fact]
+    [Test]
     public async Task BotToBotMessage_NoMention_NeitherResponds()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        using var _ = db;
         var openRouter = Substitute.For<IOpenRouterService>();
         var judge = new Tier3LlmJudge(openRouter);
         var engine = new BotDecisionEngine(db, judge);
@@ -81,15 +78,14 @@ public class BotDecisionEngineTests
 
         var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
 
-        Assert.DoesNotContain(bot1.Id, responders); // sender bot skipped
-        Assert.DoesNotContain(bot2.Id, responders); // not mentioned
+        await Assert.That(responders).DoesNotContain(bot1.Id); // sender bot skipped
+        await Assert.That(responders).DoesNotContain(bot2.Id); // not mentioned
     }
 
-    [Fact]
+    [Test]
     public async Task InactiveBot_NeverResponds()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        using var _ = db;
         bot1.IsActive = false;
         await db.SaveChangesAsync();
 
@@ -103,14 +99,13 @@ public class BotDecisionEngineTests
 
         var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
 
-        Assert.DoesNotContain(bot1.Id, responders);
+        await Assert.That(responders).DoesNotContain(bot1.Id);
     }
 
-    [Fact]
+    [Test]
     public async Task AliasMentioned_BotResponds()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        using var _ = db;
         var openRouter = Substitute.For<IOpenRouterService>();
         var judge = new Tier3LlmJudge(openRouter);
         var engine = new BotDecisionEngine(db, judge);
@@ -121,6 +116,6 @@ public class BotDecisionEngineTests
 
         var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
 
-        Assert.Contains(bot1.Id, responders);
+        await Assert.That(responders).Contains(bot1.Id);
     }
 }

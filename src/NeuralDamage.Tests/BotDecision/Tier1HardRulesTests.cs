@@ -1,4 +1,4 @@
-using NeuralDamage.Infrastructure.Services.BotDecision;
+﻿using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Tests.BotDecision;
@@ -11,92 +11,92 @@ public class Tier1HardRulesTests
     private static Message MakeMessage(string content, Guid? senderBotId = null, Message? replyTo = null) =>
         new() { ChatId = Guid.NewGuid(), Content = content, SenderUserId = senderBotId is null ? Guid.NewGuid() : null, SenderBotId = senderBotId, ReplyTo = replyTo, ReplyToId = replyTo?.Id };
 
-    [Fact]
-    public void InactiveBot_MustSkip()
+    [Test]
+    public async Task InactiveBot_MustSkip()
     {
         var bot = MakeBot(active: false);
         var msg = MakeMessage("hello");
-        Assert.Equal(Tier1Result.MustSkip, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustSkip);
     }
 
-    [Fact]
-    public void MutedChat_MustSkip()
+    [Test]
+    public async Task MutedChat_MustSkip()
     {
         var bot = MakeBot();
         var msg = MakeMessage("hello");
-        Assert.Equal(Tier1Result.MustSkip, Tier1HardRules.Evaluate(msg, bot, isMuted: true, isStopped: false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, isMuted: true, isStopped: false)).IsEqualTo(Tier1Result.MustSkip);
     }
 
-    [Fact]
-    public void StoppedChat_MustSkip()
+    [Test]
+    public async Task StoppedChat_MustSkip()
     {
         var bot = MakeBot();
         var msg = MakeMessage("hello");
-        Assert.Equal(Tier1Result.MustSkip, Tier1HardRules.Evaluate(msg, bot, isMuted: false, isStopped: true));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, isMuted: false, isStopped: true)).IsEqualTo(Tier1Result.MustSkip);
     }
 
-    [Fact]
-    public void SlashCommand_MustSkip()
+    [Test]
+    public async Task SlashCommand_MustSkip()
     {
         var bot = MakeBot();
         var msg = MakeMessage("/help");
-        Assert.Equal(Tier1Result.MustSkip, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustSkip);
     }
 
-    [Fact]
-    public void BotToBot_NoMention_MustSkip()
+    [Test]
+    public async Task BotToBot_NoMention_MustSkip()
     {
         var bot = MakeBot("GPT");
         var msg = MakeMessage("I think so too", senderBotId: Guid.NewGuid());
-        Assert.Equal(Tier1Result.MustSkip, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustSkip);
     }
 
-    [Fact]
-    public void BotToBot_WithMention_MustRespond()
+    [Test]
+    public async Task BotToBot_WithMention_MustRespond()
     {
         var bot = MakeBot("GPT");
         var msg = MakeMessage("hey GPT what do you think?", senderBotId: Guid.NewGuid());
-        Assert.Equal(Tier1Result.MustRespond, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustRespond);
     }
 
-    [Fact]
-    public void GroupAddress_MustRespond()
+    [Test]
+    public async Task GroupAddress_MustRespond()
     {
         var bot = MakeBot();
         var msg = MakeMessage("hey everyone what's up?");
-        Assert.Equal(Tier1Result.MustRespond, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustRespond);
     }
 
-    [Fact]
-    public void NameMentioned_MustRespond()
+    [Test]
+    public async Task NameMentioned_MustRespond()
     {
         var bot = MakeBot("Sarah");
         var msg = MakeMessage("sarah do you agree?");
-        Assert.Equal(Tier1Result.MustRespond, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustRespond);
     }
 
-    [Fact]
-    public void AliasMentioned_MustRespond()
+    [Test]
+    public async Task AliasMentioned_MustRespond()
     {
         var bot = MakeBot("Professor Einstein", aliases: "prof,al");
         var msg = MakeMessage("hey prof what's the answer?");
-        Assert.Equal(Tier1Result.MustRespond, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustRespond);
     }
 
-    [Fact]
-    public void ReplyToBot_MustRespond()
+    [Test]
+    public async Task ReplyToBot_MustRespond()
     {
         var bot = MakeBot();
         var botMessage = new Message { ChatId = Guid.NewGuid(), SenderBotId = bot.Id, Content = "earlier" };
         var msg = new Message { ChatId = Guid.NewGuid(), SenderUserId = Guid.NewGuid(), Content = "I disagree", ReplyToId = botMessage.Id, ReplyTo = botMessage };
-        Assert.Equal(Tier1Result.MustRespond, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustRespond);
     }
 
-    [Fact]
-    public void NormalMessage_Undecided()
+    [Test]
+    public async Task NormalMessage_Undecided()
     {
         var bot = MakeBot("GPT");
         var msg = MakeMessage("the weather is nice today");
-        Assert.Equal(Tier1Result.Undecided, Tier1HardRules.Evaluate(msg, bot, false, false));
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.Undecided);
     }
 }

@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Commands;
+﻿using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
@@ -10,7 +10,7 @@ namespace NeuralDamage.Tests.Commands;
 
 public class UpdateChatHandlerTests
 {
-    [Fact]
+    [Test]
     public async Task Handle_OwnerCanUpdateName()
     {
         using var db = TestDbContext.Create();
@@ -25,12 +25,12 @@ public class UpdateChatHandlerTests
         var handler = new UpdateChatHandler(db, notifications);
         var result = await handler.Handle(new UpdateChatCommand(chat.Id, "New Name", user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("New Name", chat.Name);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(chat.Name).IsEqualTo("New Name");
         await notifications.Received(1).NotifyChatUpdated(chat.Id, Arg.Any<NeuralDamage.Infrastructure.Dtos.ChatDto>());
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NonOwnerCannotUpdate()
     {
         using var db = TestDbContext.Create();
@@ -47,11 +47,11 @@ public class UpdateChatHandlerTests
         var handler = new UpdateChatHandler(db, notifications);
         var result = await handler.Handle(new UpdateChatCommand(chat.Id, "Hacked", other.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal("Chat", chat.Name);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(chat.Name).IsEqualTo("Chat");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_ChatNotFound_ReturnsFailure()
     {
         using var db = TestDbContext.Create();
@@ -60,7 +60,7 @@ public class UpdateChatHandlerTests
         var handler = new UpdateChatHandler(db, notifications);
         var result = await handler.Handle(new UpdateChatCommand(Guid.NewGuid(), "Name", Guid.NewGuid()), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("not found", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("not found");
     }
 }

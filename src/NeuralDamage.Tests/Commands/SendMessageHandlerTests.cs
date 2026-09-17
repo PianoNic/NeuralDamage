@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -27,7 +27,7 @@ public class SendMessageHandlerTests
         return (db, user, chat);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_SendsMessage()
     {
         var (db, user, chat) = await SetupChatWithMember();
@@ -37,15 +37,15 @@ public class SendMessageHandlerTests
         var handler = new SendMessageHandler(db, notifications, MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Hello world"), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
+        await Assert.That(result.IsSuccess).IsTrue();
         var msg = await db.Messages.FirstOrDefaultAsync();
-        Assert.NotNull(msg);
-        Assert.Equal("Hello world", msg!.Content);
-        Assert.Equal(user.Id, msg.SenderUserId);
+        await Assert.That(msg).IsNotNull();
+        await Assert.That(msg!.Content).IsEqualTo("Hello world");
+        await Assert.That(msg.SenderUserId).IsEqualTo(user.Id);
         await notifications.Received(1).NotifyMessageNew(chat.Id, Arg.Any<NeuralDamage.Infrastructure.Dtos.MessageDto>());
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_WithReply_SetsReplyToId()
     {
         var (db, user, chat) = await SetupChatWithMember();
@@ -57,13 +57,13 @@ public class SendMessageHandlerTests
         var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Reply", original.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
+        await Assert.That(result.IsSuccess).IsTrue();
         var reply = await db.Messages.FirstOrDefaultAsync(m => m.Content == "Reply");
-        Assert.NotNull(reply);
-        Assert.Equal(original.Id, reply!.ReplyToId);
+        await Assert.That(reply).IsNotNull();
+        await Assert.That(reply!.ReplyToId).IsEqualTo(original.Id);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NonMember_ReturnsFailure()
     {
         var (db, user, chat) = await SetupChatWithMember();
@@ -75,11 +75,11 @@ public class SendMessageHandlerTests
         var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, outsider.Id, "Sneaky"), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("not a member", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("not a member");
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_InvalidReplyTarget_ReturnsFailure()
     {
         var (db, user, chat) = await SetupChatWithMember();
@@ -88,7 +88,7 @@ public class SendMessageHandlerTests
         var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Reply", Guid.NewGuid()), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("Reply target", result.Error!);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("Reply target");
     }
 }

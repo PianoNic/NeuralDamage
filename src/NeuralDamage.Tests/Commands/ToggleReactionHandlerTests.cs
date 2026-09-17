@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -25,7 +25,7 @@ public class ToggleReactionHandlerTests
         return (db, user, chat, msg);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_AddsReaction()
     {
         var (db, user, chat, msg) = await Setup();
@@ -35,11 +35,11 @@ public class ToggleReactionHandlerTests
         var handler = new ToggleReactionHandler(db, notifications);
         var result = await handler.Handle(new ToggleReactionCommand(chat.Id, msg.Id, "👍", user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(1, await db.Reactions.CountAsync());
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.Reactions.CountAsync()).IsEqualTo(1);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_TogglesOff_WhenAlreadyExists()
     {
         var (db, user, chat, msg) = await Setup();
@@ -51,11 +51,11 @@ public class ToggleReactionHandlerTests
         var handler = new ToggleReactionHandler(db, notifications);
         var result = await handler.Handle(new ToggleReactionCommand(chat.Id, msg.Id, "👍", user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(0, await db.Reactions.CountAsync());
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.Reactions.CountAsync()).IsEqualTo(0);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_DifferentEmoji_AddsBoth()
     {
         var (db, user, chat, msg) = await Setup();
@@ -67,11 +67,11 @@ public class ToggleReactionHandlerTests
         var handler = new ToggleReactionHandler(db, notifications);
         var result = await handler.Handle(new ToggleReactionCommand(chat.Id, msg.Id, "🔥", user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(2, await db.Reactions.CountAsync());
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.Reactions.CountAsync()).IsEqualTo(2);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_MessageNotFound_ReturnsFailure()
     {
         var (db, user, chat, _) = await Setup();
@@ -81,10 +81,10 @@ public class ToggleReactionHandlerTests
         var handler = new ToggleReactionHandler(db, notifications);
         var result = await handler.Handle(new ToggleReactionCommand(chat.Id, Guid.NewGuid(), "👍", user.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
+        await Assert.That(result.IsFailure).IsTrue();
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_BroadcastsReactionUpdated()
     {
         var (db, user, chat, msg) = await Setup();

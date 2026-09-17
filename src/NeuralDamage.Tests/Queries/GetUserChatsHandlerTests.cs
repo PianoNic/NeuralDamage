@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Queries;
+﻿using NeuralDamage.Application.Queries;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
@@ -7,7 +7,7 @@ namespace NeuralDamage.Tests.Queries;
 
 public class GetUserChatsHandlerTests
 {
-    [Fact]
+    [Test]
     public async Task Handle_ReturnsOnlyUserChats()
     {
         using var db = TestDbContext.Create();
@@ -29,11 +29,11 @@ public class GetUserChatsHandlerTests
         var handler = new GetUserChatsHandler(db);
         var result = await handler.Handle(new GetUserChatsQuery(user1.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(3, result.Value!.Count);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Count).IsEqualTo(3);
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_NoChats_ReturnsEmptyList()
     {
         using var db = TestDbContext.Create();
@@ -44,7 +44,7 @@ public class GetUserChatsHandlerTests
         var handler = new GetUserChatsHandler(db);
         var result = await handler.Handle(new GetUserChatsQuery(user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Empty(result.Value!);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!).IsEmpty();
     }
 }

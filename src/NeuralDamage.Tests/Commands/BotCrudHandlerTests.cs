@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Domain;
 using NeuralDamage.Tests.Helpers;
@@ -16,7 +16,7 @@ public class BotCrudHandlerTests
         return (db, user);
     }
 
-    [Fact]
+    [Test]
     public async Task CreateBot_ReturnsDto()
     {
         var (db, user) = await Setup();
@@ -25,14 +25,14 @@ public class BotCrudHandlerTests
         var handler = new CreateBotHandler(db);
         var result = await handler.Handle(new CreateBotCommand("GPT", "openai/gpt-4o", "Be helpful", null, 0.7, null, "gpt,chatgpt", user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("GPT", result.Value!.Name);
-        Assert.Equal("openai/gpt-4o", result.Value.ModelId);
-        Assert.Equal("gpt,chatgpt", result.Value.Aliases);
-        Assert.True(result.Value.IsActive);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Name).IsEqualTo("GPT");
+        await Assert.That(result.Value.ModelId).IsEqualTo("openai/gpt-4o");
+        await Assert.That(result.Value.Aliases).IsEqualTo("gpt,chatgpt");
+        await Assert.That(result.Value.IsActive).IsTrue();
     }
 
-    [Fact]
+    [Test]
     public async Task UpdateBot_CreatorCanUpdate()
     {
         var (db, user) = await Setup();
@@ -44,14 +44,14 @@ public class BotCrudHandlerTests
         var handler = new UpdateBotHandler(db);
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "GPT v2", null, "New prompt", null, 0.9, null, null, null), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("GPT v2", bot.Name);
-        Assert.Equal("New prompt", bot.SystemPrompt);
-        Assert.Equal(0.9, bot.Temperature);
-        Assert.Equal("openai/gpt-4o", bot.ModelId); // unchanged
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(bot.Name).IsEqualTo("GPT v2");
+        await Assert.That(bot.SystemPrompt).IsEqualTo("New prompt");
+        await Assert.That(bot.Temperature).IsEqualTo(0.9);
+        await Assert.That(bot.ModelId).IsEqualTo("openai/gpt-4o"); // unchanged
     }
 
-    [Fact]
+    [Test]
     public async Task UpdateBot_NonCreator_Fails()
     {
         var (db, user) = await Setup();
@@ -65,11 +65,11 @@ public class BotCrudHandlerTests
         var handler = new UpdateBotHandler(db);
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, other.Id, "Hacked", null, null, null, null, null, null, null), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal("GPT", bot.Name);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(bot.Name).IsEqualTo("GPT");
     }
 
-    [Fact]
+    [Test]
     public async Task DeleteBot_SoftDeletes()
     {
         var (db, user) = await Setup();
@@ -81,12 +81,12 @@ public class BotCrudHandlerTests
         var handler = new DeleteBotHandler(db);
         var result = await handler.Handle(new DeleteBotCommand(bot.Id, user.Id), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.False(bot.IsActive);
-        Assert.NotNull(await db.Bots.FirstOrDefaultAsync(b => b.Id == bot.Id)); // still in DB
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(bot.IsActive).IsFalse();
+        await Assert.That(await db.Bots.FirstOrDefaultAsync(b => b.Id == bot.Id)).IsNotNull(); // still in DB
     }
 
-    [Fact]
+    [Test]
     public async Task DeleteBot_NonCreator_Fails()
     {
         var (db, user) = await Setup();
@@ -100,7 +100,7 @@ public class BotCrudHandlerTests
         var handler = new DeleteBotHandler(db);
         var result = await handler.Handle(new DeleteBotCommand(bot.Id, other.Id), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.True(bot.IsActive);
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(bot.IsActive).IsTrue();
     }
 }

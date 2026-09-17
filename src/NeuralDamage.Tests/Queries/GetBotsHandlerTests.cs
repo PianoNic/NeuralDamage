@@ -1,4 +1,4 @@
-using NeuralDamage.Application.Queries;
+﻿using NeuralDamage.Application.Queries;
 using NeuralDamage.Domain;
 using NeuralDamage.Tests.Helpers;
 
@@ -6,7 +6,7 @@ namespace NeuralDamage.Tests.Queries;
 
 public class GetBotsHandlerTests
 {
-    [Fact]
+    [Test]
     public async Task Handle_ReturnsOnlyActiveBots()
     {
         using var db = TestDbContext.Create();
@@ -20,12 +20,15 @@ public class GetBotsHandlerTests
         var handler = new GetBotsHandler(db);
         var result = await handler.Handle(new GetBotsQuery(), CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(2, result.Value!.Count);
-        Assert.All(result.Value, b => Assert.True(b.IsActive));
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Count).IsEqualTo(2);
+        foreach (var bot in result.Value)
+        {
+            await Assert.That(bot.IsActive).IsTrue();
+        }
     }
 
-    [Fact]
+    [Test]
     public async Task Handle_ReturnsAlphabetically()
     {
         using var db = TestDbContext.Create();
@@ -38,7 +41,7 @@ public class GetBotsHandlerTests
         var handler = new GetBotsHandler(db);
         var result = await handler.Handle(new GetBotsQuery(), CancellationToken.None);
 
-        Assert.Equal("Alpha", result.Value![0].Name);
-        Assert.Equal("Zeta", result.Value[1].Name);
+        await Assert.That(result.Value![0].Name).IsEqualTo("Alpha");
+        await Assert.That(result.Value[1].Name).IsEqualTo("Zeta");
     }
 }

@@ -1,4 +1,4 @@
-using NeuralDamage.Infrastructure.Services.BotDecision;
+﻿using NeuralDamage.Infrastructure.Services.BotDecision;
 
 namespace NeuralDamage.Tests.BotDecision;
 
@@ -13,63 +13,63 @@ public class Tier2WeightedScoreTests
         int totalBots = 2) =>
         new(isQuestion, botMessages, totalMessages, secondsSince, messageLength, totalBots);
 
-    [Fact]
-    public void BaseScore_IsPositive()
+    [Test]
+    public async Task BaseScore_IsPositive()
     {
         var score = Tier2WeightedScore.ComputeScore(DefaultContext());
-        Assert.True(score > 0);
+        await Assert.That(score > 0).IsTrue();
     }
 
-    [Fact]
-    public void GroupQuestion_IncreasesScore()
+    [Test]
+    public async Task GroupQuestion_IncreasesScore()
     {
         var without = Tier2WeightedScore.ComputeScore(DefaultContext(isQuestion: false));
         var with = Tier2WeightedScore.ComputeScore(DefaultContext(isQuestion: true));
-        Assert.True(with > without);
+        await Assert.That(with > without).IsTrue();
     }
 
-    [Fact]
-    public void RecentlySpokeUnder30s_HeavyPenalty()
+    [Test]
+    public async Task RecentlySpokeUnder30s_HeavyPenalty()
     {
         var normal = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 300));
         var recent = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 10));
-        Assert.True(normal > recent);
+        await Assert.That(normal > recent).IsTrue();
     }
 
-    [Fact]
-    public void RecentlySpoke30To120s_ModeratePenalty()
+    [Test]
+    public async Task RecentlySpoke30To120s_ModeratePenalty()
     {
         var normal = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 300));
         var moderate = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 60));
-        Assert.True(normal > moderate);
+        await Assert.That(normal > moderate).IsTrue();
     }
 
-    [Fact]
-    public void DominatingConversation_Penalty()
+    [Test]
+    public async Task DominatingConversation_Penalty()
     {
         var normal = Tier2WeightedScore.ComputeScore(DefaultContext(botMessages: 2, totalMessages: 20));
         var dominant = Tier2WeightedScore.ComputeScore(DefaultContext(botMessages: 10, totalMessages: 20));
-        Assert.True(normal > dominant);
+        await Assert.That(normal > dominant).IsTrue();
     }
 
-    [Fact]
-    public void ShortMessage_Penalty()
+    [Test]
+    public async Task ShortMessage_Penalty()
     {
         var normal = Tier2WeightedScore.ComputeScore(DefaultContext(messageLength: 50));
         var short_ = Tier2WeightedScore.ComputeScore(DefaultContext(messageLength: 5));
-        Assert.True(normal > short_);
+        await Assert.That(normal > short_).IsTrue();
     }
 
-    [Fact]
-    public void ManyBots_Penalty()
+    [Test]
+    public async Task ManyBots_Penalty()
     {
         var few = Tier2WeightedScore.ComputeScore(DefaultContext(totalBots: 1));
         var many = Tier2WeightedScore.ComputeScore(DefaultContext(totalBots: 5));
-        Assert.True(few > many);
+        await Assert.That(few > many).IsTrue();
     }
 
-    [Fact]
-    public void Score_NeverNegative()
+    [Test]
+    public async Task Score_NeverNegative()
     {
         // Worst case: recently spoke, dominating, short message, many bots
         var score = Tier2WeightedScore.ComputeScore(new Tier2Context(
@@ -79,11 +79,11 @@ public class Tier2WeightedScoreTests
             SecondsSinceLastBotMessage: 5,
             MessageLength: 2,
             TotalBotsInChat: 10));
-        Assert.True(score >= 0.0);
+        await Assert.That(score >= 0.0).IsTrue();
     }
 
-    [Fact]
-    public void Score_NeverAboveOne()
+    [Test]
+    public async Task Score_NeverAboveOne()
     {
         // Best case: question, never spoke, long message, solo bot
         var score = Tier2WeightedScore.ComputeScore(new Tier2Context(
@@ -93,11 +93,11 @@ public class Tier2WeightedScoreTests
             SecondsSinceLastBotMessage: -1,
             MessageLength: 500,
             TotalBotsInChat: 1));
-        Assert.True(score <= 1.0);
+        await Assert.That(score <= 1.0).IsTrue();
     }
 
-    [Fact]
-    public void QuestionFromFreshBot_HigherThanNormal()
+    [Test]
+    public async Task QuestionFromFreshBot_HigherThanNormal()
     {
         var questionScore = Tier2WeightedScore.ComputeScore(new Tier2Context(
             IsGroupQuestion: true,
@@ -113,12 +113,12 @@ public class Tier2WeightedScoreTests
             SecondsSinceLastBotMessage: -1,
             MessageLength: 80,
             TotalBotsInChat: 1));
-        Assert.True(questionScore > normalScore);
-        Assert.True(questionScore > 0.3); // in the "undecided" zone, closer to respond
+        await Assert.That(questionScore > normalScore).IsTrue();
+        await Assert.That(questionScore > 0.3).IsTrue(); // in the "undecided" zone, closer to respond
     }
 
-    [Fact]
-    public void ShortOkMessage_BelowSkipThreshold()
+    [Test]
+    public async Task ShortOkMessage_BelowSkipThreshold()
     {
         var score = Tier2WeightedScore.ComputeScore(new Tier2Context(
             IsGroupQuestion: false,
@@ -127,6 +127,6 @@ public class Tier2WeightedScoreTests
             SecondsSinceLastBotMessage: 20,
             MessageLength: 2,
             TotalBotsInChat: 3));
-        Assert.True(score <= Tier2WeightedScore.SkipThreshold);
+        await Assert.That(score <= Tier2WeightedScore.SkipThreshold).IsTrue();
     }
 }
