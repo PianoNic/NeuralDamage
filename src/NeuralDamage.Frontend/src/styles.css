@@ -2,7 +2,7 @@
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/preflight.css' layer(base);
 @import 'tailwindcss/utilities.css';
-@import "@spartan-ng/cli/src/generators/ui/style-vega.css";
+@import "@spartan-ng/cli/src/generators/ui/style-nova.css";
 
 @source "../libs/ui";
 @source "../node_modules/@spartan-ng";

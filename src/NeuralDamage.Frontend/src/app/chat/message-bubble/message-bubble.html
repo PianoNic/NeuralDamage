@@ -1,53 +1,18 @@
-﻿@if (isBot()) {
-  <!-- Bot: left aligned, markdown body, no bubble chrome -->
-  <div class="group flex w-full max-w-[85%] gap-3 self-start">
-    <hlm-avatar class="size-8 shrink-0 self-start">
-      @if (message().senderAvatar) {
-        <img hlmAvatarImage [src]="message().senderAvatar" [alt]="message().senderName" />
-      }
-      <span hlmAvatarFallback class="text-xs font-semibold">{{ senderInitial() }}</span>
-    </hlm-avatar>
+<div hlmMessage [align]="isBot() ? 'start' : 'end'" class="group">
+  <hlm-avatar hlmMessageAvatar class="size-8">
+    @if (message().senderAvatar) {
+      <img hlmAvatarImage [src]="message().senderAvatar" [alt]="message().senderName" />
+    }
+    <span hlmAvatarFallback class="text-xs font-semibold">{{ senderInitial() }}</span>
+  </hlm-avatar>
 
-    <div class="flex min-w-0 flex-1 flex-col gap-1">
-      <div class="flex items-center gap-2">
-        <span class="text-foreground text-sm font-medium">{{ message().senderName }}</span>
+  <div hlmMessageContent>
+    <div hlmMessageHeader class="gap-2">
+      <span class="text-foreground font-medium">{{ message().senderName }}</span>
+      @if (isBot()) {
         <span hlmBadge variant="secondary" class="px-1.5 py-0 text-[10px] leading-4">BOT</span>
-        <span class="text-muted-foreground text-xs">{{ sentAt() }}</span>
-      </div>
-
-      @if (hasReply()) {
-        <div class="border-primary/50 bg-muted/50 rounded-sm border-l-2 px-3 py-1.5 text-xs">
-          <span class="text-foreground font-medium">{{ message().replyTo!.senderName }}</span>
-          <p class="text-muted-foreground truncate">{{ message().replyTo!.content }}</p>
-        </div>
       }
-
-      <pk-message-content
-        class="bg-transparent p-0"
-        [markdown]="true"
-        [content]="message().content"
-      />
-
-      @if (hasReactions()) {
-        <app-reaction-bar
-          [reactions]="message().reactions"
-          (toggleReaction)="toggleReaction($event)"
-        />
-      }
-
-      <div class="invisible flex gap-1 group-hover:visible">
-        <button hlmBtn variant="ghost" size="sm" class="h-6 px-2 text-xs" (click)="onReply()">
-          Reply
-        </button>
-      </div>
-    </div>
-  </div>
-} @else {
-  <!-- Human: right aligned, filled bubble -->
-  <div class="group flex w-full max-w-[80%] flex-col items-end gap-1 self-end">
-    <div class="flex items-center gap-2">
-      <span class="text-muted-foreground text-xs">{{ sentAt() }}</span>
-      <span class="text-foreground text-sm font-medium">{{ message().senderName }}</span>
+      <span>{{ sentAt() }}</span>
     </div>
 
     @if (hasReply()) {
@@ -57,22 +22,29 @@
       </div>
     }
 
-    <pk-message-content
-      class="bg-primary text-primary-foreground"
-      [content]="message().content"
-    />
+    <div hlmBubble [variant]="isBot() ? 'muted' : 'default'" [align]="isBot() ? 'start' : 'end'">
+      <div hlmBubbleContent>
+        @if (isBot()) {
+          <pk-message-content class="bg-transparent p-0" [markdown]="true" [content]="message().content" />
+        } @else {
+          {{ message().content }}
+        }
+      </div>
 
-    @if (hasReactions()) {
-      <app-reaction-bar
-        [reactions]="message().reactions"
-        (toggleReaction)="toggleReaction($event)"
-      />
-    }
+      @if (hasReactions()) {
+        <div hlmBubbleReactions [align]="isBot() ? 'start' : 'end'">
+          <app-reaction-bar
+            [reactions]="message().reactions"
+            (toggleReaction)="toggleReaction($event)"
+          />
+        </div>
+      }
+    </div>
 
-    <div class="invisible flex gap-1 group-hover:visible">
+    <div hlmMessageFooter class="invisible gap-1 group-hover:visible">
       <button hlmBtn variant="ghost" size="sm" class="h-6 px-2 text-xs" (click)="onReply()">
         Reply
       </button>
     </div>
   </div>
-}
+</div>

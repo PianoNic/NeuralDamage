@@ -28,19 +28,22 @@
   }
 
   <!-- Input area -->
-  <pk-prompt-input [(value)]="content" (submitted)="onSend()">
-    <pk-prompt-input-textarea placeholder="Type a message... (use @ to mention)" />
-    <pk-prompt-input-actions class="justify-end">
-      <button
-        hlmBtn
-        size="icon"
-        class="h-9 w-9 shrink-0"
-        (click)="onSend()"
-        [disabled]="!content().trim()"
-        title="Send message"
-      >
-        <ng-icon name="lucideSendHorizontal" class="size-4" />
-      </button>
+  <pk-prompt-input class="bg-muted/40 border-0 shadow-none" [(value)]="content" (submitted)="onSend()">
+    <pk-prompt-input-textarea placeholder="Ask anything, or @mention a bot..." />
+    <pk-prompt-input-actions class="mt-2 justify-end">
+      <pk-prompt-input-action tooltip="Send message">
+        <button
+          hlmBtn
+          size="icon-sm"
+          type="button"
+          class="rounded-full"
+          aria-label="Send message"
+          [disabled]="!content().trim()"
+          (click)="onSend()"
+        >
+          <ng-icon name="lucideArrowUp" class="size-3.5" />
+        </button>
+      </pk-prompt-input-action>
     </pk-prompt-input-actions>
   </pk-prompt-input>
 </div>

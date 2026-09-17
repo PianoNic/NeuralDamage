@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+﻿import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmAvatar, HlmAvatarFallback } from '@spartan-ng/helm/avatar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideX, lucideSendHorizontal } from '@ng-icons/lucide';
+import { lucideArrowUp, lucideX } from '@ng-icons/lucide';
 import { PkPromptInputImports } from '@prompt-kit/prompt-input';
 import { ChatMember, Message } from '@app/models';
 
@@ -13,7 +13,7 @@ const TRAILING_MENTION = /@(\w*)$/;
   selector: 'app-message-input',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [PkPromptInputImports, HlmButton, HlmAvatar, HlmAvatarFallback, NgIcon],
-  viewProviders: [provideIcons({ lucideX, lucideSendHorizontal })],
+  viewProviders: [provideIcons({ lucideArrowUp, lucideX })],
   templateUrl: './message-input.html',
 })
 export class MessageInputComponent {
