@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -6,7 +6,6 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Mappers;
-using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services;

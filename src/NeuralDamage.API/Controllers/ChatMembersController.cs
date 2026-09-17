@@ -1,4 +1,4 @@
-using Mediator;
+﻿using Mediator;
 using Microsoft.AspNetCore.Mvc;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Dtos.Requests;
@@ -6,7 +6,6 @@ using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.API.Hubs;
 using NeuralDamage.Infrastructure;
-using NeuralDamage.Infrastructure.Services;
 
 namespace NeuralDamage.API.Controllers;
 
