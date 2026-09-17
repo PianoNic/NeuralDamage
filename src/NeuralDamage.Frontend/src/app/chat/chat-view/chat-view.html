@@ -1,29 +1,34 @@
-<div class="flex flex-1 h-full">
-  <!-- Chat area -->
-  <div class="flex flex-1 flex-col">
-    <!-- Chat header -->
-    <div class="flex items-center justify-between border-b border-border px-6 py-3">
-      <div>
-        <h2 class="text-lg font-bold text-foreground">{{ chatName() }}</h2>
-        <p class="flex items-center gap-1 text-xs text-muted-foreground">
-          <ng-icon name="lucideUsers" class="size-3" />
-          <span>{{ userCount() }}</span>
-          <span class="mx-0.5">&middot;</span>
-          <ng-icon name="lucideBot" class="size-3" />
-          <span>{{ botCount() }}</span>
-        </p>
+<div class="flex min-h-0 flex-1">
+  <section class="flex min-h-0 min-w-0 flex-1 flex-col">
+    <!-- Header -->
+    <header class="border-border flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2">
+      <div class="flex min-w-0 items-center gap-2">
+        <button hlmSidebarTrigger type="button">
+          <span class="sr-only">Toggle sidebar</span>
+        </button>
+        <div class="min-w-0">
+          <h2 class="text-foreground truncate text-sm font-medium">{{ chatName() }}</h2>
+          <p class="text-muted-foreground flex items-center gap-1 text-xs">
+            <ng-icon name="lucideUsers" class="size-3" />
+            <span>{{ userCount() }}</span>
+            <span class="mx-0.5">&middot;</span>
+            <ng-icon name="lucideBot" class="size-3" />
+            <span>{{ botCount() }}</span>
+          </p>
+        </div>
       </div>
 
-      <div class="flex items-center gap-3">
-        <!-- Bot avatar stack -->
+      <div class="flex shrink-0 items-center gap-3">
         @if (botMembers().length > 0) {
           <div class="flex -space-x-2">
             @for (bot of botMembers().slice(0, 5); track bot.id) {
-              <hlm-avatar class="h-7 w-7 ring-2 ring-background">
+              <hlm-avatar class="ring-background size-7 ring-2">
                 @if (bot.avatarUrl) {
                   <img hlmAvatarImage [src]="bot.avatarUrl" [alt]="bot.displayName ?? 'Bot'" />
                 }
-                <span hlmAvatarFallback class="text-[10px] font-semibold">{{ (bot.displayName ?? 'B').charAt(0).toUpperCase() }}</span>
+                <span hlmAvatarFallback class="text-[10px] font-semibold">
+                  {{ (bot.displayName ?? 'B').charAt(0).toUpperCase() }}
+                </span>
               </hlm-avatar>
             }
           </div>
@@ -34,32 +39,35 @@
           Bots
         </button>
       </div>
-    </div>
+    </header>
 
     <!-- Messages -->
     @if (loading()) {
       <div class="flex flex-1 items-center justify-center">
-        <hlm-spinner />
+        <pk-loader variant="dots" size="md" />
       </div>
     } @else {
-      <app-message-list
-        class="flex-1 overflow-hidden"
-        [messages]="messages()"
-        (replyTo)="setReplyTo($event)"
-      />
+      <app-message-list [messages]="messages()" (replyTo)="setReplyTo($event)" />
     }
 
-    <!-- Typing indicator -->
-    <app-typing-indicator [typingUsers]="typingUsers()" [typingBots]="typingBots()" />
-
-    <!-- Message input -->
-    <app-message-input
-      [members]="members()"
-      [replyingTo]="replyingTo()"
-      (send)="sendMessage($event)"
-      (cancelReply)="setReplyTo(null)"
+    <app-typing-indicator
+      class="mx-auto w-full max-w-3xl px-4"
+      [typingUsers]="typingUsers()"
+      [typingBots]="typingBots()"
     />
-  </div>
+
+    <!-- Composer -->
+    <div class="shrink-0 px-4 py-3">
+      <div class="mx-auto w-full max-w-3xl">
+        <app-message-input
+          [members]="members()"
+          [replyingTo]="replyingTo()"
+          (send)="sendMessage($event)"
+          (cancelReply)="setReplyTo(null)"
+        />
+      </div>
+    </div>
+  </section>
 
   <!-- Bot manager side panel -->
   @if (botManagerOpen()) {

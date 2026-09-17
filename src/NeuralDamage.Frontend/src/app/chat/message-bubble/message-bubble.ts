@@ -18,6 +18,7 @@ import { PkMessageContent } from '@prompt-kit/message';
     ReactionBarComponent,
     PkMessageContent,
   ],
+  host: { class: 'contents' },
   templateUrl: './message-bubble.html',
 })
 export class MessageBubbleComponent {
@@ -28,6 +29,16 @@ export class MessageBubbleComponent {
   readonly isBot = computed(() => this.message().senderType === 'bot');
   readonly hasReactions = computed(() => this.message().reactions.length > 0);
   readonly hasReply = computed(() => this.message().replyTo !== null);
+
+  /** Wall-clock time; the API sends an ISO string. */
+  readonly sentAt = computed(() => {
+    const raw = this.message().createdAt;
+    if (!raw) return '';
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime())
+      ? ''
+      : date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  });
 
   onReply(): void {
     this.reply.emit(this.message());

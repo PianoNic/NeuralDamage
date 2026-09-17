@@ -1,10 +1,20 @@
-<div class="flex h-full flex-col-reverse overflow-y-auto px-4 py-3">
-  @for (message of messages(); track message.id) {
-    <app-message-bubble [message]="message" (reply)="onReply($event)" />
-  } @empty {
-    <div class="flex flex-1 flex-col items-center justify-center gap-2">
-      <ng-icon name="lucideMessageSquare" class="size-10 text-muted-foreground/40" />
-      <p class="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+@if (messages().length === 0) {
+  <div class="flex flex-1 items-center justify-center px-4">
+    <pk-chat-empty
+      title="No messages yet"
+      subtitle="Say something, or mention a bot with @ to pull it into the conversation."
+    />
+  </div>
+} @else {
+  <pk-chat-container-root class="relative flex-1 px-4 py-4">
+    <pk-chat-container-content class="mx-auto w-full max-w-3xl gap-6">
+      @for (message of messages(); track message.id) {
+        <app-message-bubble [message]="message" (reply)="onReply($event)" />
+      }
+    </pk-chat-container-content>
+    <pk-chat-container-scroll-anchor />
+    <div class="sticky bottom-2 ml-auto w-fit pr-1">
+      <pk-scroll-button />
     </div>
-  }
-</div>
+  </pk-chat-container-root>
+}

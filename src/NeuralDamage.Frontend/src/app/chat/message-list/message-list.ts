@@ -1,14 +1,15 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideMessageSquare } from '@ng-icons/lucide';
+import { PkChatContainerImports } from '@prompt-kit/chat-container';
+import { PkChatEmpty } from '@prompt-kit/chat-empty';
+import { PkScrollButton } from '@prompt-kit/scroll-button';
 import { Message } from '@app/models';
 import { MessageBubbleComponent } from '@app/chat/message-bubble/message-bubble';
 
 @Component({
   selector: 'app-message-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MessageBubbleComponent, NgIcon],
-  viewProviders: [provideIcons({ lucideMessageSquare })],
+  imports: [MessageBubbleComponent, PkChatContainerImports, PkChatEmpty, PkScrollButton],
+  host: { class: 'flex min-h-0 flex-1 flex-col' },
   templateUrl: './message-list.html',
 })
 export class MessageListComponent {

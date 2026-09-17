@@ -1,36 +1,64 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+﻿import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { HlmButton } from '@spartan-ng/helm/button';
-import { HlmSeparator } from '@spartan-ng/helm/separator';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
-import { HlmPopoverImports } from '@spartan-ng/helm/popover';
+import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
+import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucidePlus, lucideTrash2, lucideLogOut, lucideMessageSquare, lucideSun, lucideMoon } from '@ng-icons/lucide';
+import {
+  lucideBrain,
+  lucideChevronsUpDown,
+  lucideLogOut,
+  lucideMoon,
+  lucideSearch,
+  lucideSquarePen,
+  lucideSun,
+} from '@ng-icons/lucide';
+import { PkConversationList, type Conversation } from '@prompt-kit/conversation-list';
 import { AuthService } from '@app/shared/auth/auth.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
 import { Chat } from '@app/models';
-import { firstValueFrom } from 'rxjs';
+import { filter, firstValueFrom, map } from 'rxjs';
 
 @Component({
   selector: 'app-sidebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    FormsModule, RouterLink, RouterLinkActive,
-    HlmButton, HlmSeparator, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, HlmInput,
+    FormsModule,
+    RouterLink,
+    HlmButton,
+    HlmAvatar,
+    HlmAvatarFallback,
+    HlmAvatarImage,
+    HlmInput,
     HlmDialogImports,
     HlmAlertDialogImports,
-    HlmPopoverImports,
+    HlmDropdownMenuImports,
+    HlmSidebarImports,
+    PkConversationList,
     NgIcon,
   ],
-  viewProviders: [provideIcons({ lucidePlus, lucideTrash2, lucideLogOut, lucideMessageSquare, lucideSun, lucideMoon })],
+  viewProviders: [
+    provideIcons({
+      lucideBrain,
+      lucideChevronsUpDown,
+      lucideLogOut,
+      lucideMoon,
+      lucideSearch,
+      lucideSquarePen,
+      lucideSun,
+    }),
+  ],
   templateUrl: './sidebar.html',
 })
 export class SidebarComponent implements OnInit, OnDestroy {
+  private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly signalr = inject(SignalRService);
   private readonly chatsApi = inject(ChatsService);
@@ -66,6 +94,33 @@ export class SidebarComponent implements OnInit, OnDestroy {
     if (!query) return this.chats();
     return this.chats().filter((c) => c.name.toLowerCase().includes(query));
   });
+
+  /** The shape pk-conversation-list expects. */
+  readonly conversations = computed<Conversation[]>(() =>
+    this.filteredChats().map((c) => ({
+      id: c.id,
+      title: c.name,
+      updatedAt: c.createdAt,
+    })),
+  );
+
+  private readonly navigationUrl = toSignal(
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      map((e) => e.urlAfterRedirects),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  readonly activeChatId = computed(() => {
+    const match = /\/chat\/([^/?#]+)/.exec(this.navigationUrl());
+    return match ? match[1] : null;
+  });
+
+  openChat(chatId: string): void {
+    void this.router.navigate(['/chat', chatId]);
+  }
+
 
   private onChatCreated = (chat: Chat) => {
     this.chats.update((list) => [chat, ...list]);
