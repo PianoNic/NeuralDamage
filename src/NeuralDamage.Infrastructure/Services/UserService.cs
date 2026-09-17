@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Domain;
@@ -31,6 +31,15 @@ namespace NeuralDamage.Infrastructure.Services
                 ?? throw new UnauthorizedAccessException("User not found");
 
             return user.Id;
+        }
+
+        public async Task<Guid?> GetUserIdByExternalIdAsync(string externalId, CancellationToken cancellationToken = default)
+        {
+            var user = await dbContext.Users
+                .AsNoTracking()
+                .SingleOrDefaultAsync(u => u.ExternalId == externalId, cancellationToken);
+
+            return user?.Id;
         }
 
         public async Task SyncCurrentUserAsync(CancellationToken cancellationToken = default)

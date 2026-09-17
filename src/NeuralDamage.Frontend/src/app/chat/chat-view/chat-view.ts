@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, signal } from '@angular/core';
+﻿import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { HlmButton } from '@spartan-ng/helm/button';
-import { HlmSpinner } from '@spartan-ng/helm/spinner';
+import { HlmSidebarTrigger } from '@spartan-ng/helm/sidebar';
+import { PkLoader } from '@prompt-kit/loader';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideBot, lucideUsers } from '@ng-icons/lucide';
@@ -11,6 +12,7 @@ import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
 import { MessagesService } from '@app/api/api/messages.service';
 import { ReactionsService } from '@app/api/api/reactions.service';
+import { toChatMembers, toMessage, toMessages } from '@app/chat/message.mapper';
 import { MessageListComponent } from '@app/chat/message-list/message-list';
 import { MessageInputComponent } from '@app/chat/message-input/message-input';
 import { TypingIndicatorComponent } from '@app/chat/typing-indicator/typing-indicator';
@@ -20,10 +22,22 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-chat-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmButton, HlmSpinner, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, NgIcon, MessageListComponent, MessageInputComponent, TypingIndicatorComponent, BotManagerComponent],
+  imports: [
+    HlmButton,
+    HlmAvatar,
+    HlmAvatarFallback,
+    HlmAvatarImage,
+    HlmSidebarTrigger,
+    PkLoader,
+    NgIcon,
+    MessageListComponent,
+    MessageInputComponent,
+    TypingIndicatorComponent,
+    BotManagerComponent,
+  ],
   viewProviders: [provideIcons({ lucideBot, lucideUsers })],
   templateUrl: './chat-view.html',
-  host: { class: 'flex flex-1' },
+  host: { class: 'flex min-h-0 flex-1' },
 })
 export class ChatViewComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
@@ -51,8 +65,8 @@ export class ChatViewComponent implements OnDestroy {
 
   currentChatId: string | null = null;
 
-  private onMessageNew = (msg: Message) => {
-    this.messages.update((list) => [...list, msg]);
+  private onMessageNew = (dto: unknown) => {
+    this.messages.update((list) => [...list, toMessage(dto as never)]);
   };
 
   private onMemberAdded = (member: ChatMember) => {
@@ -122,10 +136,10 @@ export class ChatViewComponent implements OnDestroy {
     try {
       const chat = (await firstValueFrom(this.chatsApi.apiChatsChatIdGet(chatId))) as any;
       this.chat.set(chat);
-      this.members.set(chat.members ?? []);
+      this.members.set(toChatMembers((chat.members ?? []) as never));
 
-      const messages = (await firstValueFrom(this.messagesApi.apiChatsChatIdMessagesGet(chatId))) as Message[];
-      this.messages.set(messages);
+      const dtos = await firstValueFrom(this.messagesApi.apiChatsChatIdMessagesGet(chatId));
+      this.messages.set(toMessages(dtos as never));
 
       this.subscribeEvents();
     } catch (e) {

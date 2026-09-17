@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -10,11 +10,11 @@ using NeuralDamage.Infrastructure;
 namespace NeuralDamage.API.Hubs;
 
 [Authorize]
-public class ChatHub(NeuralDamageDbContext db) : Hub<IChatClient>
+public class ChatHub(NeuralDamageDbContext db, IUserService userService) : Hub<IChatClient>
 {
     public override async Task OnConnectedAsync()
     {
-        var userId = GetUserId();
+        var userId = await GetUserIdAsync();
         if (userId == null) { Context.Abort(); return; }
 
         var chatIds = await db.ChatMembers
@@ -38,10 +38,17 @@ public class ChatHub(NeuralDamageDbContext db) : Hub<IChatClient>
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
     }
 
-    private Guid? GetUserId()
+    /// <summary>
+    /// The token's subject is the OIDC external id, not Users.Id, so it has to be
+    /// translated before it can be matched against ChatMembers.
+    /// </summary>
+    private async Task<Guid?> GetUserIdAsync()
     {
-        var sub = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? Context.User?.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : null;
+        var sub = Context.User?.FindFirstValue("sub")
+            ?? Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        return string.IsNullOrEmpty(sub)
+            ? null
+            : await userService.GetUserIdByExternalIdAsync(sub, Context.ConnectionAborted);
     }
 }

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using NeuralDamage.Infrastructure.Services;
@@ -9,19 +9,19 @@ using NeuralDamage.Infrastructure;
 namespace NeuralDamage.API.Hubs;
 
 [Authorize]
-public class UserHub(IConnectionTracker connectionTracker) : Hub<IUserClient>
+public class UserHub(IConnectionTracker connectionTracker, IUserService userService) : Hub<IUserClient>
 {
-    public override Task OnConnectedAsync()
+    public override async Task OnConnectedAsync()
     {
-        var userId = GetUserId();
+        var userId = await GetUserIdAsync();
         if (userId == null)
         {
             Context.Abort();
-            return Task.CompletedTask;
+            return;
         }
 
         connectionTracker.TrackConnection(Context.ConnectionId, userId.Value);
-        return base.OnConnectedAsync();
+        await base.OnConnectedAsync();
     }
 
     public override Task OnDisconnectedAsync(Exception? exception)
@@ -30,10 +30,16 @@ public class UserHub(IConnectionTracker connectionTracker) : Hub<IUserClient>
         return base.OnDisconnectedAsync(exception);
     }
 
-    private Guid? GetUserId()
+    /// <summary>
+    /// The token's subject is the OIDC external id, not Users.Id.
+    /// </summary>
+    private async Task<Guid?> GetUserIdAsync()
     {
-        var sub = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? Context.User?.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : null;
+        var sub = Context.User?.FindFirstValue("sub")
+            ?? Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        return string.IsNullOrEmpty(sub)
+            ? null
+            : await userService.GetUserIdByExternalIdAsync(sub, Context.ConnectionAborted);
     }
 }
