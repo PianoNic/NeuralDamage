@@ -6,7 +6,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "libs/ui/**/src/**/*.ts"
+    "libs/ui/**/src/**/*.ts",
+    "libs/prompt-kit/**/*.ts"
   ],
   "exclude": [
     "src/**/*.spec.ts"

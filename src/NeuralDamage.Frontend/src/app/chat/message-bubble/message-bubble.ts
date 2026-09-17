@@ -1,14 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+﻿import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { Message } from '@app/models';
 import { ReactionBarComponent } from '@app/chat/reaction-bar/reaction-bar';
+import { PkMessageContent } from '@prompt-kit/message';
 
 @Component({
   selector: 'app-message-bubble',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmButton, HlmAvatar, HlmAvatarFallback, HlmAvatarImage, HlmBadge, ReactionBarComponent],
+  imports: [
+    HlmButton,
+    HlmAvatar,
+    HlmAvatarFallback,
+    HlmAvatarImage,
+    HlmBadge,
+    ReactionBarComponent,
+    PkMessageContent,
+  ],
   templateUrl: './message-bubble.html',
 })
 export class MessageBubbleComponent {
