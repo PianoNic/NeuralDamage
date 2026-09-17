@@ -1,4 +1,4 @@
-using FluentValidation;
+﻿using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
@@ -24,6 +24,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
 builder.Services.AddScoped<IOpenRouterService, OpenRouterAgentService>();
+builder.Services.AddSingleton<IBotRankingService, LlmRankingService>();
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
 builder.Services.AddScoped<Tier3LlmJudge>();
 builder.Services.AddSingleton<BotResponseQueue>();
