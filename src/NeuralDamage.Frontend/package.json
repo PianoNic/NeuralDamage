@@ -65,7 +65,6 @@
     "@openapitools/openapi-generator-cli": "^2.30.2",
     "@spartan-ng/cli": "1.4.1",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/dompurify": "^3.2.0",
     "@types/luxon": "^3.7.5",
     "jsdom": "^27.1.0",
     "ngx-prompt-kit": "^22.1.0",
