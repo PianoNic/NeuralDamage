@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/NeuralDamage.Application/NeuralDamage.Application.csproj" />
+  <Project Path="src/NeuralDamage.Domain/NeuralDamage.Domain.csproj" />
+  <Project Path="src/NeuralDamage.Infrastructure/NeuralDamage.Infrastructure.csproj" />
+  <Project Path="src/NeuralDamage.Tests/NeuralDamage.Tests.csproj" />
+  <Project Path="src/NeuralDamage.API/NeuralDamage.API.csproj" />
+</Solution>
