@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using NeuralDamage.Infrastructure.Services;
 using System.Security.Claims;
@@ -7,9 +6,19 @@ namespace NeuralDamage.API.Extensions
 {
     public static class AuthenticationExtensions
     {
-        public static AuthenticationBuilder AddUserSync(this AuthenticationBuilder builder)
+        /// <summary>
+        /// Mirrors the authenticated caller into the domain Users table on first
+        /// sight. Toamaisutaa owns authentication, but this app owns its own user
+        /// row because chats, messages, bots and reactions are keyed to it.
+        /// </summary>
+        /// <remarks>
+        /// Hangs off JwtBearerOptions rather than the AuthenticationBuilder, since
+        /// AddToamaisutaaBearer configures the scheme itself and does not hand one
+        /// back to chain from.
+        /// </remarks>
+        public static IServiceCollection AddUserSync(this IServiceCollection services)
         {
-            builder.Services.PostConfigure<JwtBearerOptions>(
+            services.PostConfigure<JwtBearerOptions>(
                 JwtBearerDefaults.AuthenticationScheme,
                 options =>
                 {
@@ -18,6 +27,8 @@ namespace NeuralDamage.API.Extensions
 
                     options.Events.OnTokenValidated = async context =>
                     {
+                        // Toamaisutaa enriches the principal from the userinfo
+                        // endpoint in its own handler, so run it first.
                         if (previous is not null)
                             await previous(context);
 
@@ -40,7 +51,7 @@ namespace NeuralDamage.API.Extensions
                     };
                 });
 
-            return builder;
+            return services;
         }
     }
 }

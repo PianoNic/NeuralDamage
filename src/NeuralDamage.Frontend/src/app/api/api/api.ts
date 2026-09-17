@@ -1,7 +1,5 @@
-export * from './app.service';
-import { AppService } from './app.service';
-export * from './auth.service';
-import { AuthService } from './auth.service';
+export * from './applicationConfiguration.service';
+import { ApplicationConfigurationService } from './applicationConfiguration.service';
 export * from './bots.service';
 import { BotsService } from './bots.service';
 export * from './chatActions.service';
@@ -16,4 +14,6 @@ export * from './messages.service';
 import { MessagesService } from './messages.service';
 export * from './reactions.service';
 import { ReactionsService } from './reactions.service';
-export const APIS = [AppService, AuthService, BotsService, ChatActionsService, ChatMembersService, ChatsService, InternalDevOnlyService, MessagesService, ReactionsService];
+export * from './user.service';
+import { UserService } from './user.service';
+export const APIS = [ApplicationConfigurationService, BotsService, ChatActionsService, ChatMembersService, ChatsService, InternalDevOnlyService, MessagesService, ReactionsService, UserService];

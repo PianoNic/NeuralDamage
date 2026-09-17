@@ -17,7 +17,7 @@ import { CustomHttpParameterCodec }                          from '../encoder';
 import { Observable }                                        from 'rxjs';
 
 // @ts-ignore
-import { AppConfigDto } from '../model/appConfigDto';
+import { ToamaisutaaClientConfiguration } from '../model/toamaisutaaClientConfiguration';
 
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS }                     from '../variables';
@@ -28,7 +28,7 @@ import { Configuration }                                     from '../configurat
 @Injectable({
   providedIn: 'root'
 })
-export class AppService {
+export class ApplicationConfigurationService {
 
     protected basePath = 'http://localhost';
     public defaultHeaders = new HttpHeaders();
@@ -91,13 +91,15 @@ export class AppService {
     }
 
     /**
+     * What the SPA reads at startup to configure its OIDC client.
+     * Anonymous, because it is needed before anyone has signed in. To serve your own fields alongside these, or from a different route, inject &#x60;IToamaisutaaClientConfigurationProvider&#x60; into an endpoint of your own instead of calling this.
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public getAppConfig(observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<AppConfigDto>;
-    public getAppConfig(observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<AppConfigDto>>;
-    public getAppConfig(observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<AppConfigDto>>;
-    public getAppConfig(observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public toamaisutaaClientConfiguration(observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<ToamaisutaaClientConfiguration>;
+    public toamaisutaaClientConfiguration(observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<ToamaisutaaClientConfiguration>>;
+    public toamaisutaaClientConfiguration(observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<ToamaisutaaClientConfiguration>>;
+    public toamaisutaaClientConfiguration(observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
 
         let localVarHeaders = this.defaultHeaders;
 
@@ -112,9 +114,7 @@ export class AppService {
         if (localVarHttpHeaderAcceptSelected === undefined) {
             // to determine the Accept header
             const httpHeaderAccepts: string[] = [
-                'text/plain',
-                'application/json',
-                'text/json'
+                'application/json'
             ];
             localVarHttpHeaderAcceptSelected = this.configuration.selectHeaderAccept(httpHeaderAccepts);
         }
@@ -144,8 +144,8 @@ export class AppService {
             }
         }
 
-        let localVarPath = `/api/App/config`;
-        return this.httpClient.request<AppConfigDto>('get', `${this.configuration.basePath}${localVarPath}`,
+        let localVarPath = `/api/app`;
+        return this.httpClient.request<ToamaisutaaClientConfiguration>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 responseType: <any>responseType_,
