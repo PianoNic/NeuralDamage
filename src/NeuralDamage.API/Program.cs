@@ -23,7 +23,7 @@ builder.Services.AddScoped<IOidcService, OidcService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
-builder.Services.AddScoped<IOpenRouterService, SemanticKernelService>();
+builder.Services.AddScoped<IOpenRouterService, OpenRouterAgentService>();
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
 builder.Services.AddScoped<Tier3LlmJudge>();
 builder.Services.AddSingleton<BotResponseQueue>();
