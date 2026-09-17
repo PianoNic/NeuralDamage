@@ -15,7 +15,7 @@ import { routes } from './app.routes';
 
 const httpLoaderFactory = (httpClient: HttpClient) => {
   const config$ = httpClient
-    .get<any>(`${environment.apiBaseUrl}/api/App/config`)
+    .get<any>(`${environment.apiBaseUrl}/api/app`)
     .pipe(
       map((c) => ({
         authority: c.authority,

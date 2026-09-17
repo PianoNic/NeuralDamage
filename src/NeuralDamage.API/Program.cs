@@ -19,7 +19,6 @@ builder.Services.AddDbContext<NeuralDamageDbContext>(options => options.UseNpgsq
 
 // Services
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IOidcService, OidcService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
@@ -35,29 +34,11 @@ builder.Services.AddHostedService<BotResponseBackgroundService>();
 // Mediator & Validation
 builder.Services.AddMediator(options => { options.ServiceLifetime = ServiceLifetime.Scoped; });
 
-// Authentication (JWT/OIDC)
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Authority = builder.Configuration["Oidc:Authority"];
-        options.RequireHttpsMetadata = builder.Configuration.GetValue("Oidc:RequireHttpsMetadata", true);
-        options.TokenValidationParameters.NameClaimType = "name";
-        options.TokenValidationParameters.RoleClaimType = "groups";
-        options.TokenValidationParameters.ValidateAudience = false;
-        options.Events = new JwtBearerEvents
-        {
-            OnMessageReceived = context =>
-            {
-                var accessToken = context.Request.Query["access_token"];
-                if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
-                    context.Token = accessToken;
-                return Task.CompletedTask;
-            }
-        };
-    })
-    .AddUserSync();
-
-builder.Services.AddAuthorization(options => options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+// Authentication (Toamaisutaa)
+builder.Services.AddToamaisutaaBearer(builder.Configuration);
+builder.Services.AddToamaisutaaAuthorization(builder.Configuration);
+builder.Services.AddToamaisutaaCurrentUser();
+builder.Services.AddUserSync();
 
 // SignalR
 builder.Services.AddSignalR();
@@ -146,6 +127,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapToamaisutaaConfiguration();
 app.MapHub<NeuralDamage.API.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<NeuralDamage.API.Hubs.UserHub>("/hubs/user");
 
