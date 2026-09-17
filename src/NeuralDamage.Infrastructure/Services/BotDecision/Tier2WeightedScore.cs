@@ -1,4 +1,4 @@
-namespace NeuralDamage.Infrastructure.Services.BotDecision;
+﻿namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
 public record Tier2Context(
     bool IsGroupQuestion,
@@ -15,7 +15,10 @@ public static class Tier2WeightedScore
 
     public static double ComputeScore(Tier2Context context)
     {
-        double score = 0.15; // base interest
+        // Base interest has to sit clear of SkipThreshold, otherwise an
+        // ordinary statement scores exactly at the threshold and is dropped
+        // before Tier 3 ever sees it.
+        double score = 0.35;
 
         // Group question bonus
         if (context.IsGroupQuestion)
@@ -45,6 +48,11 @@ public static class Tier2WeightedScore
         // Many bots penalty (each extra bot reduces chance)
         var botPenalty = Math.Min(0.15, 0.05 * (context.TotalBotsInChat - 1));
         score -= botPenalty;
+
+        // A lone bot cannot pile on, and a chat where the only bot stays quiet
+        // reads as broken, so bias it towards answering.
+        if (context.TotalBotsInChat == 1)
+            score += 0.3;
 
         return Math.Clamp(score, 0.0, 1.0);
     }

@@ -1,4 +1,4 @@
-@if (messages().length === 0) {
+﻿@if (messages().length === 0) {
   <div class="flex flex-1 items-center justify-center px-4">
     <pk-chat-empty
       title="No messages yet"
@@ -7,7 +7,7 @@
   </div>
 } @else {
   <pk-chat-container-root class="relative flex-1 px-4 py-4">
-    <pk-chat-container-content class="mx-auto w-full max-w-3xl gap-6">
+    <pk-chat-container-content class="mx-auto w-full max-w-3xl gap-1.5">
       @for (message of messages(); track message.id) {
         <app-message-bubble [message]="message" (reply)="onReply($event)" />
       }
