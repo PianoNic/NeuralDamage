@@ -1,4 +1,4 @@
-<!-- Bot messages: left-aligned -->
+﻿<!-- Bot messages: left-aligned -->
 @if (isBot()) {
   <div class="group flex gap-3 px-2 py-1.5 hover:bg-accent/30">
     <!-- Avatar -->
@@ -26,7 +26,11 @@
       }
 
       <!-- Message content -->
-      <p class="mt-1 text-sm leading-relaxed text-foreground">{{ message().content }}</p>
+      <pk-message-content
+        class="mt-1 block text-sm leading-relaxed text-foreground"
+        [content]="message().content"
+        [markdown]="true"
+      />
 
       <!-- Reactions -->
       @if (hasReactions()) {

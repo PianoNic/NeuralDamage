@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+﻿import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { PkLoader } from '@prompt-kit/loader';
 
 @Component({
   selector: 'app-typing-indicator',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [],
+  imports: [PkLoader],
   templateUrl: './typing-indicator.html',
 })
 export class TypingIndicatorComponent {

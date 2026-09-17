@@ -17,7 +17,7 @@
   @if (mentionSuggestions().length > 0) {
     <div class="mb-2 rounded-lg border border-border bg-card p-1 shadow-lg">
       @for (member of mentionSuggestions(); track member.id) {
-        <button hlmBtn variant="ghost" class="w-full justify-start gap-2 text-sm">
+        <button hlmBtn variant="ghost" class="w-full justify-start gap-2 text-sm" (click)="onSelectMention(member)">
           <hlm-avatar class="h-6 w-6">
             <span hlmAvatarFallback class="text-[10px]">{{ (member.displayName ?? 'U').charAt(0).toUpperCase() }}</span>
           </hlm-avatar>
@@ -28,25 +28,19 @@
   }
 
   <!-- Input area -->
-  <div class="flex items-end gap-2">
-    <textarea
-      hlmTextarea
-      rows="1"
-      class="min-h-[40px] flex-1 resize-none"
-      placeholder="Type a message... (use @ to mention)"
-      [ngModel]="content()"
-      (ngModelChange)="content.set($event)"
-      (keydown)="onKeydown($event)"
-    ></textarea>
-    <button
-      hlmBtn
-      size="icon"
-      class="mb-px h-10 w-10 shrink-0"
-      (click)="onSend()"
-      [disabled]="!content().trim()"
-      title="Send message"
-    >
-      <ng-icon name="lucideSendHorizontal" class="size-4" />
-    </button>
-  </div>
+  <pk-prompt-input [(value)]="content" (submitted)="onSend()">
+    <pk-prompt-input-textarea placeholder="Type a message... (use @ to mention)" />
+    <pk-prompt-input-actions class="justify-end">
+      <button
+        hlmBtn
+        size="icon"
+        class="h-9 w-9 shrink-0"
+        (click)="onSend()"
+        [disabled]="!content().trim()"
+        title="Send message"
+      >
+        <ng-icon name="lucideSendHorizontal" class="size-4" />
+      </button>
+    </pk-prompt-input-actions>
+  </pk-prompt-input>
 </div>

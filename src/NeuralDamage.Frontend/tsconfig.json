@@ -19,6 +19,9 @@
       "@app/*": [
         "./src/app/*"
       ],
+      "@prompt-kit/*": [
+        "./libs/prompt-kit/*"
+      ],
       "@spartan-ng/helm/input": [
         "./libs/ui/input/src/index.ts"
       ],
