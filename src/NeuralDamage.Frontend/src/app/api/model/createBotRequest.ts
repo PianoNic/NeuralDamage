@@ -10,11 +10,11 @@
 
 
 export interface CreateBotRequest { 
-    name?: string | null;
-    modelId?: string | null;
-    systemPrompt?: string | null;
+    name: string;
+    modelId: string;
+    systemPrompt: string;
     personality?: string | null;
-    temperature?: number;
+    temperature: number;
     avatarUrl?: string | null;
     aliases?: string | null;
 }

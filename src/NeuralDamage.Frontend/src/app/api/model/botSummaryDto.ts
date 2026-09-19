@@ -9,7 +9,11 @@
  */
 
 
-export interface CreateChatRequest { 
+export interface BotSummaryDto { 
+    id: string;
     name: string;
+    avatarUrl?: string | null;
+    isActive: boolean;
+    modelId: string;
 }
 

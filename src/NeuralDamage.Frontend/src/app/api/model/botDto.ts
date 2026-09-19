@@ -9,10 +9,17 @@
  */
 
 
-export interface UserDto { 
+export interface BotDto { 
     id: string;
-    email: string;
-    displayName: string;
+    name: string;
+    modelId: string;
+    systemPrompt: string;
+    personality?: string | null;
+    temperature: number;
     avatarUrl?: string | null;
+    aliases?: string | null;
+    createdById: string;
+    isActive: boolean;
+    createdAt: string;
 }
 

@@ -17,6 +17,8 @@ import { CustomHttpParameterCodec }                          from '../encoder';
 import { Observable }                                        from 'rxjs';
 
 // @ts-ignore
+import { MessageDto } from '../model/messageDto';
+// @ts-ignore
 import { SendMessageRequest } from '../model/sendMessageRequest';
 
 // @ts-ignore
@@ -97,10 +99,10 @@ export class MessagesService {
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any>;
-    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<any>>;
-    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<any>>;
-    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<Array<MessageDto>>;
+    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<Array<MessageDto>>>;
+    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<Array<MessageDto>>>;
+    public apiChatsChatIdMessagesGet(chatId: string, limit?: number, before?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
         if (chatId === null || chatId === undefined) {
             throw new Error('Required parameter chatId was null or undefined when calling apiChatsChatIdMessagesGet.');
         }
@@ -128,6 +130,9 @@ export class MessagesService {
         if (localVarHttpHeaderAcceptSelected === undefined) {
             // to determine the Accept header
             const httpHeaderAccepts: string[] = [
+                'text/plain',
+                'application/json',
+                'text/json'
             ];
             localVarHttpHeaderAcceptSelected = this.configuration.selectHeaderAccept(httpHeaderAccepts);
         }
@@ -158,7 +163,7 @@ export class MessagesService {
         }
 
         let localVarPath = `/api/chats/${this.configuration.encodeParam({name: "chatId", value: chatId, in: "path", style: "simple", explode: false, dataType: "string", dataFormat: "uuid"})}/messages`;
-        return this.httpClient.request<any>('get', `${this.configuration.basePath}${localVarPath}`,
+        return this.httpClient.request<Array<MessageDto>>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 params: localVarQueryParameters,
@@ -178,10 +183,10 @@ export class MessagesService {
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any>;
-    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<any>>;
-    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<any>>;
-    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<any>;
+    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<any>>;
+    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<any>>;
+    public apiChatsChatIdMessagesPost(chatId: string, sendMessageRequest?: SendMessageRequest, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
         if (chatId === null || chatId === undefined) {
             throw new Error('Required parameter chatId was null or undefined when calling apiChatsChatIdMessagesPost.');
         }
@@ -199,6 +204,9 @@ export class MessagesService {
         if (localVarHttpHeaderAcceptSelected === undefined) {
             // to determine the Accept header
             const httpHeaderAccepts: string[] = [
+                'text/plain',
+                'application/json',
+                'text/json'
             ];
             localVarHttpHeaderAcceptSelected = this.configuration.selectHeaderAccept(httpHeaderAccepts);
         }

@@ -10,10 +10,10 @@
 
 
 export interface ToamaisutaaClientConfiguration { 
-    authority: string | null;
-    clientId: string | null;
-    redirectUri: string | null;
-    postLogoutRedirectUri: string | null;
-    scope: string | null;
+    authority: string;
+    clientId: string;
+    redirectUri: string;
+    postLogoutRedirectUri: string;
+    scope: string;
 }
 

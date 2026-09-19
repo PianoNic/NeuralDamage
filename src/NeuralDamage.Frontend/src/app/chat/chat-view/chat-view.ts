@@ -8,7 +8,7 @@ import { PkLoader } from '@prompt-kit/loader';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideBot, lucideUsers } from '@ng-icons/lucide';
-import { Chat, ChatMember, Message, ReactionGroup } from '@app/models';
+import { ChatDetailDto, ChatMember, ChatMemberDto, Message, MessageDto, ReactionGroupDto } from '@app/models';
 import { AuthService } from '@app/shared/auth/auth.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
@@ -49,7 +49,7 @@ export class ChatViewComponent implements OnDestroy {
   private readonly messagesApi = inject(MessagesService);
   private readonly reactionsApi = inject(ReactionsService);
 
-  readonly chat = signal<Chat | null>(null);
+  readonly chat = signal<ChatDetailDto | null>(null);
   readonly messages = signal<Message[]>([]);
   readonly members = signal<ChatMember[]>([]);
   readonly loading = signal(true);
@@ -67,12 +67,12 @@ export class ChatViewComponent implements OnDestroy {
 
   currentChatId: string | null = null;
 
-  private onMessageNew = (dto: unknown) => {
-    this.messages.update((list) => [...list, toMessage(dto as never)]);
+  private onMessageNew = (dto: MessageDto) => {
+    this.messages.update((list) => [...list, toMessage(dto)]);
   };
 
-  private onMemberAdded = (dto: unknown) => {
-    const member = toChatMember(dto as never);
+  private onMemberAdded = (dto: ChatMemberDto) => {
+    const member = toChatMember(dto);
     this.members.update((list) =>
       list.some((m) => m.id === member.id) ? list : [...list, member],
     );
@@ -93,7 +93,7 @@ export class ChatViewComponent implements OnDestroy {
     }, 5000);
   };
 
-  private onReactionUpdated = (messageId: string, reactions: ReactionGroup[]) => {
+  private onReactionUpdated = (messageId: string, reactions: ReactionGroupDto[]) => {
     this.messages.update((list) =>
       list.map((m) => (m.id === messageId ? { ...m, reactions: reactions ?? [] } : m)),
     );
@@ -173,12 +173,12 @@ export class ChatViewComponent implements OnDestroy {
     this.loading.set(true);
 
     try {
-      const chat = (await firstValueFrom(this.chatsApi.apiChatsChatIdGet(chatId))) as any;
+      const chat = await firstValueFrom(this.chatsApi.apiChatsChatIdGet(chatId));
       this.chat.set(chat);
-      this.members.set(toChatMembers((chat.members ?? []) as never));
+      this.members.set(toChatMembers(chat.members));
 
       const dtos = await firstValueFrom(this.messagesApi.apiChatsChatIdMessagesGet(chatId));
-      this.messages.set(toMessages(dtos as never));
+      this.messages.set(toMessages(dtos));
 
       // Must come after start(); joining is what puts this client in the
       // chat's SignalR group for chats created after the connection opened.

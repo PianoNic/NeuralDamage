@@ -10,9 +10,11 @@ namespace NeuralDamage.API.Controllers;
 
 [ApiController]
 [Route("api/chats/{chatId:guid}/actions")]
+[ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
 public class ChatActionsController(ISender sender, IUserService userService) : ControllerBase
 {
     [HttpPost("clear")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> Clear(Guid chatId, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
@@ -21,6 +23,7 @@ public class ChatActionsController(ISender sender, IUserService userService) : C
     }
 
     [HttpPost("kick/{botId:guid}")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> Kick(Guid chatId, Guid botId, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);

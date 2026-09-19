@@ -10,6 +10,6 @@
 
 
 export interface UpdateChatRequest { 
-    name?: string | null;
+    name: string;
 }
 

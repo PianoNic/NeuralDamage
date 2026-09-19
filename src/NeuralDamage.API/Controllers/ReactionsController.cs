@@ -10,9 +10,11 @@ namespace NeuralDamage.API.Controllers;
 
 [ApiController]
 [Route("api/chats/{chatId:guid}/messages/{messageId:guid}/reactions")]
+[ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
 public class ReactionsController(ISender sender, IUserService userService) : ControllerBase
 {
     [HttpPost("{emoji}")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> Toggle(Guid chatId, Guid messageId, string emoji, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);

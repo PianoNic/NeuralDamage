@@ -9,7 +9,7 @@ import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/a
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideX, lucidePlus, lucidePencil, lucideTrash2, lucideUsers, lucideBot } from '@ng-icons/lucide';
-import { Bot, ChatMember } from '@app/models';
+import { BotDto, ChatMember } from '@app/models';
 import { BotFormComponent } from '@app/bots/bot-form/bot-form';
 import { BotsService } from '@app/api/api/bots.service';
 import { ChatMembersService } from '@app/api/api/chatMembers.service';
@@ -32,10 +32,10 @@ export class BotManagerComponent implements OnInit {
   readonly members = input.required<ChatMember[]>();
   readonly close = output<void>();
 
-  readonly allBots = signal<Bot[]>([]);
+  readonly allBots = signal<BotDto[]>([]);
   readonly searchQuery = signal('');
   readonly showBotForm = signal(false);
-  readonly editingBot = signal<Bot | null>(null);
+  readonly editingBot = signal<BotDto | null>(null);
   readonly showDeleteBotDialog = signal(false);
   readonly deletingBotId = signal<string | null>(null);
 
@@ -56,7 +56,7 @@ export class BotManagerComponent implements OnInit {
   });
 
   async ngOnInit() {
-    const bots = (await firstValueFrom(this.botsApi.apiBotsGet())) as Bot[];
+    const bots = await firstValueFrom(this.botsApi.apiBotsGet());
     this.allBots.set(bots);
   }
 
@@ -76,7 +76,7 @@ export class BotManagerComponent implements OnInit {
     }
   }
 
-  openBotForm(bot?: Bot) {
+  openBotForm(bot?: BotDto) {
     this.editingBot.set(bot ?? null);
     this.showBotForm.set(true);
   }
@@ -106,7 +106,7 @@ export class BotManagerComponent implements OnInit {
 
   async onBotSaved() {
     this.closeBotForm();
-    const bots = (await firstValueFrom(this.botsApi.apiBotsGet())) as Bot[];
+    const bots = await firstValueFrom(this.botsApi.apiBotsGet());
     this.allBots.set(bots);
   }
 }

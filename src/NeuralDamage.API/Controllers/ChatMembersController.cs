@@ -11,9 +11,11 @@ namespace NeuralDamage.API.Controllers;
 
 [ApiController]
 [Route("api/chats/{chatId:guid}/members")]
+[ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
 public class ChatMembersController(ISender sender, IUserService userService) : ControllerBase
 {
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> Add(Guid chatId, AddMemberRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
@@ -22,6 +24,7 @@ public class ChatMembersController(ISender sender, IUserService userService) : C
     }
 
     [HttpDelete("{memberId:guid}")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> Remove(Guid chatId, Guid memberId, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);

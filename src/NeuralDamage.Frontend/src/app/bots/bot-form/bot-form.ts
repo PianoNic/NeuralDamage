@@ -7,7 +7,7 @@ import { HlmTextarea } from '@spartan-ng/helm/textarea';
 import { HlmLabel } from '@spartan-ng/helm/label';
 import { HlmAutocompleteImports } from '@spartan-ng/helm/autocomplete';
 import { HlmSliderImports } from '@spartan-ng/helm/slider';
-import { Bot, OpenRouterModel } from '@app/models';
+import { BotDto, OpenRouterModel } from '@app/models';
 import { BotsService } from '@app/api/api/bots.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -20,7 +20,7 @@ import { firstValueFrom } from 'rxjs';
 export class BotFormComponent implements OnInit {
   private readonly botsApi = inject(BotsService);
 
-  readonly bot = input<Bot | null>(null);
+  readonly bot = input<BotDto | null>(null);
   readonly saved = output<void>();
   readonly cancel = output<void>();
 
@@ -49,11 +49,11 @@ export class BotFormComponent implements OnInit {
       if (b) {
         this.isEditing.set(true);
         this.name.set(b.name);
-        this.selectedModel.set({ id: b.modelId, name: b.modelId } as OpenRouterModel);
+        this.selectedModel.set({ id: b.modelId, name: b.modelId });
         this.systemPrompt.set(b.systemPrompt);
         this.personality.set(b.personality ?? '');
         this.temperature.set(b.temperature);
-        this.aliases.set((b as any).aliases ?? '');
+        this.aliases.set(b.aliases ?? '');
       } else {
         this.isEditing.set(false);
       }
@@ -62,7 +62,7 @@ export class BotFormComponent implements OnInit {
 
   async ngOnInit() {
     try {
-      const models = (await firstValueFrom(this.botsApi.apiBotsModelsGet())) as OpenRouterModel[];
+      const models = await firstValueFrom(this.botsApi.apiBotsModelsGet());
       this.availableModels.set(models);
     } catch {
       toast.error('Could not load the model list. Check your connection and try again.');
