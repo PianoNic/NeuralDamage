@@ -63,16 +63,16 @@ export class BotManagerComponent implements OnInit {
   async addBot(botId: string) {
     try {
       await firstValueFrom(this.membersApi.apiChatsChatIdMembersPost(this.chatId(), { botId }));
-    } catch {
-      toast.error('Could not add that bot to the chat.');
+    } catch (error: unknown) {
+      toast.error(serverMessage(error) ?? 'Could not add that bot to the chat.');
     }
   }
 
   async removeBot(memberId: string) {
     try {
       await firstValueFrom(this.membersApi.apiChatsChatIdMembersMemberIdDelete(this.chatId(), memberId));
-    } catch {
-      toast.error('Could not remove that member.');
+    } catch (error: unknown) {
+      toast.error(serverMessage(error) ?? 'Could not remove that member.');
     }
   }
 
@@ -109,4 +109,13 @@ export class BotManagerComponent implements OnInit {
     const bots = (await firstValueFrom(this.botsApi.apiBotsGet())) as Bot[];
     this.allBots.set(bots);
   }
+}
+
+/** ProblemDetails or a plain string body from the API, when there is one. */
+function serverMessage(error: unknown): string | null {
+  const body = (error as { error?: unknown })?.error;
+  if (typeof body === 'string' && body.trim()) return body;
+  const detail = (body as { detail?: string; title?: string } | undefined)?.detail
+    ?? (body as { title?: string } | undefined)?.title;
+  return detail?.trim() ? detail : null;
 }

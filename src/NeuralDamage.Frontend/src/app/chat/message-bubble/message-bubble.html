@@ -53,7 +53,8 @@
     </div>
 
     <div
-      class="invisible flex items-center gap-1 group-hover:visible"
+      class="invisible flex items-center gap-1 group-hover:visible has-[[aria-expanded=true]]:visible"
+      [class.mt-3]="hasReactions()"
       [class.justify-end]="!isBot()"
     >
       <button hlmBtn variant="ghost" size="sm" class="h-5 px-2 text-[11px]" (click)="onReply()">

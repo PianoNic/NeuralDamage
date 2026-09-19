@@ -14,7 +14,7 @@ import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
 import { MessagesService } from '@app/api/api/messages.service';
 import { ReactionsService } from '@app/api/api/reactions.service';
-import { toChatMembers, toMessage, toMessages } from '@app/chat/message.mapper';
+import { toChatMember, toChatMembers, toMessage, toMessages } from '@app/chat/message.mapper';
 import { MessageListComponent } from '@app/chat/message-list/message-list';
 import { MessageInputComponent } from '@app/chat/message-input/message-input';
 import { TypingIndicatorComponent } from '@app/chat/typing-indicator/typing-indicator';
@@ -71,8 +71,11 @@ export class ChatViewComponent implements OnDestroy {
     this.messages.update((list) => [...list, toMessage(dto as never)]);
   };
 
-  private onMemberAdded = (member: ChatMember) => {
-    this.members.update((list) => [...list, member]);
+  private onMemberAdded = (dto: unknown) => {
+    const member = toChatMember(dto as never);
+    this.members.update((list) =>
+      list.some((m) => m.id === member.id) ? list : [...list, member],
+    );
   };
 
   private onMemberRemoved = (_chatId: string, memberId: string) => {
