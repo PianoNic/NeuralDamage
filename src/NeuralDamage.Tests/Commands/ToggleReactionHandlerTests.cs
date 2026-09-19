@@ -94,6 +94,6 @@ public class ToggleReactionHandlerTests
         var handler = new ToggleReactionHandler(db, notifications);
         await handler.Handle(new ToggleReactionCommand(chat.Id, msg.Id, "❤️", user.Id), CancellationToken.None);
 
-        await notifications.Received(1).NotifyReactionUpdated(chat.Id, msg.Id, Arg.Any<List<NeuralDamage.Infrastructure.Dtos.ReactionDto>>());
+        await notifications.Received(1).NotifyReactionUpdated(chat.Id, msg.Id, Arg.Any<List<NeuralDamage.Infrastructure.Dtos.ReactionGroupDto>>());
     }
 }

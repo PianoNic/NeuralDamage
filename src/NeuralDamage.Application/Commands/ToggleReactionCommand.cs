@@ -1,4 +1,4 @@
-using Mediator;
+﻿using Mediator;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -34,10 +34,12 @@ public class ToggleReactionHandler(NeuralDamageDbContext db, IChatNotificationSe
 
         var reactions = await db.Reactions
             .Where(r => r.MessageId == request.MessageId)
+            .Include(r => r.User)
+            .Include(r => r.Bot)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        await notifications.NotifyReactionUpdated(request.ChatId, request.MessageId, reactions.Select(r => r.ToDto()).ToList());
+        await notifications.NotifyReactionUpdated(request.ChatId, request.MessageId, reactions.ToGroups());
         return Result.Success();
     }
 }

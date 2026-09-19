@@ -3,6 +3,7 @@ import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmBubbleImports } from '@spartan-ng/helm/bubble';
+import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmMessageImports } from '@spartan-ng/helm/message';
 import { Message } from '@app/models';
 import { ReactionBarComponent } from '@app/chat/reaction-bar/reaction-bar';
@@ -20,6 +21,7 @@ import { PkMessageContent } from '@prompt-kit/message';
     ReactionBarComponent,
     PkMessageContent,
     HlmBubbleImports,
+    HlmDropdownMenuImports,
     HlmMessageImports,
   ],
   host: { class: 'contents' },
@@ -28,6 +30,10 @@ import { PkMessageContent } from '@prompt-kit/message';
 export class MessageBubbleComponent {
   readonly message = input.required<Message>();
   readonly reply = output<Message>();
+  readonly react = output<{ messageId: string; emoji: string }>();
+
+  /** Quick picks, same set the legacy UI offered. */
+  readonly quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as const;
 
   readonly senderInitial = computed(() => this.message().senderName.charAt(0).toUpperCase());
   readonly isBot = computed(() => this.message().senderType === 'bot');
@@ -49,6 +55,6 @@ export class MessageBubbleComponent {
   }
 
   toggleReaction(emoji: string): void {
-    // TODO: implement via SignalR
+    this.react.emit({ messageId: this.message().id, emoji });
   }
 }

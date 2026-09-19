@@ -41,7 +41,7 @@ public class ChatNotificationService(
     public Task NotifyMessageNew(Guid chatId, MessageDto message) => chatHub.Clients.Group(chatId.ToString()).MessageNew(message);
     public Task NotifyMemberAdded(Guid chatId, ChatMemberDto member) => chatHub.Clients.Group(chatId.ToString()).MemberAdded(member);
     public Task NotifyMemberRemoved(Guid chatId, Guid memberId) => chatHub.Clients.Group(chatId.ToString()).MemberRemoved(chatId, memberId);
-    public Task NotifyReactionUpdated(Guid chatId, Guid messageId, List<ReactionDto> reactions) => chatHub.Clients.Group(chatId.ToString()).ReactionUpdated(messageId, reactions);
+    public Task NotifyReactionUpdated(Guid chatId, Guid messageId, List<ReactionGroupDto> reactions) => chatHub.Clients.Group(chatId.ToString()).ReactionUpdated(messageId, reactions);
     public Task NotifyBotTyping(Guid chatId, Guid botId, string botName) => chatHub.Clients.Group(chatId.ToString()).BotTyping(chatId, botId, botName);
     public Task NotifyBotResponseCancelled(Guid chatId) => chatHub.Clients.Group(chatId.ToString()).BotResponseCancelled(chatId);
 }

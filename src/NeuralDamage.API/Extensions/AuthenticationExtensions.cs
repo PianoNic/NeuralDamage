@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using NeuralDamage.Infrastructure.Services;
 using System.Security.Claims;
 
@@ -44,7 +44,7 @@ namespace NeuralDamage.API.Extensions
 
                         var userService = context.HttpContext.RequestServices.GetRequiredService<IUserService>();
 
-                        if (await userService.ExistsAsync(externalId, context.HttpContext.RequestAborted))
+                        if (!await userService.NeedsSyncAsync(externalId, context.HttpContext.RequestAborted))
                             return;
 
                         await userService.SyncCurrentUserAsync(context.HttpContext.RequestAborted);

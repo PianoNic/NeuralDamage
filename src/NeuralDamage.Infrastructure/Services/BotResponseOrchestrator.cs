@@ -119,6 +119,10 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
                 // Broadcast
                 var loaded = await db.Messages
                     .Include(m => m.SenderBot)
+                    .Include(m => m.Reactions).ThenInclude(r => r.User)
+                    .Include(m => m.Reactions).ThenInclude(r => r.Bot)
+                    .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
+                    .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
                     .AsNoTracking()
                     .FirstAsync(m => m.Id == botMessage.Id, cts.Token);
                 await notifications.NotifyMessageNew(chatId, loaded.ToDto());

@@ -1,13 +1,14 @@
 ﻿import { toast } from '@spartan-ng/brain/sonner';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSidebarTrigger } from '@spartan-ng/helm/sidebar';
 import { PkLoader } from '@prompt-kit/loader';
 import { HlmAvatar, HlmAvatarFallback, HlmAvatarImage } from '@spartan-ng/helm/avatar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideBot, lucideUsers } from '@ng-icons/lucide';
-import { Chat, ChatMember, Message } from '@app/models';
+import { Chat, ChatMember, Message, ReactionGroup } from '@app/models';
 import { AuthService } from '@app/shared/auth/auth.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
@@ -18,7 +19,7 @@ import { MessageListComponent } from '@app/chat/message-list/message-list';
 import { MessageInputComponent } from '@app/chat/message-input/message-input';
 import { TypingIndicatorComponent } from '@app/chat/typing-indicator/typing-indicator';
 import { BotManagerComponent } from '@app/bots/bot-manager/bot-manager';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 
 @Component({
   selector: 'app-chat-view',
@@ -89,14 +90,29 @@ export class ChatViewComponent implements OnDestroy {
     }, 5000);
   };
 
+  private onReactionUpdated = (messageId: string, reactions: ReactionGroup[]) => {
+    this.messages.update((list) =>
+      list.map((m) => (m.id === messageId ? { ...m, reactions: reactions ?? [] } : m)),
+    );
+  };
+
   private onChatCleared = () => {
     this.messages.set([]);
   };
 
+  /**
+   * route.snapshot is a plain object, so an effect reading it registers no
+   * dependency and fires only once. Angular reuses this component when only the
+   * chatId changes, so switching chats never reloaded. Track the param map,
+   * which is an observable, instead.
+   */
+  private readonly routeChatId = toSignal(this.route.paramMap.pipe(map((p) => p.get('chatId'))), {
+    initialValue: this.route.snapshot.paramMap.get('chatId'),
+  });
+
   constructor() {
     effect(() => {
-      const params = this.route.snapshot.paramMap;
-      const chatId = params.get('chatId');
+      const chatId = this.routeChatId();
       if (chatId && chatId !== this.currentChatId) {
         this.loadChat(chatId);
       }
@@ -177,6 +193,7 @@ export class ChatViewComponent implements OnDestroy {
     this.signalr.onChatEvent('MemberAdded', this.onMemberAdded);
     this.signalr.onChatEvent('MemberRemoved', this.onMemberRemoved);
     this.signalr.onChatEvent('BotTyping', this.onBotTyping);
+    this.signalr.onChatEvent('ReactionUpdated', this.onReactionUpdated);
     this.signalr.onChatEvent('ChatCleared', this.onChatCleared);
   }
 
@@ -185,6 +202,7 @@ export class ChatViewComponent implements OnDestroy {
     this.signalr.offChatEvent('MemberAdded', this.onMemberAdded);
     this.signalr.offChatEvent('MemberRemoved', this.onMemberRemoved);
     this.signalr.offChatEvent('BotTyping', this.onBotTyping);
+    this.signalr.offChatEvent('ReactionUpdated', this.onReactionUpdated);
     this.signalr.offChatEvent('ChatCleared', this.onChatCleared);
   }
 }

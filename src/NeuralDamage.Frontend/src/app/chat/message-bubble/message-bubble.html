@@ -1,4 +1,4 @@
-<div hlmMessage [align]="isBot() ? 'start' : 'end'" class="group">
+﻿<div hlmMessage [align]="isBot() ? 'start' : 'end'" class="group">
   <!-- WhatsApp only shows the other party's avatar, never your own -->
   @if (isBot()) {
     <hlm-avatar hlmMessageAvatar class="size-8 self-start">
@@ -59,6 +59,33 @@
       <button hlmBtn variant="ghost" size="sm" class="h-5 px-2 text-[11px]" (click)="onReply()">
         Reply
       </button>
+
+      <button
+        hlmBtn
+        variant="ghost"
+        size="sm"
+        class="h-5 px-2 text-[11px]"
+        [hlmDropdownMenuTrigger]="emojiMenu"
+        [align]="isBot() ? 'start' : 'end'"
+      >
+        React
+      </button>
+      <ng-template #emojiMenu>
+        <hlm-dropdown-menu class="min-w-0 p-1">
+          <div class="flex gap-0.5">
+            @for (emoji of quickEmojis; track emoji) {
+              <button
+                type="button"
+                class="hover:bg-accent rounded-md px-1.5 py-1 text-base leading-none"
+                [attr.aria-label]="'React with ' + emoji"
+                (click)="toggleReaction(emoji)"
+              >
+                {{ emoji }}
+              </button>
+            }
+          </div>
+        </hlm-dropdown-menu>
+      </ng-template>
     </div>
   </div>
 </div>
