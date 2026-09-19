@@ -1,5 +1,8 @@
 @if (typingText()) {
-  <div class="px-4 py-1.5">
-    <pk-loader variant="typing" size="sm" [text]="typingText()" class="text-muted-foreground" />
+  <!-- pk-loader's "typing" variant draws dots only and ignores its text input,
+       so the name is rendered alongside it. -->
+  <div class="text-muted-foreground flex items-center gap-2 px-1 py-1.5 text-xs">
+    <pk-loader variant="typing" size="sm" />
+    <span>{{ typingText() }}</span>
   </div>
 }
