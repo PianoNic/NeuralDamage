@@ -1,11 +1,12 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
-public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judge) : IBotDecisionEngine
+public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judge, ILogger<BotDecisionEngine> logger) : IBotDecisionEngine
 {
     public async Task<List<Guid>> DecideRespondersAsync(Guid chatId, Message message, List<Bot> candidateBots, CancellationToken ct = default)
     {
@@ -26,6 +27,8 @@ public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judg
         {
             // Tier 1: Hard rules
             var tier1 = Tier1HardRules.Evaluate(message, bot, isMuted: false, isStopped: false);
+            if (tier1 != Tier1Result.Undecided)
+                logger.LogInformation("Bot {Bot}: tier 1 says {Tier1}", bot.Name, tier1);
             if (tier1 == Tier1Result.MustRespond) { mustRespond.Add(bot.Id); continue; }
             if (tier1 == Tier1Result.MustSkip) continue;
 
@@ -45,11 +48,25 @@ public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judg
                 TotalBotsInChat: totalBotsInChat);
 
             var score = Tier2WeightedScore.ComputeScore(context);
+            logger.LogInformation(
+                "Bot {Bot}: tier 2 score {Score:F2} (respond >= {Respond}, skip < {Skip})",
+                bot.Name, score, Tier2WeightedScore.RespondThreshold, Tier2WeightedScore.SkipThreshold);
 
             if (score >= Tier2WeightedScore.RespondThreshold) { mustRespond.Add(bot.Id); continue; }
             if (score < Tier2WeightedScore.SkipThreshold) continue;
 
             undecided.Add((bot, score));
+        }
+
+        // Tier 3 exists to choose between bots. With a single bot in the chat
+        // there is nothing to disambiguate, so asking a model "which of these
+        // one bots should reply?" only adds a round trip and a chance of an
+        // unexplained silence. Tier 2 has already had its say via SkipThreshold.
+        if (undecided.Count > 0 && totalBotsInChat == 1)
+        {
+            logger.LogInformation("Single bot in chat; responding without a tier 3 call");
+            mustRespond.AddRange(undecided.Select(u => u.Bot.Id));
+            undecided.Clear();
         }
 
         // Tier 3: Single LLM call for all undecided bots
@@ -63,9 +80,12 @@ public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judg
                 .ToList();
 
             var judged = await tier3Judge.JudgeAsync(message, undecided, history, ct);
+            logger.LogInformation("Tier 3 judged {Judged} of {Undecided} undecided bots as responders",
+                judged.Count, undecided.Count);
             mustRespond.AddRange(judged);
         }
 
+        logger.LogInformation("Decision for chat {ChatId}: {Count} responder(s)", chatId, mustRespond.Count);
         return mustRespond;
     }
 }

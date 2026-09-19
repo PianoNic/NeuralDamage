@@ -1,11 +1,12 @@
 ﻿using System.Text.Json;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
+using Microsoft.Extensions.Logging;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
-public class Tier3LlmJudge(IBotRankingService ranking)
+public class Tier3LlmJudge(IBotRankingService ranking, ILogger<Tier3LlmJudge> logger)
 {
 
     public async Task<List<Guid>> JudgeAsync(Message message, List<(Bot Bot, double Tier2Score)> undecidedBots, List<ChatMessage> recentHistory, CancellationToken ct)
@@ -45,6 +46,8 @@ public class Tier3LlmJudge(IBotRankingService ranking)
                 """;
 
             var response = await ranking.RankAsync(systemPrompt, prompt, ct);
+            logger.LogInformation("Ranking reply for candidates [{Ids}]: {Reply}",
+                string.Join(", ", undecidedBots.Select(b => b.Bot.Id)), response ?? "<null>");
 
             // Ranking unavailable - fall back to the Tier 2 scores.
             if (response is null)

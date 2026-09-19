@@ -1,3 +1,4 @@
+﻿import { toast } from '@spartan-ng/brain/sonner';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnInit, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HlmButton } from '@spartan-ng/helm/button';
@@ -64,7 +65,7 @@ export class BotFormComponent implements OnInit {
       const models = (await firstValueFrom(this.botsApi.apiBotsModelsGet())) as OpenRouterModel[];
       this.availableModels.set(models);
     } catch {
-      console.error('Failed to load models');
+      toast.error('Could not load the model list. Check your connection and try again.');
     }
   }
 
@@ -95,8 +96,8 @@ export class BotFormComponent implements OnInit {
         }));
       }
       this.saved.emit();
-    } catch (e) {
-      console.error('Failed to save bot', e);
+    } catch {
+      toast.error('Could not save the bot. Please try again.');
     }
     this.loading.set(false);
   }

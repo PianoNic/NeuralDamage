@@ -1,4 +1,5 @@
-﻿import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+﻿import { toast } from '@spartan-ng/brain/sonner';
+import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -12,8 +13,10 @@ import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideBrain,
+  lucideCheck,
   lucideChevronsUpDown,
   lucideLogOut,
+  lucideMonitor,
   lucideMoon,
   lucideSearch,
   lucideSquarePen,
@@ -21,6 +24,7 @@ import {
 } from '@ng-icons/lucide';
 import { PkConversationList, type Conversation } from '@prompt-kit/conversation-list';
 import { AuthService } from '@app/shared/auth/auth.service';
+import { ThemeService } from '@app/shared/theme/theme.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
 import { Chat } from '@app/models';
@@ -47,8 +51,10 @@ import { filter, firstValueFrom, map } from 'rxjs';
   viewProviders: [
     provideIcons({
       lucideBrain,
-      lucideChevronsUpDown,
+      lucideCheck,
+  lucideChevronsUpDown,
       lucideLogOut,
+      lucideMonitor,
       lucideMoon,
       lucideSearch,
       lucideSquarePen,
@@ -59,6 +65,7 @@ import { filter, firstValueFrom, map } from 'rxjs';
 })
 export class SidebarComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
+  protected readonly theme = inject(ThemeService);
   private readonly auth = inject(AuthService);
   private readonly signalr = inject(SignalRService);
   private readonly chatsApi = inject(ChatsService);
@@ -73,21 +80,6 @@ export class SidebarComponent implements OnInit, OnDestroy {
   readonly newChatName = signal('');
   readonly showDeleteDialog = signal(false);
   readonly deletingChatId = signal<string | null>(null);
-  readonly isDark = signal(
-    localStorage.getItem('theme') === 'dark' ||
-    (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  );
-
-  constructor() {
-    document.documentElement.classList.toggle('dark', this.isDark());
-  }
-
-  toggleTheme() {
-    const dark = !this.isDark();
-    this.isDark.set(dark);
-    document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem('theme', dark ? 'dark' : 'light');
-  }
 
   readonly filteredChats = computed(() => {
     const query = this.searchQuery().toLowerCase();
@@ -164,8 +156,12 @@ export class SidebarComponent implements OnInit, OnDestroy {
   async submitCreateChat() {
     const name = this.newChatName().trim();
     if (!name) return;
-    await firstValueFrom(this.chatsApi.apiChatsPost({ name }));
-    this.showCreateDialog.set(false);
+    try {
+      await firstValueFrom(this.chatsApi.apiChatsPost({ name }));
+      this.showCreateDialog.set(false);
+    } catch {
+      toast.error('Could not create the chat. Please try again.');
+    }
   }
 
   confirmDeleteChat(chatId: string) {
@@ -176,9 +172,13 @@ export class SidebarComponent implements OnInit, OnDestroy {
   async executeDeleteChat() {
     const chatId = this.deletingChatId();
     if (!chatId) return;
-    await firstValueFrom(this.chatsApi.apiChatsChatIdDelete(chatId));
-    this.showDeleteDialog.set(false);
-    this.deletingChatId.set(null);
+    try {
+      await firstValueFrom(this.chatsApi.apiChatsChatIdDelete(chatId));
+      this.showDeleteDialog.set(false);
+      this.deletingChatId.set(null);
+    } catch {
+      toast.error('Could not delete the chat.');
+    }
   }
 
   logout() {
@@ -191,7 +191,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       const chats = (await firstValueFrom(this.chatsApi.apiChatsGet())) as Chat[];
       this.chats.set(chats);
     } catch {
-      console.error('Failed to load chats');
+      toast.error('Could not load your chats.');
     }
   }
 }

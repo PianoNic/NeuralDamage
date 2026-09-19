@@ -1,6 +1,7 @@
-using NeuralDamage.Domain;
+﻿using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace NeuralDamage.Tests.BotDecision;
@@ -28,7 +29,7 @@ public class Tier3LlmJudgeTests
     {
         var above = MakeBot("Above");
         var below = MakeBot("Below");
-        var judge = new Tier3LlmJudge(RankingReturning(null));
+        var judge = new Tier3LlmJudge(RankingReturning(null), NullLogger<Tier3LlmJudge>.Instance);
 
         var result = await judge.JudgeAsync(
             MakeMessage(), [(above, 0.9), (below, 0.1)], [], CancellationToken.None);
@@ -45,7 +46,7 @@ public class Tier3LlmJudgeTests
             .Returns<Task<string?>>(_ => throw new HttpRequestException("endpoint down"));
 
         var above = MakeBot("Above");
-        var judge = new Tier3LlmJudge(ranking);
+        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
 
         var result = await judge.JudgeAsync(
             MakeMessage(), [(above, 0.75)], [], CancellationToken.None);
@@ -59,7 +60,8 @@ public class Tier3LlmJudgeTests
         var chosen = MakeBot("Chosen");
         var ignored = MakeBot("Ignored");
         var judge = new Tier3LlmJudge(
-            RankingReturning($"{{\"responders\": [\"{chosen.Id}\"]}}"));
+            RankingReturning($"{{\"responders\": [\"{chosen.Id}\"]}}"),
+            NullLogger<Tier3LlmJudge>.Instance);
 
         // Both sit below the Tier 2 threshold, so a fallback would return neither.
         var result = await judge.JudgeAsync(
@@ -74,7 +76,8 @@ public class Tier3LlmJudgeTests
     {
         var chosen = MakeBot("Chosen");
         var judge = new Tier3LlmJudge(
-            RankingReturning($"```json\n{{\"responders\": [\"{chosen.Id}\"]}}\n```"));
+            RankingReturning($"```json\n{{\"responders\": [\"{chosen.Id}\"]}}\n```"),
+            NullLogger<Tier3LlmJudge>.Instance);
 
         var result = await judge.JudgeAsync(
             MakeMessage(), [(chosen, 0.2)], [], CancellationToken.None);
@@ -86,7 +89,7 @@ public class Tier3LlmJudgeTests
     public async Task RankingReturnsUnparseableText_FallsBackToTier2()
     {
         var above = MakeBot("Above");
-        var judge = new Tier3LlmJudge(RankingReturning("I think nobody should reply."));
+        var judge = new Tier3LlmJudge(RankingReturning("I think nobody should reply."), NullLogger<Tier3LlmJudge>.Instance);
 
         var result = await judge.JudgeAsync(
             MakeMessage(), [(above, 0.8)], [], CancellationToken.None);
@@ -99,7 +102,8 @@ public class Tier3LlmJudgeTests
     {
         var known = MakeBot("Known");
         var judge = new Tier3LlmJudge(
-            RankingReturning($"{{\"responders\": [\"{Guid.NewGuid()}\"]}}"));
+            RankingReturning($"{{\"responders\": [\"{Guid.NewGuid()}\"]}}"),
+            NullLogger<Tier3LlmJudge>.Instance);
 
         var result = await judge.JudgeAsync(
             MakeMessage(), [(known, 0.2)], [], CancellationToken.None);

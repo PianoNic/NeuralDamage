@@ -1,3 +1,4 @@
+﻿import { toast } from '@spartan-ng/brain/sonner';
 import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, output, signal } from '@angular/core';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmInput } from '@spartan-ng/helm/input';
@@ -60,11 +61,19 @@ export class BotManagerComponent implements OnInit {
   }
 
   async addBot(botId: string) {
-    await firstValueFrom(this.membersApi.apiChatsChatIdMembersPost(this.chatId(), { botId }));
+    try {
+      await firstValueFrom(this.membersApi.apiChatsChatIdMembersPost(this.chatId(), { botId }));
+    } catch {
+      toast.error('Could not add that bot to the chat.');
+    }
   }
 
   async removeBot(memberId: string) {
-    await firstValueFrom(this.membersApi.apiChatsChatIdMembersMemberIdDelete(this.chatId(), memberId));
+    try {
+      await firstValueFrom(this.membersApi.apiChatsChatIdMembersMemberIdDelete(this.chatId(), memberId));
+    } catch {
+      toast.error('Could not remove that member.');
+    }
   }
 
   openBotForm(bot?: Bot) {
@@ -85,7 +94,11 @@ export class BotManagerComponent implements OnInit {
   async executeDeleteBot() {
     const botId = this.deletingBotId();
     if (!botId) return;
-    await firstValueFrom(this.botsApi.apiBotsBotIdDelete(botId));
+    try {
+      await firstValueFrom(this.botsApi.apiBotsBotIdDelete(botId));
+    } catch {
+      toast.error('Could not delete that bot.');
+    }
     this.allBots.update((list) => list.filter((b) => b.id !== botId));
     this.showDeleteBotDialog.set(false);
     this.deletingBotId.set(null);
