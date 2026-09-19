@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+﻿import { Injectable, inject, signal } from '@angular/core';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import * as signalR from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
@@ -11,8 +11,16 @@ export class SignalRService {
   private userHub: signalR.HubConnection | null = null;
 
   readonly connected = signal(false);
+  /** Guards against concurrent callers building duplicate connections. */
+  private starting: Promise<void> | null = null;
 
-  async start() {
+  async start(): Promise<void> {
+    if (this.connected()) return;
+    this.starting ??= this.connect().finally(() => (this.starting = null));
+    return this.starting;
+  }
+
+  private async connect() {
     const token = await this.getToken();
     if (!token) return;
 
@@ -42,6 +50,7 @@ export class SignalRService {
   }
 
   async joinChat(chatId: string) {
+    await this.start();
     await this.chatHub?.invoke('JoinChat', chatId);
   }
 

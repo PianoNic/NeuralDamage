@@ -3,6 +3,7 @@ using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace NeuralDamage.Tests.BotDecision;
@@ -33,8 +34,8 @@ public class BotDecisionEngineTests
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
         using var _ = db;
         var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking);
-        var engine = new BotDecisionEngine(db, judge);
+        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey GPT what do you think?" };
         db.Messages.Add(msg);
@@ -51,8 +52,8 @@ public class BotDecisionEngineTests
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
         var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking);
-        var engine = new BotDecisionEngine(db, judge);
+        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey everyone what's your opinion?" };
         db.Messages.Add(msg);
@@ -69,8 +70,8 @@ public class BotDecisionEngineTests
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
         var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking);
-        var engine = new BotDecisionEngine(db, judge);
+        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = "I agree with that" };
         db.Messages.Add(msg);
@@ -90,8 +91,8 @@ public class BotDecisionEngineTests
         await db.SaveChangesAsync();
 
         var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking);
-        var engine = new BotDecisionEngine(db, judge);
+        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey GPT respond please" };
         db.Messages.Add(msg);
@@ -107,8 +108,8 @@ public class BotDecisionEngineTests
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
         var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking);
-        var engine = new BotDecisionEngine(db, judge);
+        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "chatgpt help me out" };
         db.Messages.Add(msg);

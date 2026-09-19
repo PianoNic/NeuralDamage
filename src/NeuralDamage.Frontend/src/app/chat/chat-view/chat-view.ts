@@ -1,4 +1,5 @@
-﻿import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, signal } from '@angular/core';
+﻿import { toast } from '@spartan-ng/brain/sonner';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSidebarTrigger } from '@spartan-ng/helm/sidebar';
@@ -103,21 +104,34 @@ export class ChatViewComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.currentChatId) {
+      void this.signalr.leaveChat(this.currentChatId).catch(() => undefined);
+    }
     this.unsubscribeEvents();
   }
 
   async sendMessage(event: { content: string; mentions: string[] }) {
     if (!this.currentChatId) return;
     const replyToId = this.replyingTo()?.id;
-    await firstValueFrom(
-      this.messagesApi.apiChatsChatIdMessagesPost(this.currentChatId, { content: event.content, replyToId }),
-    );
-    this.replyingTo.set(null);
+    try {
+      await firstValueFrom(
+        this.messagesApi.apiChatsChatIdMessagesPost(this.currentChatId, { content: event.content, replyToId }),
+      );
+      this.replyingTo.set(null);
+    } catch {
+      toast.error('Message not sent. Check your connection and try again.');
+    }
   }
 
   async toggleReaction(messageId: string, emoji: string) {
     if (!this.currentChatId) return;
-    await firstValueFrom(this.reactionsApi.apiChatsChatIdMessagesMessageIdReactionsEmojiPost(this.currentChatId, messageId, emoji));
+    try {
+      await firstValueFrom(
+        this.reactionsApi.apiChatsChatIdMessagesMessageIdReactionsEmojiPost(this.currentChatId, messageId, emoji),
+      );
+    } catch {
+      toast.error('Could not update the reaction.');
+    }
   }
 
   toggleBotManager() {
@@ -130,6 +144,12 @@ export class ChatViewComponent implements OnDestroy {
 
   private async loadChat(chatId: string) {
     this.unsubscribeEvents();
+
+    const previousChatId = this.currentChatId;
+    if (previousChatId) {
+      void this.signalr.leaveChat(previousChatId).catch(() => undefined);
+    }
+
     this.currentChatId = chatId;
     this.loading.set(true);
 
@@ -141,9 +161,12 @@ export class ChatViewComponent implements OnDestroy {
       const dtos = await firstValueFrom(this.messagesApi.apiChatsChatIdMessagesGet(chatId));
       this.messages.set(toMessages(dtos as never));
 
+      // Must come after start(); joining is what puts this client in the
+      // chat's SignalR group for chats created after the connection opened.
+      await this.signalr.joinChat(chatId);
       this.subscribeEvents();
-    } catch (e) {
-      console.error('Failed to load chat', e);
+    } catch {
+      toast.error('Could not open this chat. Try reloading the page.');
     }
 
     this.loading.set(false);

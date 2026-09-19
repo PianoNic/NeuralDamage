@@ -86,9 +86,29 @@
           <hlm-dropdown-menu class="min-w-56">
             <hlm-dropdown-menu-label>{{ user()?.email }}</hlm-dropdown-menu-label>
             <hlm-dropdown-menu-separator />
-            <button hlmDropdownMenuItem type="button" (triggered)="toggleTheme()">
-              <ng-icon [name]="isDark() ? 'lucideSun' : 'lucideMoon'" />
-              {{ isDark() ? 'Light mode' : 'Dark mode' }}
+            <hlm-dropdown-menu-label class="text-muted-foreground text-xs font-normal">
+              Appearance
+            </hlm-dropdown-menu-label>
+            <button hlmDropdownMenuItem type="button" (triggered)="theme.set('light')">
+              <ng-icon name="lucideSun" />
+              Light
+              @if (theme.mode() === 'light') {
+                <ng-icon name="lucideCheck" class="ml-auto size-3.5" />
+              }
+            </button>
+            <button hlmDropdownMenuItem type="button" (triggered)="theme.set('dark')">
+              <ng-icon name="lucideMoon" />
+              Dark
+              @if (theme.mode() === 'dark') {
+                <ng-icon name="lucideCheck" class="ml-auto size-3.5" />
+              }
+            </button>
+            <button hlmDropdownMenuItem type="button" (triggered)="theme.set('system')">
+              <ng-icon name="lucideMonitor" />
+              System
+              @if (theme.mode() === 'system') {
+                <ng-icon name="lucideCheck" class="ml-auto size-3.5" />
+              }
             </button>
             <hlm-dropdown-menu-separator />
             <button hlmDropdownMenuItem variant="destructive" type="button" (triggered)="logout()">

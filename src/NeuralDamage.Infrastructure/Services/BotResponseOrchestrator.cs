@@ -94,7 +94,13 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(responseText)) continue;
+                if (string.IsNullOrWhiteSpace(responseText))
+                {
+                    // Silently dropping this made "the bot said nothing" impossible
+                    // to tell apart from "the bot chose not to answer".
+                    logger.LogWarning("Bot {BotName} returned an empty response for model {ModelId}", bot.Name, bot.ModelId);
+                    continue;
+                }
 
                 // Strip any name prefix the model might add
                 responseText = StripNamePrefix(responseText, bot.Name);
