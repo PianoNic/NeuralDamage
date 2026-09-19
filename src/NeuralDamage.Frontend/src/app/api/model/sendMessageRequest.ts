@@ -10,7 +10,7 @@
 
 
 export interface SendMessageRequest { 
-    content?: string | null;
+    content: string;
     replyToId?: string | null;
 }
 

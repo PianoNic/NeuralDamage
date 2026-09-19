@@ -55,6 +55,13 @@ if (builder.Environment.IsDevelopment())
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
     {
+        // The frontend's models are generated from this document, so a DTO
+        // property that cannot be null in C# has to say so here - otherwise
+        // every generated field comes out optional and the client has to
+        // guard values that are always present.
+        options.SupportNonNullableReferenceTypes();
+        options.NonNullableReferenceTypesAsRequired();
+
         options.AddSecurityDefinition("OAuth2", new OpenApiSecurityScheme
         {
             Type = SecuritySchemeType.OAuth2,

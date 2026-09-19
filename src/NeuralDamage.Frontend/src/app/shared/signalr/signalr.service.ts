@@ -3,6 +3,7 @@ import { OidcSecurityService } from 'angular-auth-oidc-client';
 import * as signalR from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
 import { firstValueFrom } from 'rxjs';
+import { ChatHubEvents, UserHubEvents } from './hub-events';
 
 @Injectable({ providedIn: 'root' })
 export class SignalRService {
@@ -58,22 +59,24 @@ export class SignalRService {
     await this.chatHub?.invoke('LeaveChat', chatId);
   }
 
-  // Chat hub event listeners
-  onChatEvent(event: string, callback: (...args: any[]) => void) {
-    this.chatHub?.on(event, callback);
+  // Chat hub event listeners. The event name picks the argument types out of
+  // ChatHubEvents, so a handler that reads a payload the server does not send
+  // fails to compile. signalR.on is untyped, hence the cast at the boundary.
+  onChatEvent<E extends keyof ChatHubEvents>(event: E, callback: (...args: ChatHubEvents[E]) => void) {
+    this.chatHub?.on(event, callback as (...args: unknown[]) => void);
   }
 
-  offChatEvent(event: string, callback: (...args: any[]) => void) {
-    this.chatHub?.off(event, callback);
+  offChatEvent<E extends keyof ChatHubEvents>(event: E, callback: (...args: ChatHubEvents[E]) => void) {
+    this.chatHub?.off(event, callback as (...args: unknown[]) => void);
   }
 
   // User hub event listeners
-  onUserEvent(event: string, callback: (...args: any[]) => void) {
-    this.userHub?.on(event, callback);
+  onUserEvent<E extends keyof UserHubEvents>(event: E, callback: (...args: UserHubEvents[E]) => void) {
+    this.userHub?.on(event, callback as (...args: unknown[]) => void);
   }
 
-  offUserEvent(event: string, callback: (...args: any[]) => void) {
-    this.userHub?.off(event, callback);
+  offUserEvent<E extends keyof UserHubEvents>(event: E, callback: (...args: UserHubEvents[E]) => void) {
+    this.userHub?.off(event, callback as (...args: unknown[]) => void);
   }
 
   private async getToken(): Promise<string> {

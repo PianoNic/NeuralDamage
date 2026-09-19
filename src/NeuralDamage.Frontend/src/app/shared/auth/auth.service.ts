@@ -28,7 +28,7 @@ export class AuthService {
         // Provisioning happens during token validation, so this only reads.
         const user = (await firstValueFrom(
           this.apiUser.getCurrentUser('body', false, { httpHeaderAccept: 'application/json' }),
-        )) as UserDto;
+        ));
         this._user.set(user);
       }
     } catch {

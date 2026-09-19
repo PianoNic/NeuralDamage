@@ -9,7 +9,11 @@
  */
 
 
-export interface CreateChatRequest { 
-    name: string;
+export interface ReactionGroupDto { 
+    emoji: string;
+    count: number;
+    userIds: Array<string>;
+    botIds: Array<string>;
+    names: Array<string>;
 }
 

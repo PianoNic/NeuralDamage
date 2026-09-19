@@ -9,7 +9,9 @@
  */
 
 
-export interface CreateChatRequest { 
+export interface OpenRouterModel { 
+    id: string;
     name: string;
+    contextLength?: number | null;
 }
 

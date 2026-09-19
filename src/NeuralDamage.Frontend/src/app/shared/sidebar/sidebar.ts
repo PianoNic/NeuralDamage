@@ -27,7 +27,7 @@ import { AuthService } from '@app/shared/auth/auth.service';
 import { ThemeService } from '@app/shared/theme/theme.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
 import { ChatsService } from '@app/api/api/chats.service';
-import { Chat } from '@app/models';
+import { ChatDetailDto, ChatDto } from '@app/models';
 import { filter, firstValueFrom, map } from 'rxjs';
 
 @Component({
@@ -70,7 +70,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
   private readonly signalr = inject(SignalRService);
   private readonly chatsApi = inject(ChatsService);
 
-  readonly chats = signal<Chat[]>([]);
+  readonly chats = signal<ChatDto[]>([]);
   readonly searchQuery = signal('');
   readonly user = this.auth.user;
   readonly displayName = this.auth.displayName;
@@ -114,13 +114,13 @@ export class SidebarComponent implements OnInit, OnDestroy {
   }
 
 
-  private onChatCreated = (chat: Chat) => {
+  private onChatCreated = (chat: ChatDto) => {
     this.chats.update((list) => [chat, ...list]);
   };
-  private onChatJoined = (chat: any) => {
+  private onChatJoined = (chat: ChatDetailDto) => {
     this.chats.update((list) => [chat, ...list]);
   };
-  private onChatUpdated = (chat: Chat) => {
+  private onChatUpdated = (chat: ChatDto) => {
     this.chats.update((list) => list.map((c) => (c.id === chat.id ? { ...c, ...chat } : c)));
   };
   private onChatDeleted = (chatId: string) => {
@@ -188,7 +188,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   private async loadChats() {
     try {
-      const chats = (await firstValueFrom(this.chatsApi.apiChatsGet())) as Chat[];
+      const chats = await firstValueFrom(this.chatsApi.apiChatsGet());
       this.chats.set(chats);
     } catch {
       toast.error('Could not load your chats.');

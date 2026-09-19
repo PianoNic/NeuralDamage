@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { HlmButton } from '@spartan-ng/helm/button';
-import { ReactionGroup } from '@app/models';
+import { ReactionGroupDto } from '@app/models';
 
 @Component({
   selector: 'app-reaction-bar',
@@ -9,7 +9,7 @@ import { ReactionGroup } from '@app/models';
   templateUrl: './reaction-bar.html',
 })
 export class ReactionBarComponent {
-  readonly reactions = input.required<ReactionGroup[]>();
+  readonly reactions = input.required<ReactionGroupDto[]>();
   readonly toggleReaction = output<string>();
 
   onToggle(emoji: string): void {

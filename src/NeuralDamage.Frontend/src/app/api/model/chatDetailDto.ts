@@ -7,9 +7,15 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { ChatMemberDto } from './chatMemberDto';
 
 
-export interface CreateChatRequest { 
+export interface ChatDetailDto { 
+    id: string;
     name: string;
+    createdById: string;
+    createdAt: string;
+    updatedAt: string;
+    members: Array<ChatMemberDto>;
 }
 

@@ -9,7 +9,11 @@
  */
 
 
-export interface CreateChatRequest { 
+export interface ChatDto { 
+    id: string;
     name: string;
+    createdById: string;
+    createdAt: string;
+    updatedAt: string;
 }
 

@@ -9,7 +9,10 @@
  */
 
 
-export interface CreateChatRequest { 
-    name: string;
+export interface ReplyInfoDto { 
+    id: string;
+    senderName: string;
+    senderType: string;
+    content: string;
 }
 
