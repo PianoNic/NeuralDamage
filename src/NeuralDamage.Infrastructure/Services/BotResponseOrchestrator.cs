@@ -82,25 +82,42 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
                 var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames);
                 var history = BotPromptBuilder.BuildHistory(recentMessages, bot.Id);
 
-                // Generate response
-                string responseText;
-                try
+                // Generate response. Sampling is non-deterministic and a model
+                // run hot will occasionally return nothing at all, so one empty
+                // result is worth a second attempt before giving up - otherwise
+                // the bot just looks broken to the person who asked.
+                string responseText = string.Empty;
+                for (var attempt = 1; attempt <= 2; attempt++)
                 {
-                    responseText = await openRouter.GenerateResponseAsync(bot.ModelId, bot.Temperature, systemPrompt, history, cts.Token);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to generate response for bot {BotName}", bot.Name);
-                    continue;
+                    // A model run hot can spiral: at temperature 2 one reasoning
+                    // model spent 2494 tokens thinking and returned nothing, or
+                    // returned garbage. Retrying at the same setting mostly
+                    // reproduces it, so the second attempt backs the temperature
+                    // off to a range these models stay coherent in.
+                    var attemptTemperature = attempt == 1
+                        ? bot.Temperature
+                        : Math.Min(bot.Temperature, 1.0);
+                    try
+                    {
+                        responseText = await openRouter.GenerateResponseAsync(bot.ModelId, attemptTemperature, systemPrompt, history, cts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to generate response for bot {BotName}", bot.Name);
+                        responseText = string.Empty;
+                        break;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(responseText))
+                        break;
+
+                    logger.LogWarning(
+                        "Bot {BotName} returned an empty response for model {ModelId} at temperature {Temperature} (attempt {Attempt} of 2)",
+                        bot.Name, bot.ModelId, attemptTemperature, attempt);
                 }
 
                 if (string.IsNullOrWhiteSpace(responseText))
-                {
-                    // Silently dropping this made "the bot said nothing" impossible
-                    // to tell apart from "the bot chose not to answer".
-                    logger.LogWarning("Bot {BotName} returned an empty response for model {ModelId}", bot.Name, bot.ModelId);
                     continue;
-                }
 
                 // Strip any name prefix the model might add
                 responseText = StripNamePrefix(responseText, bot.Name);
