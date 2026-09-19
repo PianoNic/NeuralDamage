@@ -1,4 +1,4 @@
-using NeuralDamage.Infrastructure.Dtos;
+﻿using NeuralDamage.Infrastructure.Dtos;
 
 namespace NeuralDamage.API.Hubs;
 
@@ -10,7 +10,7 @@ public interface IChatClient
     Task MemberAdded(ChatMemberDto member);
     Task MemberRemoved(Guid chatId, Guid memberId);
     Task MessageNew(MessageDto message);
-    Task ReactionUpdated(Guid messageId, List<ReactionDto> reactions);
+    Task ReactionUpdated(Guid messageId, List<ReactionGroupDto> reactions);
     Task BotTyping(Guid chatId, Guid botId, string botName);
     Task BotResponseCancelled(Guid chatId);
 }

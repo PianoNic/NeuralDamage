@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -10,7 +11,7 @@ using NeuralDamage.Infrastructure;
 namespace NeuralDamage.API.Hubs;
 
 [Authorize]
-public class ChatHub(NeuralDamageDbContext db, IUserService userService) : Hub<IChatClient>
+public class ChatHub(NeuralDamageDbContext db, IUserService userService, ILogger<ChatHub> logger) : Hub<IChatClient>
 {
     public override async Task OnConnectedAsync()
     {
@@ -25,12 +26,15 @@ public class ChatHub(NeuralDamageDbContext db, IUserService userService) : Hub<I
         foreach (var chatId in chatIds)
             await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
 
+        logger.LogInformation("Connection {Conn} joined {Count} chat group(s) on connect", Context.ConnectionId, chatIds.Count);
+
         await base.OnConnectedAsync();
     }
 
     public async Task JoinChat(Guid chatId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
+        logger.LogInformation("Connection {Conn} joined chat group {ChatId}", Context.ConnectionId, chatId);
     }
 
     public async Task LeaveChat(Guid chatId)

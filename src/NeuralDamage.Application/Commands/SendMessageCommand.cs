@@ -1,4 +1,4 @@
-using Mediator;
+﻿using Mediator;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -43,6 +43,10 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
         var loaded = await db.Messages
             .Include(m => m.SenderUser)
             .Include(m => m.SenderBot)
+            .Include(m => m.Reactions).ThenInclude(r => r.User)
+            .Include(m => m.Reactions).ThenInclude(r => r.Bot)
+            .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
+            .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
             .AsNoTracking()
             .FirstAsync(m => m.Id == message.Id, cancellationToken);
 

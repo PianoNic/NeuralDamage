@@ -33,6 +33,16 @@ namespace NeuralDamage.Infrastructure.Services
             return user.Id;
         }
 
+        public async Task<bool> NeedsSyncAsync(string externalId, CancellationToken cancellationToken = default)
+        {
+            var lastLogin = await dbContext.Users
+                .Where(u => u.ExternalId == externalId)
+                .Select(u => u.LastLoginAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return lastLogin is null || DateTime.UtcNow - lastLogin.Value > TimeSpan.FromMinutes(15);
+        }
+
         public async Task<Guid?> GetUserIdByExternalIdAsync(string externalId, CancellationToken cancellationToken = default)
         {
             var user = await dbContext.Users
@@ -53,7 +63,11 @@ namespace NeuralDamage.Infrastructure.Services
             // endpoint, so these are present even when the access token omits
             // them. ICurrentUser itself only surfaces subject and name.
             var email = FindClaim(ClaimTypes.Email, "email") ?? $"{externalId}@unknown";
-            var displayName = currentUser.Name ?? FindClaim(ClaimTypes.Name, "name") ?? email;
+            // Prefer the handle the provider exposes over the legal/full name.
+            var displayName = FindClaim("preferred_username", "nickname", "username")
+                ?? currentUser.Name
+                ?? FindClaim(ClaimTypes.Name, "name")
+                ?? email;
             var avatarUrl = FindClaim("picture");
 
             if (user is null)

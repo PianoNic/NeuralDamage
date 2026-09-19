@@ -1,4 +1,4 @@
-import { ChatMember, Message } from '@app/models';
+﻿import { ChatMember, Message, ReactionGroup, ReplyInfo } from '@app/models';
 
 /**
  * The API returns a MessageDto — sender identity lives in nested `senderUser` /
@@ -18,6 +18,8 @@ interface MessageDto {
   createdAt: string;
   senderUser?: { id: string; email?: string; displayName?: string | null; avatarUrl?: string | null } | null;
   senderBot?: { id: string; name?: string | null; avatarUrl?: string | null } | null;
+  reactions?: ReactionGroup[] | null;
+  replyTo?: ReplyInfo | null;
 }
 
 export function toMessage(dto: MessageDto): Message {
@@ -35,10 +37,8 @@ export function toMessage(dto: MessageDto): Message {
     senderType: isBot ? 'bot' : 'user',
     content: dto.content,
     mentions: dto.mentions ?? [],
-    // The messages endpoint does not return reaction groups or an expanded
-    // reply yet, so default rather than leaving these undefined.
-    reactions: [],
-    replyTo: null,
+    reactions: dto.reactions ?? [],
+    replyTo: dto.replyTo ?? null,
     createdAt: dto.createdAt,
   };
 }

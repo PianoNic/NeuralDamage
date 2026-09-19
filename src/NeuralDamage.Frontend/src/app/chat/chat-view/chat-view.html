@@ -1,4 +1,4 @@
-<div class="flex min-h-0 flex-1">
+﻿<div class="flex min-h-0 flex-1">
   <section class="flex min-h-0 min-w-0 flex-1 flex-col">
     <!-- Header -->
     <header class="border-border flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2">
@@ -47,7 +47,11 @@
         <pk-loader variant="dots" size="md" />
       </div>
     } @else {
-      <app-message-list [messages]="messages()" (replyTo)="setReplyTo($event)" />
+      <app-message-list
+        [messages]="messages()"
+        (replyTo)="setReplyTo($event)"
+        (react)="toggleReaction($event.messageId, $event.emoji)"
+      />
     }
 
     <app-typing-indicator

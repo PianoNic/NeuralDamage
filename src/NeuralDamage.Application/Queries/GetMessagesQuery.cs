@@ -1,4 +1,4 @@
-using Mediator;
+﻿using Mediator;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
@@ -33,6 +33,10 @@ public class GetMessagesHandler(NeuralDamageDbContext db) : IQueryHandler<GetMes
             .Take(limit)
             .Include(m => m.SenderUser)
             .Include(m => m.SenderBot)
+            .Include(m => m.Reactions).ThenInclude(r => r.User)
+            .Include(m => m.Reactions).ThenInclude(r => r.Bot)
+            .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
+            .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
             .ToListAsync(cancellationToken);
 
         // Return in chronological order

@@ -1,4 +1,4 @@
-using NeuralDamage.Infrastructure.Dtos;
+﻿using NeuralDamage.Infrastructure.Dtos;
 
 namespace NeuralDamage.Infrastructure.Services;
 
@@ -16,7 +16,7 @@ public interface IChatNotificationService
     Task NotifyMessageNew(Guid chatId, MessageDto message);
     Task NotifyMemberAdded(Guid chatId, ChatMemberDto member);
     Task NotifyMemberRemoved(Guid chatId, Guid memberId);
-    Task NotifyReactionUpdated(Guid chatId, Guid messageId, List<ReactionDto> reactions);
+    Task NotifyReactionUpdated(Guid chatId, Guid messageId, List<ReactionGroupDto> reactions);
     Task NotifyBotTyping(Guid chatId, Guid botId, string botName);
     Task NotifyBotResponseCancelled(Guid chatId);
 }
