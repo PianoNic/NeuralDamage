@@ -1,4 +1,4 @@
-export interface User {
+﻿export interface User {
   id: string;
   email: string;
   displayName: string;
@@ -61,6 +61,7 @@ export interface Message {
   senderBotId: string | null;
   senderName: string;
   senderAvatar: string | null;
+  senderModelId: string | null;
   senderType: 'user' | 'bot';
   content: string;
   mentions: string[];

@@ -1,9 +1,21 @@
 ﻿<div hlmMessage [align]="isBot() ? 'start' : 'end'" class="group">
   <!-- WhatsApp only shows the other party's avatar, never your own -->
   @if (isBot()) {
-    <hlm-avatar hlmMessageAvatar class="size-8 self-start">
-      @if (message().senderAvatar) {
-        <img hlmAvatarImage [src]="message().senderAvatar" [alt]="message().senderName" />
+    <hlm-avatar
+      hlmMessageAvatar
+      class="size-8 self-start"
+      [class.bg-background]="avatarIsBrandIcon()"
+      [class.border]="avatarIsBrandIcon()"
+    >
+      @if (avatarSrc()) {
+        <img
+          hlmAvatarImage
+          [src]="avatarSrc()"
+          [alt]="message().senderName"
+          [class.p-1.5]="avatarIsBrandIcon()"
+          [class.object-contain]="avatarIsBrandIcon()"
+          [class.dark:invert]="avatarIsBrandIcon()"
+        />
       }
       <span hlmAvatarFallback class="text-xs font-semibold">{{ senderInitial() }}</span>
     </hlm-avatar>

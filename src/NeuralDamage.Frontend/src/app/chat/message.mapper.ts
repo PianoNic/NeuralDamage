@@ -17,7 +17,7 @@ interface MessageDto {
   replyToId: string | null;
   createdAt: string;
   senderUser?: { id: string; email?: string; displayName?: string | null; avatarUrl?: string | null } | null;
-  senderBot?: { id: string; name?: string | null; avatarUrl?: string | null } | null;
+  senderBot?: { id: string; name?: string | null; avatarUrl?: string | null; modelId?: string | null } | null;
   reactions?: ReactionGroup[] | null;
   replyTo?: ReplyInfo | null;
 }
@@ -34,6 +34,8 @@ export function toMessage(dto: MessageDto): Message {
       ? (dto.senderBot?.name ?? 'Bot')
       : (dto.senderUser?.displayName ?? dto.senderUser?.email ?? 'Unknown'),
     senderAvatar: (isBot ? dto.senderBot?.avatarUrl : dto.senderUser?.avatarUrl) ?? null,
+    // Falls back to the model vendor's brand icon when a bot has no avatar.
+    senderModelId: isBot ? (dto.senderBot?.modelId ?? null) : null,
     senderType: isBot ? 'bot' : 'user',
     content: dto.content,
     mentions: dto.mentions ?? [],
