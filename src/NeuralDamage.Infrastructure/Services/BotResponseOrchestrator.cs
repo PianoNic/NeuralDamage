@@ -49,9 +49,17 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
 
             // Decide which bots respond
             var responderIds = await decisionEngine.DecideRespondersAsync(chatId, message, bots, cts.Token);
-            if (responderIds.Count == 0) return;
 
             var responders = bots.Where(b => responderIds.Contains(b.Id)).ToList();
+            var silent = bots.Where(b => !responderIds.Contains(b.Id)).ToList();
+
+            // Reactions come before replies. They cost nothing - no model call,
+            // just a keyword match - so landing them first means something
+            // visible happens the moment a message is sent, while the bots that
+            // are actually answering are still generating.
+            await ReactAsync(db, notifications, chatId, message, silent, cts.Token);
+
+            if (responders.Count == 0) return;
 
             // Get participant names for system prompt
             var members = await db.ChatMembers
@@ -163,6 +171,64 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
             _activeTasks.TryRemove(chatId, out _);
             cts.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Gives the bots that decided not to reply a chance to react with an
+    /// emoji instead, so a quiet bot is not an invisible one.
+    /// </summary>
+    /// <remarks>
+    /// Only messages a person sent reach this orchestrator, so a bot can never
+    /// end up reacting to itself and there is no reply chain to bound - which
+    /// is what the legacy implementation needed its depth check for.
+    /// </remarks>
+    private async Task ReactAsync(
+        NeuralDamageDbContext db,
+        IChatNotificationService notifications,
+        Guid chatId,
+        Message message,
+        List<Bot> silent,
+        CancellationToken ct)
+    {
+        var reacted = false;
+
+        foreach (var bot in silent)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (!BotReactionService.ShouldReact())
+                continue;
+
+            var emoji = BotReactionService.SelectEmoji(message.Content);
+            if (string.IsNullOrEmpty(emoji))
+                continue;
+
+            var already = await db.Reactions.AnyAsync(
+                r => r.MessageId == message.Id && r.BotId == bot.Id && r.Emoji == emoji, ct);
+            if (already)
+                continue;
+
+            db.Reactions.Add(new Reaction { MessageId = message.Id, BotId = bot.Id, Emoji = emoji });
+            reacted = true;
+
+            logger.LogInformation("Bot {BotName} reacted with {Emoji}", bot.Name, emoji);
+        }
+
+        if (!reacted)
+            return;
+
+        await db.SaveChangesAsync(ct);
+
+        // One broadcast for the round: the client replaces the whole reaction
+        // set for the message, so sending it per bot would just be redundant.
+        var reactions = await db.Reactions
+            .Where(r => r.MessageId == message.Id)
+            .Include(r => r.User)
+            .Include(r => r.Bot)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        await notifications.NotifyReactionUpdated(chatId, message.Id, reactions.ToGroups());
     }
 
     public void CancelPendingResponses(Guid chatId)
