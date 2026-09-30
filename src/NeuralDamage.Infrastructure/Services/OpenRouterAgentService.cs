@@ -1,4 +1,5 @@
 ﻿using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Agents.AI;
@@ -52,7 +53,12 @@ public class OpenRouterAgentService : IOpenRouterService
         _baseUrl = configuration["OpenRouter:BaseUrl"] ?? DefaultBaseUrl;
         _client = new OpenAIClient(
             new ApiKeyCredential(_apiKey),
-            new OpenAIClientOptions { Endpoint = new Uri(_baseUrl) });
+            new OpenAIClientOptions
+            {
+                Endpoint = new Uri(_baseUrl),
+                Transport = new HttpClientPipelineTransport(httpClientFactory.CreateClient(nameof(OpenRouterAgentService))),
+                RetryPolicy = new ProviderRetryPolicy(configuration.GetValue("OpenRouter:RetryDelay", TimeSpan.FromSeconds(1)), logger),
+            });
     }
 
     public async Task<string> GenerateResponseAsync(string modelId, double temperature, string systemPrompt, List<ChatMessage> history, CancellationToken ct = default)
@@ -112,6 +118,12 @@ public class OpenRouterAgentService : IOpenRouterService
                     "Reply from {ModelId}: {PromptTokens} prompt tokens ({CachedTokens} cached), {CompletionTokens} completion tokens ({ReasoningTokens} reasoning)",
                     modelId, usage.InputTokenCount ?? 0, usage.CachedInputTokenCount ?? 0, usage.OutputTokenCount ?? 0, usage.ReasoningTokenCount ?? 0);
             return response.Text ?? string.Empty;
+        }
+        catch (ClientResultException ex) when (ProviderRetryPolicy.IsRetried(ex.Status))
+        {
+            // Busy, not broken: a warning without the stack trace says all there is.
+            _logger.LogWarning("OpenRouter still answered {Status} for {ModelId} after {MaxRetries} retries", ex.Status, modelId, ProviderRetryPolicy.MaxRetries);
+            throw new ProviderBusyException(modelId, ex.Status, ex);
         }
         catch (ClientResultException ex) when (ex.Status == 404)
         {
