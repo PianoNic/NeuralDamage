@@ -28,6 +28,25 @@ public static partial class BotReplyFormatter
         return parts;
     }
 
+    /// <summary>
+    /// Keeps only the bot's own turn. Models that see the history as
+    /// "[Name]: text" lines sometimes carry on writing that transcript, putting
+    /// words in other people's mouths ("[Alice]: ok got it"). A header at the
+    /// very start is the model labelling its own turn and is dropped; the
+    /// first header after that ends the reply.
+    /// </summary>
+    public static string DropOtherSpeakers(string reply)
+    {
+        reply = reply.Trim();
+
+        var own = SpeakerHeader().Match(reply);
+        if (own.Success && own.Index == 0)
+            reply = reply[own.Length..].TrimStart();
+
+        var other = SpeakerHeader().Match(reply);
+        return other.Success ? reply[..other.Index].TrimEnd() : reply;
+    }
+
     /// <summary>Removes headings, bold/italic markers and list bullets.</summary>
     public static string StripMarkdown(string text)
     {
@@ -65,6 +84,10 @@ public static partial class BotReplyFormatter
 
     private static HashSet<string> Words(string text) =>
         Word().Matches(text.ToLowerInvariant()).Select(m => m.Value).ToHashSet();
+
+    // The history's line headers: "[Alice]:", "[Alice, 2h later] (→ Bob):".
+    [GeneratedRegex(@"^[ \t]*\[[^\]\n]{1,60}\](?:[ \t]*\([^)\n]*\))*[ \t]*:", RegexOptions.Multiline)]
+    private static partial Regex SpeakerHeader();
 
     [GeneratedRegex(@"\n\s*\n")]
     private static partial Regex BlankLines();

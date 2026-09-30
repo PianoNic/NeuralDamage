@@ -148,6 +148,17 @@ public class BotReplyFormatterTests
     }
 
     [Test]
+    [Arguments("romano, obviously\n\n[Alice]: ok got it\n\n[Roger] (→ Alice): parmesan", "romano, obviously")]
+    [Arguments("[Giulia] (→ Alice): romano, obviously", "romano, obviously")]
+    [Arguments("romano\n[Byte, 2h later]: parmesan", "romano")]
+    [Arguments("[1] see my last message: romano", "[1] see my last message: romano")]
+    [Arguments("ratio 2:1 [citation needed]", "ratio 2:1 [citation needed]")]
+    public async Task DropOtherSpeakers_KeepsOnlyTheBotsOwnTurn(string reply, string expected)
+    {
+        await Assert.That(BotReplyFormatter.DropOtherSpeakers(reply)).IsEqualTo(expected);
+    }
+
+    [Test]
     [Arguments("I think pineapple on pizza is great", true)]
     [Arguments("pineapple on pizza is great, I think!", true)]
     [Arguments("I think anchovies on pizza are terrible", false)]

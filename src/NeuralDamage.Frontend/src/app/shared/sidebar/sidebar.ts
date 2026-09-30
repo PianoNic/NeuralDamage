@@ -21,7 +21,11 @@ import {
   lucideSquarePen,
   lucideSun,
 } from '@ng-icons/lucide';
-import { PkConversationList, type Conversation } from '@prompt-kit/conversation-list';
+import {
+  PkConversationList,
+  type Conversation,
+  type ConversationRename,
+} from '@prompt-kit/conversation-list';
 import { AuthService } from '@app/shared/auth/auth.service';
 import { ThemeService } from '@app/shared/theme/theme.service';
 import { SignalRService } from '@app/shared/signalr/signalr.service';
@@ -162,6 +166,17 @@ export class SidebarComponent implements OnInit, OnDestroy {
       this.showCreateDialog.set(false);
     } catch {
       toast.error('Could not create the chat. Please try again.');
+    }
+  }
+
+  async renameChat({ id, title }: ConversationRename) {
+    const name = title.trim();
+    if (!name) return;
+    try {
+      // The list updates from the ChatUpdated event the server broadcasts.
+      await firstValueFrom(this.chatsApi.apiChatsChatIdPut(id, { name }));
+    } catch {
+      toast.error('Could not rename the chat.');
     }
   }
 

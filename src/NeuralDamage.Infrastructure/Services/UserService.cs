@@ -72,15 +72,30 @@ namespace NeuralDamage.Infrastructure.Services
 
             if (user is null)
             {
-                dbContext.Users.Add(new User
+                var created = new User
                 {
                     ExternalId = externalId,
                     Email = email,
                     DisplayName = displayName,
                     AvatarUrl = avatarUrl,
                     LastLoginAt = DateTime.UtcNow
-                });
-                await dbContext.SaveChangesAsync(cancellationToken);
+                };
+                dbContext.Users.Add(created);
+
+                try
+                {
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException)
+                {
+                    // Right after sign-in the web app fires several requests at
+                    // once, and each one finds no row and tries to create it.
+                    // One insert wins; the others lose on the unique index and
+                    // must not fail the request.
+                    dbContext.Entry(created).State = EntityState.Detached;
+                    if (!await ExistsAsync(externalId, cancellationToken))
+                        throw;
+                }
                 return;
             }
 

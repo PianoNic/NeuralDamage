@@ -45,6 +45,19 @@ public class BotDecisionEngine(
             .Take(2)
             .ToList();
 
+        // A person who names someone - another person ("hey alice, ...") or
+        // particular bots ("Byte, tabs or spaces?") - is talking to them. The
+        // bots left unnamed stay out, however recently one of them spoke.
+        var otherPeople = message.SenderUserId is null
+            ? []
+            : await db.ChatMembers
+                .Where(cm => cm.ChatId == chatId && cm.UserId != null && cm.UserId != message.SenderUserId)
+                .Select(cm => cm.User!.DisplayName)
+                .ToListAsync(ct);
+        var addressedToOthers = message.SenderUserId is not null
+            && (otherPeople.Any(name => FuzzyNameMatcher.IsNameMentioned(message.Content, name, null))
+                || candidateBots.Any(b => FuzzyNameMatcher.IsNameMentioned(message.Content, b.Name, b.Aliases)));
+
         foreach (var bot in candidateBots)
         {
             // Tier 1: Hard rules
@@ -74,6 +87,12 @@ public class BotDecisionEngine(
             {
                 if (Random.Shared.NextDouble() < _options.BotChainChance)
                     mustRespond.Add((bot.Id, 0));
+                continue;
+            }
+
+            if (addressedToOthers)
+            {
+                logger.LogInformation("Bot {Bot}: message is addressed to someone else; skipping", bot.Name);
                 continue;
             }
 

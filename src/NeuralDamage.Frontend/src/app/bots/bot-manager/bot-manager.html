@@ -5,7 +5,7 @@
       <h3 class="flex items-center gap-2 text-lg font-semibold text-foreground"><ng-icon name="lucideUsers" class="size-5" /> Manage Members</h3>
       <p class="mt-0.5 text-xs text-muted-foreground">Add or remove bots and users from this chat</p>
     </div>
-    <button hlmBtn variant="ghost" size="icon" class="shrink-0" (click)="close.emit()">
+    <button hlmBtn variant="ghost" size="icon" class="shrink-0" (click)="close.emit()" aria-label="Close">
       <ng-icon name="lucideX" class="size-4" />
     </button>
   </div>
@@ -27,11 +27,11 @@
             <span hlmAvatarFallback class="text-xs font-semibold">{{ (member.displayName ?? 'U').charAt(0).toUpperCase() }}</span>
           </hlm-avatar>
           <span class="flex-1 truncate text-sm font-medium text-foreground">{{ member.displayName }}</span>
-          @if (member.role === 'owner') {
+          @if (member.role === 'Owner') {
             <span hlmBadge variant="outline" class="px-1.5 py-0 text-[10px] font-semibold leading-4">OWNER</span>
           }
-          @if (member.role !== 'owner') {
-            <button hlmBtn variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-destructive" (click)="removeBot(member.id)">
+          @if (member.role !== 'Owner') {
+            <button hlmBtn variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-destructive" (click)="removeBot(member.id)" [attr.aria-label]="'Remove ' + member.displayName">
               <ng-icon name="lucideX" class="size-3.5" />
             </button>
           }
@@ -89,7 +89,7 @@
           </hlm-avatar>
           <span class="flex-1 truncate text-sm font-medium text-foreground">{{ member.displayName }}</span>
           <span hlmBadge variant="secondary" class="px-1.5 py-0 text-[10px] font-medium leading-4">BOT</span>
-          <button hlmBtn variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-destructive" (click)="removeBot(member.id)">
+          <button hlmBtn variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-destructive" (click)="removeBot(member.id)" [attr.aria-label]="'Remove ' + member.displayName">
             <ng-icon name="lucideX" class="size-3.5" />
           </button>
         </div>

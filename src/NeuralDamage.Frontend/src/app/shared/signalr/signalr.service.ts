@@ -30,6 +30,8 @@ export class SignalRService {
         accessTokenFactory: () => this.getToken(),
       })
       .withAutomaticReconnect()
+      // Information logs each connect URL, access_token query string included.
+      .configureLogging(signalR.LogLevel.Warning)
       .build();
 
     this.userHub = new signalR.HubConnectionBuilder()
@@ -37,6 +39,8 @@ export class SignalRService {
         accessTokenFactory: () => this.getToken(),
       })
       .withAutomaticReconnect()
+      // Information logs each connect URL, access_token query string included.
+      .configureLogging(signalR.LogLevel.Warning)
       .build();
 
     await Promise.all([this.chatHub.start(), this.userHub.start()]);

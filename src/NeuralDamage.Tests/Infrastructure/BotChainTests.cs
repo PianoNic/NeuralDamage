@@ -55,6 +55,24 @@ public class BotChainTests
     }
 
     [Test]
+    public async Task TwoBotsAnsweringEachRound_StillChainOneHopAtATime()
+    {
+        var queue = new BotResponseQueue();
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3,
+            configure: s => s.AddSingleton<IBotResponseQueue>(queue));
+        // Every bot but the sender answers, two per round.
+        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => h.Bots.Where(b => b.Id != ci.ArgAt<Message>(1).SenderBotId).Take(2).Select(b => b.Id).ToList());
+        h.Reply("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten");
+        var trigger = await h.SayAsync("what's the best pizza topping?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+        var depths = await DrainAsync(h, queue);
+
+        await Assert.That(depths).IsEquivalentTo([1, 2, 3]);
+    }
+
+    [Test]
     public async Task PersonSpeaking_EndsTheChain()
     {
         var (h, queue) = await TwoChattyBotsAsync();

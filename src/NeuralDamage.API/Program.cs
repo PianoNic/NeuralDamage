@@ -5,6 +5,8 @@ using Microsoft.OpenApi;
 using NeuralDamage.API.Extensions;
 using NeuralDamage.API.Middleware;
 using NeuralDamage.API.Services;
+using NeuralDamage.Application.Behaviors;
+using NeuralDamage.Application.Validators;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
@@ -37,7 +39,12 @@ builder.Services.AddSingleton<IBotResponseOrchestrator, BotResponseOrchestrator>
 builder.Services.AddHostedService<BotResponseBackgroundService>();
 
 // Mediator & Validation
-builder.Services.AddMediator(options => { options.ServiceLifetime = ServiceLifetime.Scoped; });
+builder.Services.AddMediator(options =>
+{
+    options.ServiceLifetime = ServiceLifetime.Scoped;
+    options.PipelineBehaviors = [typeof(ValidationBehavior<,>)];
+});
+builder.Services.AddValidatorsFromAssemblyContaining<SendMessageValidator>(ServiceLifetime.Scoped);
 
 // Authentication (Toamaisutaa)
 builder.Services.AddToamaisutaaBearer(builder.Configuration);

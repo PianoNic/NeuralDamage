@@ -145,6 +145,42 @@ public class BotDecisionEngineTests
         await Assert.That(responders).IsEquivalentTo([bot2.Id]);
     }
 
+    [Test]
+    public async Task PersonTalkingToAnotherPerson_BotsStayOut()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var bob = new User { ExternalId = "ext-2", Email = "bob@test.com", DisplayName = "bob" };
+        db.Users.Add(bob);
+        db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = bob.Id });
+        var engine = EngineWithSilentJudge(db);
+        db.Messages.Add(new Message { ChatId = chat.Id, SenderBotId = bot2.Id, Content = "risotto, obviously", CreatedAt = DateTime.UtcNow.AddSeconds(-10) });
+
+        // Claude just spoke and it is a question, which alone would pull Claude in.
+        var toBob = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey bob, are you coming on saturday?" };
+        var toBoth = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "bob, what do you think Claude?" };
+        db.Messages.AddRange(toBob, toBoth);
+        await db.SaveChangesAsync();
+
+        await Assert.That(await engine.DecideRespondersAsync(chat.Id, toBob, [bot1, bot2])).IsEmpty();
+        // Naming a bot as well still reaches that bot.
+        await Assert.That(await engine.DecideRespondersAsync(chat.Id, toBoth, [bot1, bot2])).IsEquivalentTo([bot2.Id]);
+    }
+
+    [Test]
+    public async Task OneBotNamed_TheBotThatJustSpokeStaysOut()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var engine = EngineWithSilentJudge(db);
+        db.Messages.Add(new Message { ChatId = chat.Id, SenderBotId = bot2.Id, Content = "risotto, obviously", CreatedAt = DateTime.UtcNow.AddSeconds(-10) });
+        var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "GPT, tabs or spaces?" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
+        var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
+
+        await Assert.That(responders).IsEquivalentTo([bot1.Id]);
+    }
+
     /// <summary>A Tier 3 that never picks anyone, so only Tiers 1 and 2 decide.</summary>
     private static BotDecisionEngine EngineWithSilentJudge(NeuralDamage.Infrastructure.NeuralDamageDbContext db, double botChainChance = 0)
     {

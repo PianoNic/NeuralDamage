@@ -47,6 +47,7 @@
         [conversations]="conversations()"
         [activeId]="activeChatId()"
         (selected)="openChat($event)"
+        (renamed)="renameChat($event)"
         (deleted)="confirmDeleteChat($event)"
       />
     }
