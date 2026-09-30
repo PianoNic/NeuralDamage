@@ -38,7 +38,6 @@ src/NeuralDamage.Infrastructure/  EF Core + PostgreSQL, OpenRouter, bot decision
 src/NeuralDamage.API/             controllers, SignalR hubs, Dockerfile; serves the SPA from wwwroot
 src/NeuralDamage.Frontend/        Angular 22 + Spartan, bun (not in the .slnx; see its CLAUDE.md)
 src/NeuralDamage.Tests/           TUnit
-backend/, frontend/               the legacy Python/React app, no longer built or released
 ```
 
 ## Local development
