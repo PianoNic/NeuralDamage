@@ -33,8 +33,8 @@ public class BotDecisionEngineTests
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
         using var _ = db;
-        var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var decisions = Substitute.For<IDecisionsClient>();
+        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
         var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey GPT what do you think?" };
@@ -51,8 +51,8 @@ public class BotDecisionEngineTests
     public async Task GroupAddress_AllBotsRespond()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var decisions = Substitute.For<IDecisionsClient>();
+        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
         var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey everyone what's your opinion?" };
@@ -69,8 +69,8 @@ public class BotDecisionEngineTests
     public async Task BotToBotMessage_NoMention_NeitherResponds()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var decisions = Substitute.For<IDecisionsClient>();
+        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
         var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = "I agree with that" };
@@ -90,8 +90,8 @@ public class BotDecisionEngineTests
         bot1.IsActive = false;
         await db.SaveChangesAsync();
 
-        var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var decisions = Substitute.For<IDecisionsClient>();
+        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
         var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey GPT respond please" };
@@ -107,8 +107,8 @@ public class BotDecisionEngineTests
     public async Task AliasMentioned_BotResponds()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        var ranking = Substitute.For<IBotRankingService>();
-        var judge = new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance);
+        var decisions = Substitute.For<IDecisionsClient>();
+        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
         var engine = new BotDecisionEngine(db, judge, NullLogger<BotDecisionEngine>.Instance);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "chatgpt help me out" };
