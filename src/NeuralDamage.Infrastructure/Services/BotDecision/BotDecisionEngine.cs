@@ -45,6 +45,16 @@ public class BotDecisionEngine(
             .Take(2)
             .ToList();
 
+        // A person talking to another person by name ("hey alice, ...") is not
+        // talking to the bots, however recently one of them spoke.
+        var otherPeople = message.SenderUserId is null
+            ? []
+            : await db.ChatMembers
+                .Where(cm => cm.ChatId == chatId && cm.UserId != null && cm.UserId != message.SenderUserId)
+                .Select(cm => cm.User!.DisplayName)
+                .ToListAsync(ct);
+        var toAPerson = otherPeople.Any(name => FuzzyNameMatcher.IsNameMentioned(message.Content, name, null));
+
         foreach (var bot in candidateBots)
         {
             // Tier 1: Hard rules
@@ -74,6 +84,12 @@ public class BotDecisionEngine(
             {
                 if (Random.Shared.NextDouble() < _options.BotChainChance)
                     mustRespond.Add((bot.Id, 0));
+                continue;
+            }
+
+            if (toAPerson)
+            {
+                logger.LogInformation("Bot {Bot}: message is addressed to another person; skipping", bot.Name);
                 continue;
             }
 
