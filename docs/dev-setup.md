@@ -102,6 +102,16 @@ OpenRouter__ApiKey=sk-or-v1-your-key-here
 # Model price caps ($/million tokens, 0 or unset = no limit)
 OpenRouter__MaxPromptPrice=0.25
 OpenRouter__MaxCompletionPrice=0.60
+
+# Bot response ranking (Tier 3, Jev on the OpenRouter Decisions API).
+# All optional: the key falls back to OpenRouter__ApiKey, and without one
+# (or when a call fails or times out) ranking falls back to Tier 2 scores.
+BotRanking__ApiKey=sk-or-v1-your-key-here
+BotRanking__Endpoint=https://openrouter.ai/api/alpha/decisions
+BotRanking__Model=~typesafe/jev-latest
+BotRanking__Threshold=0.6
+BotRanking__MaxResponders=2
+BotRanking__TimeoutSeconds=5
 ```
 
 | Key | Default | Purpose |

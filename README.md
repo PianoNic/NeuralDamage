@@ -59,10 +59,10 @@ OpenRouter__ApiKey=sk-or-v1-your-key-here
 OpenRouter__MaxPromptPrice=0.25
 OpenRouter__MaxCompletionPrice=0.60
 
-# Bot response ranking - any OpenAI-compatible endpoint (optional)
-BotRanking__Endpoint=https://your-gateway.example.com/v1
-BotRanking__ApiKey=your-ranking-api-key
-BotRanking__Model=your-model-id
+# Bot response ranking (optional) - Jev on the OpenRouter Decisions API.
+# The key falls back to OpenRouter__ApiKey; defaults shown.
+#BotRanking__Model=~typesafe/jev-latest
+#BotRanking__Threshold=0.6
 ```
 
 The database connection (`ConnectionStrings__DefaultConnection`) is set in `compose.yml`.

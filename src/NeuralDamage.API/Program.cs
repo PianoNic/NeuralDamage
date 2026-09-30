@@ -24,7 +24,9 @@ builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
 builder.Services.AddSingleton(ModelPriceCap.FromConfiguration(builder.Configuration));
 builder.Services.AddScoped<IOpenRouterService, OpenRouterAgentService>();
-builder.Services.AddSingleton<IBotRankingService, LlmRankingService>();
+builder.Services.AddSingleton(BotRankingOptions.FromConfiguration(builder.Configuration));
+builder.Services.AddHttpClient<IDecisionsClient, DecisionsClient>((sp, client) =>
+    client.Timeout = sp.GetRequiredService<BotRankingOptions>().Timeout);
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
 builder.Services.AddScoped<Tier3LlmJudge>();
 builder.Services.AddSingleton<BotResponseQueue>();

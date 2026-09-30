@@ -1,94 +1,96 @@
-﻿using System.Text.Json;
-using NeuralDamage.Infrastructure.Services;
-using NeuralDamage.Infrastructure.Services.BotDecision;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
-public class Tier3LlmJudge(IBotRankingService ranking, ILogger<Tier3LlmJudge> logger)
+/// <summary>
+/// Asks Jev (OpenRouter Decisions API) one yes/no question per undecided bot:
+/// would this persona naturally reply here? The policy - threshold and how
+/// many may reply - stays in code.
+/// </summary>
+public class Tier3LlmJudge(IDecisionsClient decisions, BotRankingOptions options, ILogger<Tier3LlmJudge> logger)
 {
+    private const int HistoryMessages = 10;
+    private const int MaxMessageChars = 400;
+    private const int MaxSystemPromptChars = 500;
 
-    public async Task<List<Guid>> JudgeAsync(Message message, List<(Bot Bot, double Tier2Score)> undecidedBots, List<ChatMessage> recentHistory, CancellationToken ct)
+    private const string RespondCriterion =
+        "A real person with this persona would naturally chime in now: `new_message` is addressed to them by name "
+        + "or to the whole room, asks something this persona would have an opinion or knowledge about, or continues "
+        + "a thread in `recent_messages` that this bot was already part of. When several bots in `bots` fit, only "
+        + "the one or two best fits by persona should reply.";
+
+    private const string SilentCriterion =
+        "Replying would be noise: `new_message` is chatter between other people, is aimed at a different bot, this "
+        + "bot just spoke and has nothing new to add, the topic is outside this persona, or another bot in `bots` "
+        + "is a clearly better fit. In a group chat most people stay quiet on most messages.";
+
+    public async Task<List<Guid>> JudgeAsync(Message message, List<(Bot Bot, double Tier2Score)> undecidedBots, List<Message> recentHistory, CancellationToken ct)
     {
         try
         {
-            var botDescriptions = string.Join("\n", undecidedBots.Select(b =>
-                $"- {b.Bot.Id}: \"{b.Bot.Name}\" (personality: {b.Bot.Personality ?? "general"}, score: {b.Tier2Score:F2})"));
+            var keyed = undecidedBots.Select((b, i) => (Key: $"bot_{i}", b.Bot)).ToList();
 
-            var historyText = string.Join("\n", recentHistory.TakeLast(10).Select(h => $"[{h.Role}]: {h.Content}"));
+            var state = new
+            {
+                RecentMessages = recentHistory
+                    .Where(m => m.Id != message.Id)
+                    .TakeLast(HistoryMessages)
+                    .Select(m => new { Sender = SenderName(m), IsBot = m.SenderBotId is not null, Text = Trim(m.Content, MaxMessageChars) })
+                    .ToList(),
+                NewMessage = new
+                {
+                    Sender = SenderName(recentHistory.FirstOrDefault(m => m.Id == message.Id) ?? message),
+                    IsBot = message.SenderBotId is not null,
+                    Text = Trim(message.Content, MaxMessageChars),
+                },
+                Bots = keyed.ToDictionary(k => k.Key, k => new { k.Bot.Name, Persona = Persona(k.Bot) }),
+            };
 
-            var systemPrompt = """
-                You decide which bots should respond to a chat message in a group chat.
-                Return ONLY a JSON object: {"responders": ["bot-id-1", "bot-id-2"]}
+            var questions = keyed.ToDictionary(
+                k => k.Key,
+                k => new DecisionQuestion(
+                    "noul",
+                    $"Would the bot `bots.{k.Key}` (named in `bots.{k.Key}.name`, persona in `bots.{k.Key}.persona`) "
+                    + "naturally reply to `new_message` in this group chat, given `recent_messages`? "
+                    + "Usually only one or two bots should reply to a message, never all of them.",
+                    new NoulCriteria(RespondCriterion, SilentCriterion)));
 
-                Default to letting a bot respond. People expect a reply when they say
-                something to the room, so silence should be the exception, not the norm.
-                Pick a bot when the message is a question, is addressed at the room, or
-                continues a thread that bot was already part of.
-
-                Return an empty array only when replying would clearly be noise: the
-                message is chatter between two other people, or the same bot has just
-                spoken and has nothing to add. With several strong candidates prefer the
-                one or two best fits by personality rather than every bot at once.
-                """;
-
-            var prompt = $"""
-                Recent conversation:
-                {historyText}
-
-                New message: "{message.Content}"
-
-                Candidate bots (with pre-computed relevance scores):
-                {botDescriptions}
-
-                Which of these bots should respond? Return JSON only.
-                """;
-
-            var response = await ranking.RankAsync(systemPrompt, prompt, ct);
-            logger.LogInformation("Ranking reply for candidates [{Ids}]: {Reply}",
-                string.Join(", ", undecidedBots.Select(b => b.Bot.Id)), response ?? "<null>");
-
-            // Ranking unavailable - fall back to the Tier 2 scores.
-            if (response is null)
+            var response = await decisions.DecideAsync(state, questions, ct);
+            if (response?.Answers is null)
                 return FallbackToTier2(undecidedBots);
 
-            return ParseResponse(response, undecidedBots);
+            var scored = keyed
+                .Select(k => (k.Bot, P: response.Answers.TryGetValue(k.Key, out var a) ? a.Noul ?? 0 : 0))
+                .ToList();
+
+            logger.LogInformation("Jev probabilities {Probabilities} (threshold {Threshold}, max {Max}), cost {Cost}",
+                string.Join(", ", scored.Select(s => $"{s.Bot.Name}={s.P:F2}")),
+                options.Threshold, options.MaxResponders, response.Usage?.Cost);
+
+            return scored
+                .Where(s => s.P >= options.Threshold)
+                .OrderByDescending(s => s.P)
+                .Take(options.MaxResponders)
+                .Select(s => s.Bot.Id)
+                .ToList();
         }
-        catch
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
+            logger.LogWarning(ex, "Tier 3 judge failed; falling back to Tier 2 scores.");
             return FallbackToTier2(undecidedBots);
         }
     }
 
-    private static List<Guid> ParseResponse(string response, List<(Bot Bot, double Tier2Score)> candidates)
-    {
-        try
-        {
-            // Strip markdown code blocks if present
-            var json = response.Replace("```json", "").Replace("```", "").Trim();
-            var doc = JsonDocument.Parse(json);
+    private static string SenderName(Message m) =>
+        m.SenderUser?.DisplayName is { Length: > 0 } user ? user : m.SenderBot?.Name ?? "Unknown";
 
-            if (!doc.RootElement.TryGetProperty("responders", out var responders))
-                return [];
+    private static string Persona(Bot bot) =>
+        string.Join(" ", new[] { bot.Personality, Trim(bot.SystemPrompt, MaxSystemPromptChars) }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
 
-            var validIds = candidates.Select(c => c.Bot.Id).ToHashSet();
-            var result = new List<Guid>();
-
-            foreach (var item in responders.EnumerateArray())
-            {
-                if (Guid.TryParse(item.GetString(), out var id) && validIds.Contains(id))
-                    result.Add(id);
-            }
-
-            return result;
-        }
-        catch
-        {
-            // Parse failure fallback
-            return FallbackToTier2(candidates);
-        }
-    }
+    private static string Trim(string? text, int max) =>
+        text is null ? string.Empty : text.Length > max ? text[..max] + "..." : text;
 
     private static List<Guid> FallbackToTier2(List<(Bot Bot, double Tier2Score)> candidates)
         => candidates.Where(b => b.Tier2Score > 0.4).Select(b => b.Bot.Id).ToList();

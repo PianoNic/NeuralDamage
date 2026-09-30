@@ -18,6 +18,8 @@ public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judg
             .Where(m => m.ChatId == chatId)
             .OrderByDescending(m => m.CreatedAt)
             .Take(20)
+            .Include(m => m.SenderUser)
+            .Include(m => m.SenderBot)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -69,15 +71,10 @@ public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judg
             undecided.Clear();
         }
 
-        // Tier 3: Single LLM call for all undecided bots
+        // Tier 3: Single Jev call for all undecided bots
         if (undecided.Count > 0)
         {
-            var history = recentMessages
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => new ChatMessage(
-                    m.SenderBotId is not null ? "assistant" : "user",
-                    m.Content))
-                .ToList();
+            var history = recentMessages.OrderBy(m => m.CreatedAt).ToList();
 
             var judged = await tier3Judge.JudgeAsync(message, undecided, history, ct);
             logger.LogInformation("Tier 3 judged {Judged} of {Undecided} undecided bots as responders",
