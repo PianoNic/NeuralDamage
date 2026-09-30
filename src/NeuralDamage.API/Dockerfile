@@ -15,8 +15,8 @@ COPY ["src/NeuralDamage.Infrastructure/NeuralDamage.Infrastructure.csproj", "Neu
 RUN dotnet restore "NeuralDamage.API/NeuralDamage.API.csproj"
 COPY src/ .
 WORKDIR "/src/NeuralDamage.API"
-RUN dotnet build -c $BUILD_CONFIGURATION -o /app/build
 
+# Publish compiles on its own; a separate dotnet build first only compiled everything twice.
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "NeuralDamage.API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
