@@ -1,128 +1,87 @@
-# <p align="center">Neural Damage</p>
 <p align="center">
-  <img src="assets/logo.svg" width="200" alt="Neural Damage Logo">
+  <img src="assets/logo.svg" width="160" alt="Neural Damage Logo">
 </p>
+
+<h1 align="center">Neural Damage</h1>
+
 <p align="center">
-  <strong>A group chat where humans and AI bots have natural conversations.</strong>
-  Bots are powered by OpenRouter (GPT-4, Claude, Llama, Gemini, etc.) and only respond when "response-worthy" — not to every message.
+  <strong>A group chat where people and AI bots talk like friends: the bots speak up when they have something to say, not after every message.</strong>
 </p>
+
 <p align="center">
-  <a href="https://github.com/PianoNic/NeuralDamage?tab=readme-ov-file#-docker-setup"><img src="https://img.shields.io/badge/Selfhost-Instructions-7c3aed.svg"/></a>
-  <a href="https://github.com/PianoNic/NeuralDamage/blob/main/docs/dev-setup.md"><img src="https://img.shields.io/badge/Development-Setup-7c3aed.svg"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage"><img src="https://badgetrack.pianonic.ch/badge?tag=neural-damage&label=visits&color=7c3aed&style=flat" alt="visits"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PianoNic/NeuralDamage?color=7c3aed&label=License" alt="License"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage/releases"><img src="https://img.shields.io/github/v/release/PianoNic/NeuralDamage?include_prereleases&color=7c3aed&label=Latest%20Release" alt="Latest release"/></a>
+  <a href="docs/self-hosting.md"><img src="https://img.shields.io/badge/Selfhost-Instructions-7c3aed.svg" alt="Self-hosting"/></a>
 </p>
 
 ---
 
-> **Warning:** This project is currently under active development. For a stable version, check the [Releases tab](https://github.com/PianoNic/NeuralDamage/releases).
+> **Heads up:** Neural Damage is in early development. Expect rough edges and breaking changes between versions.
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/chat-light.png" width="49%" alt="A group chat with three bots, light mode" />
+  <img src="assets/screenshots/bots-light.png" width="49%" alt="Chat members panel, light mode" />
+</p>
+<p align="center">
+  <img src="assets/screenshots/chat-dark.png" width="49%" alt="A group chat with three bots, dark mode" />
+  <img src="assets/screenshots/bots-dark.png" width="49%" alt="Chat members panel, dark mode" />
+</p>
+
+<details>
+<summary><strong>Show more screenshots</strong></summary>
+
+<p align="center">
+  <img src="assets/screenshots/new-bot-light.png" width="49%" alt="Creating a bot, light mode" />
+  <img src="assets/screenshots/new-bot-dark.png" width="49%" alt="Creating a bot, dark mode" />
+</p>
+
+</details>
 
 ## Features
 
-- **Multi-provider AI bots** — Create bots using any model on [OpenRouter](https://openrouter.ai/)
-- **Smart response engine** — Bots score each message and only chime in when appropriate
-- **Real-time WebSocket sync** — All state changes broadcast instantly across tabs/clients
-- **Bot emoji reactions** — Non-responding bots can still react to messages
-- **Slash commands** — `/stop`, `/mute`, `/unmute`, `/kick`, `/clear`, `/rename`, `/bots`, `/help`
-- **Reply threading** — Reply to specific messages with quoted context
-- **Content moderation** — Built-in guardrails prevent bots from engaging with harmful content
-- **OIDC authentication** — Login via any OpenID Connect provider (Google, Pocket ID, etc.)
-- **Cost protection** — Model price caps, history truncation, and token budgets keep API costs in check
-- **Docker ready** — Single `docker compose up` to run everything
+- **Any model as a bot**: every bot runs on a model of your choice from [OpenRouter](https://openrouter.ai/), with its own system prompt, personality, aliases and temperature.
+- **Bots that know when to talk**: hard rules first (mentions, mutes, `/stop`), then a weighted score for questions, how recently a bot spoke and how much it already talks, and finally Jev on the OpenRouter Decisions API ranks the bots still undecided.
+- **Reactions**: bots that stay quiet can still react with an emoji, and so can you.
+- **Replies and live updates**: reply to a message with its quote attached; messages, reactions and typing indicators arrive over SignalR.
+- **Slash commands**: `/stop`, `/mute`, `/unmute`, `/clear`, `/kick`, `/rename`, `/bots` and `/help`.
+- **Cheap and private by default**: bots only run on inexpensive models whose providers keep no data. Price caps and the zero-data-retention rule are one setting each.
+- **Sign in with your own provider**: any OpenID Connect provider (Pocket ID, Authentik, Keycloak and others).
+- **One container**: the API serves the web app, next to a PostgreSQL database.
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui, Zustand |
-| Backend API | .NET 10, ASP.NET Core, Entity Framework Core, Mediator |
-| Database | PostgreSQL |
-| Auth | OIDC + JWT Bearer |
-| Real-time | WebSockets |
-| AI | OpenRouter API |
-| Deploy | Docker Compose |
-
-## Docker Setup
-
-1. **Create a `.env` file:**
-
-```env
-# OIDC Provider (Pocket ID, Google, etc.)
-Oidc__Authority=https://your-oidc-provider.com
-Oidc__ClientId=your-client-id
-Oidc__RedirectUri=http://localhost:3000/callback
-Oidc__PostLogoutRedirectUri=http://localhost:3000/
-Oidc__Scope=openid profile email
-
-# OpenRouter (AI models)
-OpenRouter__ApiKey=sk-or-v1-your-key-here
-
-# Model price caps ($/million tokens, 0 or unset = no limit)
-OpenRouter__MaxPromptPrice=0.25
-OpenRouter__MaxCompletionPrice=0.60
-
-# Bot response ranking (optional) - Jev on the OpenRouter Decisions API.
-# The key falls back to OpenRouter__ApiKey; defaults shown.
-#BotRanking__Model=~typesafe/jev-latest
-#BotRanking__Threshold=0.6
-```
-
-The database connection (`ConnectionStrings__DefaultConnection`) is set in `compose.yml`.
-
-2. **Start it:**
+## Quick start
 
 ```bash
-docker compose up --build -d
+git clone https://github.com/PianoNic/NeuralDamage.git && cd NeuralDamage
+cp .env.example .env   # add your OIDC client and OpenRouter key
+docker compose up -d --build
 ```
 
-The application will be available at `http://localhost:3000`.
+Open <http://localhost:3000>.
 
-Get an OpenRouter API key from [openrouter.ai/keys](https://openrouter.ai/keys).
+## Documentation
 
-## Usage
+- [Self-hosting](docs/self-hosting.md): Docker Compose, your OIDC provider and every environment variable
+- [Development](docs/dev-setup.md): running from source, tests, migrations and the generated API client
 
-1. Navigate to `http://localhost:3000`
-2. Log in with your OIDC provider
-3. Create a chat and add some AI bots
-4. Start chatting — bots will join in naturally
+<details>
+<summary><strong>Tech stack</strong></summary>
 
-## How Bot Responses Work
+- **.NET 10** ASP.NET Core API (Clean Architecture, Mediator, EF Core on PostgreSQL).
+- **Angular 22** with Signals, [Spartan UI](https://www.spartan.ng/) and [ngx-prompt-kit](https://github.com/PianoNic/ngx-prompt-kit).
+- **SignalR** for live chat updates.
+- **[Toamaisutaa](https://github.com/PianoNic/Toamaisutaa)** for OIDC bearer validation.
+- **OpenRouter** for the bots and the Decisions API for ranking them.
+- **TUnit** for tests; the frontend's API client is generated from the OpenAPI document with `bun run apigen`.
 
-When a message is sent, each bot gets a **response-worthiness score** (0.0-1.0). A bot responds if its score exceeds the threshold.
+</details>
 
-| Signal | Impact |
-|--------|--------|
-| Direct @mention | +0.6 |
-| Name in message | +0.5 |
-| Group question (no @mention) | +0.15 |
-| Topic relevance | up to +0.3 |
-| Spoke < 30s ago | -0.4 |
-| Spoke < 2min ago | -0.2 |
-| Dominates conversation | -0.15 per extra |
-| Bot-to-bot (no @mention) | Nearly 0 |
+## License
 
-Multiple responding bots are staggered with random delays. Bot-to-bot chains are capped at depth 3.
-
-## Development
-
-See [docs/dev-setup.md](docs/dev-setup.md) for full development setup instructions.
-
-### Project Structure
-
-```
-NeuralDamage/
-├── compose.yml
-├── docs/
-│   └── dev-setup.md
-├── frontend/                        # React SPA
-│   ├── Dockerfile
-│   └── src/
-└── src/                             # .NET Backend
-    ├── NeuralDamage.API/            # ASP.NET Core host, controllers, middleware
-    ├── NeuralDamage.Application/    # DTOs, interfaces, mappers, commands
-    ├── NeuralDamage.Domain/         # Entity models
-    ├── NeuralDamage.Infrastructure/ # EF Core, PostgreSQL, service implementations
-    └── NeuralDamage.Tests/          # Unit & integration tests
-```
+[MIT](LICENSE)
 
 ---
 
-**Made with love by [PianoNic](https://github.com/PianoNic)**
+<p align="center">Made with care by <a href="https://github.com/PianoNic">PianoNic</a></p>

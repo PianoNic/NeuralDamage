@@ -1,284 +1,110 @@
-# Development Environment Setup
+# Development
 
-## Prerequisites
+You need the [.NET 10 SDK](https://dotnet.microsoft.com/download), [Bun](https://bun.sh/) and Docker (for the database), plus an OIDC provider and an OpenRouter key as described in [Self-hosting](self-hosting.md#your-oidc-provider).
 
-- Git
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js](https://nodejs.org/) (v20+) or [Bun](https://bun.sh/)
-- PostgreSQL 17+ (or use Docker)
+## Run from source
 
-## Setting Up the Environment
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/PianoNic/NeuralDamage.git
-cd NeuralDamage
-```
-
-### 2. Install EF Core CLI Tools
-
-```bash
-dotnet tool install --global dotnet-ef
-```
-
-### 3. Database Setup
-
-#### Option A: Using Docker (Recommended)
+### 1. Database
 
 ```bash
 docker compose -f compose.dev.yml up -d
 ```
 
-This starts a PostgreSQL 18 instance with the following credentials:
+PostgreSQL on `localhost:5434`, database `neuraldamage`, user `postgres`, password `postgres`.
 
-| Setting  | Value          |
-|----------|----------------|
-| Host     | `localhost`    |
-| Port     | `5434`         |
-| Database | `neuraldamage` |
-| Username | `postgres`     |
-| Password | `postgres`     |
+### 2. API settings
 
-#### Option B: Local PostgreSQL
-
-Create a database named `neuraldamage` in your existing PostgreSQL installation.
-
-### 4. Configure API Credentials
-
-#### Option A: Using User Secrets (Recommended for Development)
+Keep them in user secrets so nothing lands in the repository:
 
 ```bash
 cd src/NeuralDamage.API
-dotnet user-secrets init
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5434;Database=neuraldamage;Username=postgres;Password=postgres"
 dotnet user-secrets set "Oidc:Authority" "https://your-oidc-provider.com"
 dotnet user-secrets set "Oidc:ClientId" "your-client-id"
 dotnet user-secrets set "Oidc:RedirectUri" "http://localhost:4200/callback"
 dotnet user-secrets set "Oidc:PostLogoutRedirectUri" "http://localhost:4200/"
 dotnet user-secrets set "Oidc:Scope" "openid profile email"
-dotnet user-secrets set "Oidc:RequireHttpsMetadata" "false"
+dotnet user-secrets set "OpenRouter:ApiKey" "sk-or-v1-your-key-here"
 ```
 
-**Visual Studio Users:**
+Register `http://localhost:4200/callback` as a redirect URI with your provider. Every other setting is optional; see the [configuration reference](self-hosting.md#configuration). `dotnet user-secrets list` shows what is set.
 
-Right-click on `NeuralDamage.API` project in Solution Explorer, select **Manage User Secrets**, and replace the contents with:
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5434;Database=neuraldamage;Username=postgres;Password=postgres"
-  },
-  "Oidc": {
-    "Authority": "https://your-oidc-provider.com",
-    "ClientId": "your-client-id",
-    "RedirectUri": "http://localhost:4200/callback",
-    "PostLogoutRedirectUri": "http://localhost:4200/",
-    "Scope": "openid profile email",
-    "RequireHttpsMetadata": false
-  }
-}
-```
-
-#### Option B: Using .env File
-
-Create a `.env` file in the project root:
-
-```env
-# Database
-ConnectionStrings__DefaultConnection=Host=localhost;Port=5434;Database=neuraldamage;Username=postgres;Password=postgres
-
-# OIDC Provider
-Oidc__Authority=https://your-oidc-provider.com
-Oidc__ClientId=your-client-id
-Oidc__RedirectUri=http://localhost:4200/callback
-Oidc__PostLogoutRedirectUri=http://localhost:4200/
-Oidc__Scope=openid profile email
-Oidc__RequireHttpsMetadata=false
-
-# OpenRouter
-OpenRouter__ApiKey=sk-or-v1-your-key-here
-
-# Model policy - these are the defaults, so the lines are only needed to change them.
-# Price caps are $/million tokens; unset = 0.25 / 0.60, an explicit 0 = no limit.
-OpenRouter__MaxPromptPrice=0.25
-OpenRouter__MaxCompletionPrice=0.60
-OpenRouter__ZdrOnly=true
-OpenRouter__ExcludeBatchModels=true
-
-# Bot response ranking (Tier 3, Jev on the OpenRouter Decisions API).
-# All optional: the key falls back to OpenRouter__ApiKey, and without one
-# (or when a call fails or times out) ranking falls back to Tier 2 scores.
-BotRanking__ApiKey=sk-or-v1-your-key-here
-BotRanking__Endpoint=https://openrouter.ai/api/alpha/decisions
-BotRanking__Model=~typesafe/jev-latest
-BotRanking__Threshold=0.6
-BotRanking__MaxResponders=2
-BotRanking__TimeoutSeconds=5
-```
-
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `OpenRouter:ApiKey` | - | Required. OpenRouter API key. |
-| `OpenRouter:BaseUrl` | `https://openrouter.ai/api/v1` | Point at a gateway or a local listener. |
-| `OpenRouter:MaxPromptPrice` | `0.25` | Max prompt price, $/million tokens. `0` = no limit. |
-| `OpenRouter:MaxCompletionPrice` | `0.60` | Max completion price, $/million tokens. `0` = no limit. |
-| `OpenRouter:ZdrOnly` | `true` | Only offer models with a zero-data-retention endpoint, and route only to ZDR endpoints. |
-| `OpenRouter:ExcludeBatchModels` | `true` | Hide and refuse `:batch` model variants (async batch jobs, useless in a live chat). |
-| `OpenRouter:MaxOutputTokens` | `1500` | Output token budget per bot reply. Reasoning models spend part of it thinking, so keep headroom. |
-
-The model policy is enforced in three places. `GET /api/bots/models` leaves out models it does not allow; creating a bot, or switching one to another model, is refused with a 400 that names the reason; and every generation call sends `provider.zdr: true` and the caps as `provider.max_price`, so OpenRouter never routes a request to a provider that retains prompts or charges more.
-
-- **ZDR**: a model qualifies when it appears in OpenRouter's `GET /api/v1/endpoints/zdr` list (matched by `model_id`). The list is cached for 6 hours.
-- **Price**: a model over either cap, or without fixed pricing (such as `openrouter/auto`), is refused while a cap is set.
-- **Existing bots** whose model no longer qualifies keep working until edited, but OpenRouter refuses their generation calls; the API log then says which setting to change.
-
-With the defaults, roughly 75 of OpenRouter's ~460 models remain, including `deepseek/deepseek-v4.1-flash`. Tier 3 ranking (Jev on the Decisions API) is not a chat model and is not subject to this policy.
-
-To view all configured secrets:
-
-```bash
-dotnet user-secrets list --project src/NeuralDamage.API
-```
-
-### 5. Install Dependencies
-
-#### Backend
-
-```bash
-dotnet restore
-```
-
-#### Frontend
-
-```bash
-cd frontend
-bun install
-```
-
-### 6. Apply Database Migrations
-
-```bash
-dotnet ef database update --project src/NeuralDamage.Infrastructure --startup-project src/NeuralDamage.API
-```
-
-## Running the Application
-
-### 1. Start the Backend
+### 3. Start both halves
 
 ```bash
 dotnet run --project src/NeuralDamage.API
-# Backend will be available at http://localhost:5012
-# Swagger UI at http://localhost:5012/swagger
 ```
 
-### 2. Start the Frontend
+The API runs on <http://localhost:5012> in the `Development` environment, applies migrations on startup and serves Swagger UI at <http://localhost:5012/swagger>.
 
 ```bash
-cd frontend
-bun dev
-# Frontend will be available at http://localhost:4200
+cd src/NeuralDamage.Frontend
+bun install
+bun run start
 ```
 
-### Using Docker Compose
+The web app runs on <http://localhost:4200> and talks to the API on port 5012, which allows it through CORS in development.
 
-For a complete environment with database:
+## Tests
+
+The tests use [TUnit](https://tunit.dev/), which runs as an executable:
 
 ```bash
-# Copy and configure environment variables
-cp .env.example .env
-# Edit .env with your OIDC credentials
-
-# Start all services
-docker compose up --build
-
-# Access at http://localhost:3000
+dotnet run --project src/NeuralDamage.Tests
 ```
 
-## Development Tools
+Frontend unit tests: `bun run test` in `src/NeuralDamage.Frontend`.
 
-### Entity Framework Commands
+## Generated API client
+
+The frontend's services and models in `src/NeuralDamage.Frontend/src/app/api` are generated from the API's OpenAPI document. After changing a controller or DTO, start the API and regenerate them:
 
 ```bash
-# Add a new migration
-dotnet ef migrations add <MigrationName> --project src/NeuralDamage.Infrastructure --startup-project src/NeuralDamage.API
-
-# Apply migrations to database
-dotnet ef database update --project src/NeuralDamage.Infrastructure --startup-project src/NeuralDamage.API
-
-# Remove last migration (if not yet applied)
-dotnet ef migrations remove --project src/NeuralDamage.Infrastructure --startup-project src/NeuralDamage.API
+cd src/NeuralDamage.Frontend
+bun run apigen
 ```
 
-### Running Tests
+It reads `http://localhost:5012/swagger/v1/swagger.json` (see `openapitools.json`). Commit the generated files with the change.
+
+## Migrations
+
+Migrations live in `src/NeuralDamage.Infrastructure/Migrations` and are applied when the API starts. To add one after changing an entity:
 
 ```bash
-# Run all tests
-dotnet test
-
-# Run with coverage
-dotnet test --collect:"XPlat Code Coverage"
+dotnet tool install --global dotnet-ef   # once
+dotnet ef migrations add <Name> --project src/NeuralDamage.Infrastructure --startup-project src/NeuralDamage.API
 ```
 
-### Building for Production
+## Production build
 
 ```bash
-# Build backend
-dotnet publish src/NeuralDamage.API -c Release -o ./publish
-
-# Build frontend
-cd frontend
-bun run build
+docker compose up -d --build
 ```
 
-## Project Architecture
+`src/NeuralDamage.API/Dockerfile` builds the Angular app with Bun and copies it into the API's `wwwroot`, so one image serves both on port 8080.
 
-The backend follows **Clean Architecture**:
+## Architecture
 
-| Layer | Project | Purpose |
-|-------|---------|---------|
-| Domain | `NeuralDamage.Domain` | Entity models, no dependencies |
-| Application | `NeuralDamage.Application` | Interfaces, DTOs, mappers, commands/queries |
-| Infrastructure | `NeuralDamage.Infrastructure` | EF Core DbContext, PostgreSQL, service implementations |
-| API | `NeuralDamage.API` | ASP.NET Core host, controllers, middleware, DI registration |
+The API follows Clean Architecture; controllers stay thin and send Mediator commands and queries.
 
-### Auth Flow
+| Project | Purpose |
+|---|---|
+| `NeuralDamage.Domain` | Entities (chats, members, bots, messages, reactions, users). |
+| `NeuralDamage.Application` | Commands, queries and validators, including the slash commands. |
+| `NeuralDamage.Infrastructure` | EF Core and PostgreSQL, the OpenRouter client, the bot decision engine and the background reply queue. |
+| `NeuralDamage.API` | ASP.NET Core host: controllers, SignalR hubs (`/hubs/chat`, `/hubs/user`), authentication, and the SPA in production. |
+| `NeuralDamage.Frontend` | Angular 22 app with Spartan UI and ngx-prompt-kit. |
+| `NeuralDamage.Tests` | TUnit tests. |
 
-1. Frontend redirects the user to the OIDC provider for login
-2. OIDC provider issues a JWT access token
-3. Frontend sends the token in `Authorization: Bearer <token>` headers
-4. ASP.NET Core validates the JWT against the OIDC provider's authority
-5. On first login, `POST /api/auth/sync` upserts the user in the local database
+### Sign-in
+
+1. The web app reads the OIDC settings from `GET /api/app` and sends the user to the provider.
+2. The provider returns to `/callback` with a code, which the web app exchanges for an access token (PKCE).
+3. Every API call and the SignalR connection carry that token; SignalR passes it in the query string, which is only accepted on `/hubs`.
+4. [Toamaisutaa](https://github.com/PianoNic/Toamaisutaa) validates it against the provider, and the first request from a new user creates their row in the database.
 
 ## Troubleshooting
 
-### Common Issues
-
-**PostgreSQL Connection Failed**
-
-- Ensure PostgreSQL is running on port 5432
-- Check credentials in user secrets or .env file
-- Verify the `neuraldamage` database exists
-
-**OIDC Authentication Not Working**
-
-- Verify Authority URL is correct and reachable
-- Check if Client ID matches your OIDC provider configuration
-- Ensure `RequireHttpsMetadata` is `false` for local development with HTTP providers
-
-**EF Migrations Hang After "Build succeeded"**
-
-- The `IDesignTimeDbContextFactory` in `NeuralDamageDbContext` should handle this
-- If it still hangs, check for stale `dotnet` processes in Task Manager
-
-**Port Already in Use**
-
-- Backend default: 5012 (change in `Properties/launchSettings.json`)
-- Frontend default: 4200
-- Database default: 5434 (mapped from container port 5432)
-
-## Additional Resources
-
-- [Entity Framework Core Docs](https://docs.microsoft.com/en-us/ef/core/)
-- [ASP.NET Core Authentication](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/)
-- [OpenRouter API](https://openrouter.ai/docs)
+- **Sign-in loops or 401s**: check that `Oidc:Authority` is reachable from the API and that the token's audience is `Oidc:ClientId`. For a provider on plain HTTP, set `Oidc:RequireHttpsMetadata` to `false`.
+- **Bots never reply**: check `OpenRouter:ApiKey`, and that the bot's model is under the price caps if you set any.
+- **Port in use**: the API port is in `src/NeuralDamage.API/Properties/launchSettings.json`; the database port is in `compose.dev.yml`.
