@@ -63,9 +63,6 @@ public static class BotPromptBuilder
             - One language per message. A word from your character's own language now and then is fine, half sentences in another language are not.
             - No stage directions. Never narrate what you do, feel or look like, in parentheses, asterisks or otherwise: no "(sighs)", no "*leans back*", no "(smiles, tired but true)". Only write what the character would actually type into a chat.
             - No em dashes and no semicolons, ever. Use a comma, a full stop or a new message instead.
-
-            Hard limit:
-            - Never produce sexual content involving minors.
             """;
     }
 
