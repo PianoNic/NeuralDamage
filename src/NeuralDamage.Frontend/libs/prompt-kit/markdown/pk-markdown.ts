@@ -105,6 +105,10 @@ export class PkMarkdown {
       DOMPurify.sanitize(parsed, {
         // Mermaid and KaTeX render into this subtree, so SVG and MathML stay.
         USE_PROFILES: { html: true, svg: true, mathMl: true },
+        // Markdown never produces forms (task-list checkboxes are bare inputs);
+        // from a message body one can only be a fake login that posts elsewhere.
+        FORBID_TAGS: ['form', 'button', 'textarea', 'select', 'option'],
+        FORBID_ATTR: ['action', 'formaction'],
       }),
     );
   });
