@@ -539,11 +539,12 @@ public class BotResponseOrchestrator(
 
     /// <summary>
     /// Cleans a model's reply into the messages that would be posted: its own
-    /// name prefix and any lines written for other people go, then it is split,
-    /// and parts that are only a stage direction or punctuation are dropped.
+    /// name prefix, any lines written for other people and any invented
+    /// "[image from ...]" lines go, then it is split, and parts that are only a
+    /// stage direction or punctuation are dropped.
     /// </summary>
     private List<string> ToParts(string reply, string botName) =>
-        BotReplyFormatter.Split(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName)), _options.MaxReplyParts)
+        BotReplyFormatter.Split(BotReplyFormatter.StripImageLines(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName))), _options.MaxReplyParts)
             .Where(p => !BotReplyFormatter.IsFiller(p))
             .ToList();
 

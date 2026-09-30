@@ -104,7 +104,9 @@ public class BotDeliveryTests
     [Arguments("...")]
     [Arguments("…")]
     [Arguments("(sighs)\n\n(leaves the chat)")]
-    public async Task StageDirectionOrPunctuationOnly_IsDropped(string reply)
+    [Arguments("[image from alice: a cat asleep on a keyboard]")]
+    [Arguments("[image from GPT]\n[Image from bob: pizza, [sic] burnt]\n\n...")]
+    public async Task StageDirectionPunctuationOrInventedImageOnly_IsDropped(string reply)
     {
         using var h = await OrchestratorHarness.CreateAsync();
         var gpt = h.Bots[0];
@@ -118,6 +120,20 @@ public class BotDeliveryTests
         await h.Notifications.DidNotReceiveWithAnyArgs().NotifyMessageNew(default, default!);
         // Dropped quietly: the bot did answer, it just had nothing to say.
         await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
+    }
+
+    [Test]
+    public async Task InventedImageLines_AreDropped_TheRestPosted()
+    {
+        using var h = await OrchestratorHarness.CreateAsync();
+        var gpt = h.Bots[0];
+        h.Respond(gpt);
+        h.Reply("[image from GPT: a pizza with pineapple]\nthis is my dinner\n\n[image from GPT]");
+        var trigger = await h.SayAsync("what are you eating");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+
+        await Assert.That((await h.MessagesFromAsync(gpt)).Select(m => m.Content)).IsEquivalentTo(["this is my dinner"]);
     }
 
     [Test]
@@ -294,6 +310,19 @@ public class BotReplyFormatterTests
     public async Task DropOtherSpeakers_KeepsOnlyTheBotsOwnTurn(string reply, string expected)
     {
         await Assert.That(BotReplyFormatter.DropOtherSpeakers(reply)).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments("[image from alice: a cat]", "")]
+    [Arguments("  [Image from Bob]  ", "")]
+    [Arguments("look\n[image from alice: a cat]\nso cute", "look\nso cute")]
+    [Arguments("[image from alice: a cat]\r\nso cute", "so cute")]
+    [Arguments("i sent [image from alice] earlier", "i sent [image from alice] earlier")]
+    [Arguments("[image from alice: a cat] lol", "[image from alice: a cat] lol")]
+    [Arguments("[images from space] are cool", "[images from space] are cool")]
+    public async Task StripImageLines_DropsLinesInTheHistorysPictureFormat(string reply, string expected)
+    {
+        await Assert.That(BotReplyFormatter.StripImageLines(reply)).IsEqualTo(expected);
     }
 
     [Test]
