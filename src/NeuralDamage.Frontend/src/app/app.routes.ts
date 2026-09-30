@@ -1,16 +1,43 @@
 import { Routes } from '@angular/router';
-import { authGuard } from '@app/shared/auth/auth.guard';
+import { authGuard } from './core/auth/auth.guard';
 
 export const routes: Routes = [
-  { path: 'login', loadComponent: () => import('./authentication/login/login').then((m) => m.LoginComponent) },
-  { path: 'callback', loadComponent: () => import('./authentication/callback/callback').then((m) => m.CallbackComponent) },
+  {
+    path: 'login',
+    title: 'Sign in · Neural Damage',
+    loadComponent: () => import('./features/auth/login').then((m) => m.Login),
+  },
+  {
+    path: 'callback',
+    title: 'Signing in · Neural Damage',
+    loadComponent: () => import('./features/auth/callback').then((m) => m.Callback),
+  },
   {
     path: '',
-    loadComponent: () => import('./shared/layout/layout').then((m) => m.LayoutComponent),
     canActivate: [authGuard],
+    loadComponent: () => import('./features/shell/shell').then((m) => m.Shell),
     children: [
-      { path: '', loadComponent: () => import('./home/home').then((m) => m.HomeComponent) },
-      { path: 'chat/:chatId', loadComponent: () => import('./chat/chat-view/chat-view').then((m) => m.ChatViewComponent) },
+      {
+        path: '',
+        title: 'Neural Damage',
+        loadComponent: () => import('./features/chat/home').then((m) => m.Home),
+      },
+      {
+        path: 'chat/:chatId',
+        title: 'Neural Damage',
+        loadComponent: () => import('./features/chat/chat').then((m) => m.Chat),
+      },
+      {
+        path: 'bots',
+        title: 'Bots · Neural Damage',
+        loadComponent: () => import('./features/bots/bots-page').then((m) => m.BotsPage),
+      },
+      {
+        path: 'settings',
+        title: 'Settings · Neural Damage',
+        loadComponent: () => import('./features/settings/settings').then((m) => m.Settings),
+      },
     ],
   },
+  { path: '**', redirectTo: '' },
 ];
