@@ -74,7 +74,9 @@ export class PkChatContainerRoot implements AfterViewInit, ChatContainerState {
     if (!this.isBrowser) return;
     const el = this.host.nativeElement;
     el.scrollTo({ top: el.scrollHeight, behavior });
-    this.lastScrollTop = el.scrollHeight;
+    // The furthest the element can scroll, not scrollHeight: a scroll event landing after more
+    // content arrived would otherwise read as the reader scrolling up and stop the follow.
+    this.lastScrollTop = el.scrollHeight - el.clientHeight;
     this.isAtBottom.set(true);
   }
 }

@@ -52,7 +52,7 @@ const BOT_ARGUMENT = /^\/(mute|unmute|kick) (.*)$/i;
  */
 export const SLASH_COMMANDS = [
   { command: '/stop', description: 'Stop all bot responses', arg: null },
-  { command: '/mute', description: 'Keep a bot quiet in this chat, or all of them', arg: '<bot>' },
+  { command: '/mute', description: 'Keep a bot quiet in this chat', arg: '<bot>' },
   { command: '/unmute', description: 'Let a muted bot talk again', arg: '<bot>' },
   { command: '/clear', description: 'Clear all messages in this chat', arg: null },
   { command: '/kick', description: 'Remove a bot from this chat', arg: '<bot>' },
@@ -141,7 +141,7 @@ export interface Suggestion {
     }
 
     <div
-      class="border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex cursor-text flex-col gap-1 rounded-2xl border px-3 pt-2.5 pb-2 shadow-xs transition-[color,box-shadow] focus-within:ring-3"
+      class="border-input bg-background focus-within:border-ring flex cursor-text flex-col gap-1 rounded-2xl border px-3 pt-2.5 pb-2 shadow-xs transition-colors"
       (click)="focusFromChrome($event)"
     >
       @if (replyingTo(); as reply) {

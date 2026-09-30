@@ -43,7 +43,10 @@ import { BotForm } from './bot-form';
       <hlm-sheet-content *hlmSheetPortal="let ctx" class="w-full gap-0 p-0 sm:max-w-sm">
         <hlm-sheet-header class="border-b">
           <h2 hlmSheetTitle>People</h2>
-          <p hlmSheetDescription>{{ bots().length }} bots, {{ people().length }} people</p>
+          <p hlmSheetDescription>
+            {{ bots().length }} {{ bots().length === 1 ? 'bot' : 'bots' }},
+            {{ people().length }} {{ people().length === 1 ? 'person' : 'people' }}
+          </p>
         </hlm-sheet-header>
 
         <div class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
@@ -189,7 +192,7 @@ import { BotForm } from './bot-form';
     </hlm-sheet>
 
     <hlm-dialog [state]="formOpen() ? 'open' : 'closed'" (closed)="closeForm()">
-      <hlm-dialog-content *hlmDialogPortal="let ctx" class="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <hlm-dialog-content *hlmDialogPortal="let ctx" class="max-h-[90vh] w-full overflow-y-auto sm:max-w-lg">
         <hlm-dialog-header>
           <h2 hlmDialogTitle>{{ editing() ? 'Edit bot' : 'Create a bot' }}</h2>
           <p hlmDialogDescription>Its model, instructions and personality.</p>

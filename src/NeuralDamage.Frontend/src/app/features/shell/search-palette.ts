@@ -22,7 +22,7 @@ import { ChatList } from '../chat/chat-list';
       description="Find a chat or a page"
       [state]="open() ? 'open' : 'closed'"
       (stateChange)="open.set($event === 'open')"
-      dialogContentClass="sm:max-w-lg w-[calc(100%-2rem)]"
+      dialogContentClass="w-[min(32rem,calc(100vw-2rem))] sm:max-w-none"
     >
       <hlm-command>
         <hlm-command-input placeholder="Search chats…" />

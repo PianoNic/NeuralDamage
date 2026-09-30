@@ -49,7 +49,7 @@ export class BotForm implements OnInit {
       if (b) {
         this.isEditing.set(true);
         this.name.set(b.name);
-        this.selectedModel.set({ id: b.modelId, name: b.modelId, provider: "", capabilities: [], priceTier: 1 });
+        this.selectedModel.set({ id: b.modelId, name: b.modelId, provider: '', capabilities: [], priceTier: 1 });
         this.systemPrompt.set(b.systemPrompt);
         this.personality.set(b.personality ?? '');
         this.temperature.set(b.temperature);

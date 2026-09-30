@@ -37,7 +37,7 @@ import { SearchPalette } from './search-palette';
   providers: [provideIcons({ lucideBot, lucidePlus, lucideSearch })],
   template: `
     <div hlmSidebarWrapper class="h-svh">
-      <hlm-sidebar variant="inset">
+      <hlm-sidebar variant="inset" sidebarWidthMobile="100vw">
         <hlm-sidebar-header>
           <a routerLink="/" class="flex items-center gap-2 rounded-md p-2 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
             <app-logo [size]="32" />

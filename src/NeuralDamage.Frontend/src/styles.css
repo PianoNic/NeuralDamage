@@ -77,38 +77,44 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* Message bodies are markdown rendered with the typography plugin; its colours follow the theme. */
+/*
+ * Message bodies are markdown rendered with the typography plugin. They take the bubble's text
+ * colour, so they read on muted and primary bubbles alike. Two classes, to outrank `.prose`.
+ */
 @utility prose-chat {
-  --tw-prose-body: currentColor;
-  --tw-prose-headings: currentColor;
-  --tw-prose-links: currentColor;
-  --tw-prose-bold: currentColor;
-  --tw-prose-counters: currentColor;
-  --tw-prose-bullets: currentColor;
-  --tw-prose-hr: var(--border);
-  --tw-prose-quotes: currentColor;
-  --tw-prose-quote-borders: var(--border);
-  --tw-prose-code: currentColor;
-  --tw-prose-pre-code: inherit;
-  --tw-prose-pre-bg: transparent;
-  --tw-prose-th-borders: var(--border);
-  --tw-prose-td-borders: var(--border);
-  font-size: 14px;
-  line-height: 1.5;
-  max-width: none;
-  & > :first-child {
-    margin-top: 0;
-  }
-  & > :last-child {
-    margin-bottom: 0;
-  }
-  & p {
-    margin-block: 0.25em;
-  }
-  & .mention {
-    font-weight: 500;
-    text-decoration: underline;
-    text-underline-offset: 2px;
+  &.prose {
+    color: inherit;
+    --tw-prose-body: currentColor;
+    --tw-prose-headings: currentColor;
+    --tw-prose-links: currentColor;
+    --tw-prose-bold: currentColor;
+    --tw-prose-counters: currentColor;
+    --tw-prose-bullets: currentColor;
+    --tw-prose-hr: var(--border);
+    --tw-prose-quotes: currentColor;
+    --tw-prose-quote-borders: var(--border);
+    --tw-prose-code: currentColor;
+    --tw-prose-pre-code: inherit;
+    --tw-prose-pre-bg: transparent;
+    --tw-prose-th-borders: var(--border);
+    --tw-prose-td-borders: var(--border);
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: none;
+    & > :first-child {
+      margin-top: 0;
+    }
+    & > :last-child {
+      margin-bottom: 0;
+    }
+    & p {
+      margin-block: 0.25em;
+    }
+    & .mention {
+      font-weight: 500;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
   }
 }
 
