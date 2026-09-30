@@ -47,7 +47,8 @@ public record RunSlashCommand(Guid ChatId, Guid UserId, string Content) : IComma
 /// Runs a slash command and tells the chat what happened with a system message.
 /// Errors are reported the same way rather than failing the request, so the
 /// person who typed the command sees why it did nothing. Answers that only
-/// concern that person - /help, /bots, an unknown command - go to them alone.
+/// concern that person - /help, /bots, an unknown command, a usage error or a
+/// refusal - go to them alone.
 /// </summary>
 public class RunSlashCommandHandler(
     NeuralDamageDbContext db,
@@ -76,6 +77,9 @@ public class RunSlashCommandHandler(
         public static implicit operator Feedback(string text) => new(text);
     }
 
+    /// <summary>A command that did nothing: only whoever typed it needs to know why.</summary>
+    private static Feedback Mistake(string text) => new(text, CallerOnly: true);
+
     /// <summary>What to tell the chat, or null when the command already did.</summary>
     private async Task<Feedback?> RunAsync(Guid chatId, Guid userId, SlashCommand command, CancellationToken ct)
     {
@@ -93,10 +97,10 @@ public class RunSlashCommandHandler(
             case "/unmute":
             {
                 if (command.Argument.Length == 0)
-                    return $"Usage: {command.Name} BotName";
+                    return Mistake($"Usage: {command.Name} BotName");
                 var bot = await FindBotAsync(chatId, command.Argument, ct);
                 if (bot is null)
-                    return $"Bot '{command.Argument}' not found in this chat.";
+                    return Mistake($"Bot '{command.Argument}' not found in this chat.");
 
                 if (command.Name == "/mute")
                 {
@@ -111,7 +115,7 @@ public class RunSlashCommandHandler(
             {
                 var result = await sender.Send(new ClearChatCommand(chatId, userId), ct);
                 if (!result.IsSuccess)
-                    return result.Error!;
+                    return Mistake(result.Error!);
 
                 // A reply still being written answers a message that no longer
                 // exists, and saving it would fail on the reply link.
@@ -123,25 +127,25 @@ public class RunSlashCommandHandler(
             case "/kick":
             {
                 if (command.Argument.Length == 0)
-                    return "Usage: /kick BotName";
+                    return Mistake("Usage: /kick BotName");
                 var bot = await FindBotAsync(chatId, command.Argument, ct);
                 if (bot is null)
-                    return $"Bot '{command.Argument}' not found in this chat.";
+                    return Mistake($"Bot '{command.Argument}' not found in this chat.");
 
                 var result = await sender.Send(new KickBotCommand(chatId, bot.Id, userId), ct);
-                return result.IsSuccess ? $"{userName} kicked {bot.Name} from the chat." : result.Error!;
+                return result.IsSuccess ? $"{userName} kicked {bot.Name} from the chat." : Mistake(result.Error!);
             }
 
             case "/rename":
             {
                 if (command.Argument.Length == 0)
-                    return "Usage: /rename New Name";
+                    return Mistake("Usage: /rename New Name");
                 if (command.Argument.Length > UpdateChatValidator.MaxNameLength)
-                    return UpdateChatValidator.TooLongName;
+                    return Mistake(UpdateChatValidator.TooLongName);
 
                 // Renaming tells the chat itself, however it is done.
                 var result = await sender.Send(new UpdateChatCommand(chatId, command.Argument, userId), ct);
-                return result.IsSuccess ? null : new Feedback(result.Error!);
+                return result.IsSuccess ? null : Mistake(result.Error!);
             }
 
             case "/bots":
