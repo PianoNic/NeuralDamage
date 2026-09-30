@@ -143,6 +143,14 @@ public class BotReplyFormatterTests
     }
 
     [Test]
+    public async Task Split_CollapsesRunawaySymbolRuns()
+    {
+        var reply = new string('!', 400) + " zig's a cool one... really?? 😂😂😂😂";
+        await Assert.That(BotReplyFormatter.Split(reply, 3))
+            .IsEquivalentTo(["!!! zig's a cool one... really?? 😂😂😂😂"]);
+    }
+
+    [Test]
     public async Task StripMarkdown_RemovesHeadingsBoldAndBullets()
     {
         var text = BotReplyFormatter.StripMarkdown("## Verdict\n- **yes** it is\n* __really__ *stellar*, 2 * 3 * 4");

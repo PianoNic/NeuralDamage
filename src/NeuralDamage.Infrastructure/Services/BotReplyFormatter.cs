@@ -16,6 +16,7 @@ public static partial class BotReplyFormatter
     {
         var parts = BlankLines().Split(reply)
             .Select(StripMarkdown)
+            .Select(p => RepeatedSymbol().Replace(p, "$1$1$1"))
             .Where(p => p.Length > 0)
             .ToList();
 
@@ -101,6 +102,11 @@ public static partial class BotReplyFormatter
     // The history's line headers: "[Alice]:", "[Alice, 2h later] (→ Bob):".
     [GeneratedRegex(@"^[ \t]*\[[^\]\n]{1,60}\](?:[ \t]*\([^)\n]*\))*[ \t]*:", RegexOptions.Multiline)]
     private static partial Regex SpeakerHeader();
+
+    // A symbol repeated past three ("!!!!!!!!"): what a model that has
+    // degenerated sends, hundreds of times over. Nobody types more than three.
+    [GeneratedRegex(@"([^\p{L}\p{N}\s])\1{3,}")]
+    private static partial Regex RepeatedSymbol();
 
     [GeneratedRegex(@"\n\s*\n")]
     private static partial Regex BlankLines();
