@@ -88,6 +88,7 @@ public class BotResponseOrchestrator(
             var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").ToList();
             var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
 
+            var roundSent = new List<Message>();
             foreach (var bot in responders)
             {
                 cts.Token.ThrowIfCancellationRequested();
@@ -97,9 +98,13 @@ public class BotResponseOrchestrator(
                 await Task.Delay(BotBehaviorOptions.Between(_options.ReadDelayMin, _options.ReadDelayMax), cts.Token);
 
                 typingShown = true;
-                var sent = await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, cts.Token);
-                await ChainAsync(scope.ServiceProvider, chatId, bot, bots, sent, depth + 1, cts.Token);
+                roundSent.AddRange(await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, cts.Token));
             }
+
+            // One hop per round, however many bots answered: chaining from each
+            // responder doubled the rounds at every hop, so two chatty bots
+            // could post a couple of dozen messages after a single question.
+            await ChainAsync(scope.ServiceProvider, chatId, bots, roundSent, depth + 1, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -123,10 +128,10 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>
-    /// Offers a bot's reply to the other bots, so they can answer it - until
+    /// Offers a round's replies to the bots, so they can answer them - until
     /// the chain is <see cref="BotBehaviorOptions.MaxBotChainDepth"/> hops long.
     /// </summary>
-    private async Task ChainAsync(IServiceProvider services, Guid chatId, Bot bot, List<Bot> bots, List<Message> sent, int depth, CancellationToken ct)
+    private async Task ChainAsync(IServiceProvider services, Guid chatId, List<Bot> bots, List<Message> sent, int depth, CancellationToken ct)
     {
         if (sent.Count == 0 || depth > _options.MaxBotChainDepth)
             return;
@@ -135,10 +140,10 @@ public class BotResponseOrchestrator(
         if (queue is null)
             return;
 
-        // A split reply is decided on once: by the part that names another bot
+        // The round is decided on once: by the message that names another bot
         // if there is one, since naming is what makes a bot answer.
         var chainFrom = sent.FirstOrDefault(m => bots.Any(b =>
-                b.Id != bot.Id && FuzzyNameMatcher.IsNameMentioned(m.Content, b.Name, b.Aliases)))
+                b.Id != m.SenderBotId && FuzzyNameMatcher.IsNameMentioned(m.Content, b.Name, b.Aliases)))
             ?? sent[^1];
 
         await queue.EnqueueAsync(chatId, chainFrom.Id, depth, ct);
