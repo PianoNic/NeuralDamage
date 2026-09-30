@@ -2,6 +2,7 @@ export * from './addMemberRequest';
 export * from './appConfigurationDto';
 export * from './attachmentDto';
 export * from './attachmentLimitsDto';
+export * from './botAvatarDto';
 export * from './botCreatorDto';
 export * from './botDto';
 export * from './botSummaryDto';

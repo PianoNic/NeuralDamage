@@ -81,7 +81,7 @@ public class ModelStatusTests
         await Assert.That(state.TryMarkModelNotice(chatId, bot.Id)).IsFalse();
 
         var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0), state);
-        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, "a/new", null, null, null, null, null, null), CancellationToken.None);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, "a/new", null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(state.TryMarkModelNotice(chatId, bot.Id)).IsTrue();

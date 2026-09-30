@@ -51,7 +51,7 @@ public class ChatScopedBotTests
         new(db, Substitute.For<IChatNotificationService>(), new ChatBotState(), Substitute.For<IOpenRouterService>(), NoCap);
 
     private static CreateBotCommand NewBot(string name, Guid ownerId, bool isPublic = true, Guid? chatId = null, string? aliases = null) =>
-        new(name, "m/x", "x", null, 0.7, null, aliases, ownerId, isPublic, chatId);
+        new(name, "m/x", "x", null, 0.7, aliases, ownerId, isPublic, chatId);
 
     [Test]
     public async Task CreatePublicBot_OutsideAChat_MayReuseAnyName()
@@ -129,8 +129,8 @@ public class ChatScopedBotTests
         using var _ = w.Db;
         var handler = new UpdateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
 
-        var clash = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, "rex", null, null, null, null, null, null, null), CancellationToken.None);
-        var ownCase = await handler.Handle(new UpdateBotCommand(w.Rex.Id, w.Owner.Id, "REX", null, null, null, null, null, null, null), CancellationToken.None);
+        var clash = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, "rex", null, null, null, null, null, null), CancellationToken.None);
+        var ownCase = await handler.Handle(new UpdateBotCommand(w.Rex.Id, w.Owner.Id, "REX", null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(clash.IsFailure).IsTrue();
         await Assert.That(clash.Error).IsEqualTo("This chat already has a bot named rex.");
@@ -190,8 +190,8 @@ public class ChatScopedBotTests
         await w.Db.SaveChangesAsync();
         var handler = new UpdateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
 
-        var clash = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, null, null, null, null, null, null, "bits, Doggo", null), CancellationToken.None);
-        var own = await handler.Handle(new UpdateBotCommand(w.Rex.Id, w.Owner.Id, null, null, null, null, null, null, "doggo, rexy", null), CancellationToken.None);
+        var clash = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, null, null, null, null, null, "bits, Doggo", null), CancellationToken.None);
+        var own = await handler.Handle(new UpdateBotCommand(w.Rex.Id, w.Owner.Id, null, null, null, null, null, "doggo, rexy", null), CancellationToken.None);
 
         await Assert.That(clash.Error).IsEqualTo("This chat already has a bot nicknamed Doggo (Rex).");
         await Assert.That((await w.Db.Bots.AsNoTracking().SingleAsync(b => b.Id == w.Byte.Id)).Aliases).IsNull();
@@ -207,7 +207,7 @@ public class ChatScopedBotTests
         await w.Db.SaveChangesAsync();
         var handler = new UpdateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
 
-        var result = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, "DOGGO", null, null, null, null, null, null, null), CancellationToken.None);
+        var result = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, "DOGGO", null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.Error).IsEqualTo("This chat already has a bot nicknamed DOGGO (Rex).");
     }

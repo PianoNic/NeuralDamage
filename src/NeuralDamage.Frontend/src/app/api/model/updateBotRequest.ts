@@ -15,7 +15,6 @@ export interface UpdateBotRequest {
     systemPrompt?: string | null;
     personality?: string | null;
     temperature?: number | null;
-    avatarUrl?: string | null;
     aliases?: string | null;
     isActive?: boolean | null;
 }

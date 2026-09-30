@@ -7,7 +7,7 @@ using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Application.Commands;
 
-public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? AvatarUrl, string? Aliases, bool? IsActive) : ICommand<Result>;
+public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? Aliases, bool? IsActive) : ICommand<Result>;
 
 public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy, IChatBotState botState) : ICommandHandler<UpdateBotCommand, Result>
 {
@@ -47,7 +47,6 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
         if (request.SystemPrompt is not null) bot.SystemPrompt = request.SystemPrompt;
         if (request.Personality is not null) bot.Personality = request.Personality;
         if (request.Temperature is not null) bot.Temperature = request.Temperature.Value;
-        if (request.AvatarUrl is not null) bot.AvatarUrl = request.AvatarUrl;
         if (request.Aliases is not null) bot.Aliases = request.Aliases;
         if (request.IsActive is not null) bot.IsActive = request.IsActive.Value;
 

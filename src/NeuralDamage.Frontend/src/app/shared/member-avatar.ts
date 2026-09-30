@@ -1,5 +1,6 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { HlmAvatarImports } from '@spartan-ng/helm/avatar';
+import { AvatarImages, isApiAvatar } from './avatar-images';
 import { initials } from './initials';
 import { providerIconUrl } from './provider-icon';
 
@@ -35,10 +36,19 @@ export class MemberAvatar {
   /** Pixel size of the avatar. */
   readonly px = input(28);
 
+  private readonly images = inject(AvatarImages);
+
   protected readonly letters = computed(() => initials(this.name()));
-  protected readonly brandIcon = computed(() => !this.avatarUrl() && !!this.modelId());
+  /** The member's own picture, once it has loaded. A bot's comes from the API with the token. */
+  private readonly own = computed(() => {
+    const url = this.avatarUrl();
+    if (!url) return null;
+    return isApiAvatar(url) ? this.images.get(url)() : url;
+  });
+  /** No picture of its own (yet), so the model vendor's icon stands in. */
+  protected readonly brandIcon = computed(() => !this.own() && !!this.modelId());
   protected readonly src = computed(
-    () => this.avatarUrl() || (this.modelId() ? providerIconUrl({ id: this.modelId()! }) : null),
+    () => this.own() || (this.modelId() ? providerIconUrl({ id: this.modelId()! }) : null),
   );
   protected readonly fontSize = computed(() => Math.max(10, Math.round(this.px() * 0.38)));
 }

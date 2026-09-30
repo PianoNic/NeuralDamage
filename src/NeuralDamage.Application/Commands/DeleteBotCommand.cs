@@ -4,6 +4,7 @@ using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Models;
+using NeuralDamage.Infrastructure.Services.Attachments;
 
 namespace NeuralDamage.Application.Commands;
 
@@ -11,9 +12,10 @@ public record DeleteBotCommand(Guid BotId, Guid RequestingUserId) : ICommand<Res
 
 /// <summary>
 /// Retires a bot: it stops answering and leaves every chat it is in. The row
-/// stays, so the messages it already sent keep their sender.
+/// stays, so the messages it already sent keep their sender. Its own picture
+/// goes, and those messages show its model's icon.
 /// </summary>
-public class DeleteBotHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<DeleteBotCommand, Result>
+public class DeleteBotHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IAttachmentStorage storage) : ICommandHandler<DeleteBotCommand, Result>
 {
     public async ValueTask<Result> Handle(DeleteBotCommand request, CancellationToken cancellationToken)
     {
@@ -25,6 +27,8 @@ public class DeleteBotHandler(NeuralDamageDbContext db, IChatNotificationService
             return Result.Failure("Only the bot creator can delete this bot.");
 
         bot.IsActive = false;
+        bot.AvatarUrl = null;
+        storage.DeleteBotAvatar(bot.Id);
         var memberships = await db.ChatMembers.Where(cm => cm.BotId == bot.Id).ToListAsync(cancellationToken);
         db.ChatMembers.RemoveRange(memberships);
         await db.SaveChangesAsync(cancellationToken);

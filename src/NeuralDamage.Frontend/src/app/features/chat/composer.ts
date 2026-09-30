@@ -25,7 +25,7 @@ import {
   lucideSmile,
   lucideX,
 } from '@ng-icons/lucide';
-import { HlmAvatarImports } from '@spartan-ng/helm/avatar';
+import { MemberAvatar } from '../../shared/member-avatar';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmPopoverImports } from '@spartan-ng/helm/popover';
@@ -36,7 +36,6 @@ import { firstValueFrom } from 'rxjs';
 import { AttachmentsService } from '../../api/api/attachments.service';
 import { toastApiError } from '../../core/http-errors';
 import { ChatMember, Message } from '../../core/models';
-import { initials } from '../../shared/initials';
 import { AppConfig } from '../../core/app-config';
 import { imageProblem } from './attachments';
 
@@ -106,7 +105,7 @@ export interface Suggestion {
   selector: 'app-composer',
   imports: [
     NgIcon,
-    HlmAvatarImports,
+    MemberAvatar,
     HlmBadge,
     HlmButton,
     HlmPopoverImports,
@@ -157,12 +156,7 @@ export interface Suggestion {
                 <span class="font-medium">{{ item.label }}</span>
                 <span class="text-muted-foreground truncate">{{ item.description }}</span>
               } @else {
-                <hlm-avatar size="sm">
-                  @if (item.member?.avatarUrl) {
-                    <img hlmAvatarImage [src]="item.member!.avatarUrl" alt="" />
-                  }
-                  <span hlmAvatarFallback class="text-[10px]">{{ initialsOf(item.label) }}</span>
-                </hlm-avatar>
+                <app-member-avatar [name]="item.label" [avatarUrl]="item.member?.avatarUrl" [modelId]="item.member?.modelId" [px]="24" />
                 <span class="truncate">{{ item.label }}</span>
                 @if (item.member?.memberType === 'bot') {
                   <span hlmBadge variant="secondary" class="ms-auto">Bot</span>
@@ -630,10 +624,6 @@ export class Composer {
     const at = el.selectionStart ?? text.length;
     this.content.set(text.slice(0, at) + emoji + text.slice(el.selectionEnd ?? at));
     this.focusInput(at + emoji.length);
-  }
-
-  protected initialsOf(name: string): string {
-    return initials(name);
   }
 
   protected onKeyDown(event: KeyboardEvent): void {
