@@ -88,7 +88,8 @@ const TYPING_SEND_INTERVAL_MS = 3000;
         [currentUserId]="currentUserId()"
         [replyingTo]="replyingTo()"
         [placeholder]="placeholder()"
-        (send)="sendMessage($event.content)"
+        [chatId]="chatId()"
+        (send)="sendMessage($event.content, $event.attachmentIds)"
         (typing)="onTyping()"
         (cancelReply)="replyingTo.set(null)"
       />
@@ -247,18 +248,23 @@ export class Chat implements OnDestroy {
     this.resetTyping();
   }
 
-  protected async sendMessage(content: string): Promise<void> {
+  protected async sendMessage(content: string, attachmentIds: string[] = []): Promise<void> {
     if (!this.currentChatId) return;
     const replyToId = this.replyingTo()?.id;
     this.list()?.scrollToBottom();
     try {
       await firstValueFrom(
-        this.messagesApi.apiChatsChatIdMessagesPost(this.currentChatId, { content, replyToId }),
+        this.messagesApi.apiChatsChatIdMessagesPost(this.currentChatId, {
+          content,
+          replyToId,
+          attachmentIds: attachmentIds.length ? attachmentIds : undefined,
+        }),
       );
       this.replyingTo.set(null);
       // Let the next keystroke announce typing again straight away.
       this.lastTypingSent = 0;
     } catch (error) {
+      this.composer()?.restoreDraft(content);
       const rejected = error instanceof HttpErrorResponse && error.status === 400;
       toast.error(
         rejected

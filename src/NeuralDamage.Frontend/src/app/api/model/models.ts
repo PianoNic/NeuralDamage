@@ -1,4 +1,5 @@
 export * from './addMemberRequest';
+export * from './attachmentDto';
 export * from './botCreatorDto';
 export * from './botDto';
 export * from './botSummaryDto';

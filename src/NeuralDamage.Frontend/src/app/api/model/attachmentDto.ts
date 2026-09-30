@@ -9,9 +9,13 @@
  */
 
 
-export interface SendMessageRequest { 
-    content: string;
-    replyToId?: string | null;
-    attachmentIds?: Array<string> | null;
+export interface AttachmentDto { 
+    id: string;
+    url: string;
+    contentType: string;
+    sizeBytes: number;
+    width?: number | null;
+    height?: number | null;
+    description?: string | null;
 }
 

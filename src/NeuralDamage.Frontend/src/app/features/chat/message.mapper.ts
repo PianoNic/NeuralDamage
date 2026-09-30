@@ -30,6 +30,7 @@ export function toMessage(dto: MessageDto): Message {
     mentions: dto.mentions ?? [],
     reactions: dto.reactions ?? [],
     replyTo: dto.replyTo ?? null,
+    attachments: dto.attachments ?? [],
     createdAt: dto.createdAt,
   };
 }

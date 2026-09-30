@@ -3,6 +3,7 @@ README.md
 api.module.ts
 api/api.ts
 api/applicationConfiguration.service.ts
+api/attachments.service.ts
 api/bots.service.ts
 api/chatActions.service.ts
 api/chatBots.service.ts
@@ -18,6 +19,7 @@ encoder.ts
 git_push.sh
 index.ts
 model/addMemberRequest.ts
+model/attachmentDto.ts
 model/botCreatorDto.ts
 model/botDto.ts
 model/botSummaryDto.ts

@@ -8,6 +8,7 @@
  * Do not edit the class manually.
  */
 import { BotSummaryDto } from './botSummaryDto';
+import { AttachmentDto } from './attachmentDto';
 import { UserDto } from './userDto';
 import { ReactionGroupDto } from './reactionGroupDto';
 import { ReplyInfoDto } from './replyInfoDto';
@@ -26,5 +27,6 @@ export interface MessageDto {
     senderBot?: BotSummaryDto;
     reactions: Array<ReactionGroupDto>;
     replyTo?: ReplyInfoDto;
+    attachments: Array<AttachmentDto>;
 }
 
