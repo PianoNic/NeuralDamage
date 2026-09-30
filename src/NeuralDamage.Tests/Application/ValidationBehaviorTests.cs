@@ -25,6 +25,28 @@ public class ValidationBehaviorTests
     }
 
     [Test]
+    [Arguments("", "Chat names cannot be empty.")]
+    [Arguments("   ", "Chat names cannot be empty.")]
+    [Arguments(null, "Chat names can be at most 256 characters.")]
+    public async Task RenamingFromTheMenu_RejectsWhatRenameRejects(string? name, string message)
+    {
+        var behavior = new ValidationBehavior<UpdateChatCommand, Result>([new UpdateChatValidator()]);
+        var command = new UpdateChatCommand(Guid.NewGuid(), name ?? new string('x', 257), Guid.NewGuid());
+
+        var thrown = await Assert.That(async () => await behavior.Handle(command, (_, _) => ValueTask.FromResult(Result.Success()), CancellationToken.None))
+            .Throws<ValidationException>();
+        await Assert.That(thrown!.Errors.Single().ErrorMessage).IsEqualTo(message);
+    }
+
+    [Test]
+    public async Task RenamingFromTheMenu_AcceptsANameOfTheMaximumLength()
+    {
+        var result = await new UpdateChatValidator().ValidateAsync(new UpdateChatCommand(Guid.NewGuid(), new string('x', 256), Guid.NewGuid()));
+
+        await Assert.That(result.IsValid).IsTrue();
+    }
+
+    [Test]
     public async Task TooLongMessage_IsRejected()
     {
         var command = new SendMessageCommand(Guid.NewGuid(), Guid.NewGuid(), new string('x', 4001));
