@@ -38,9 +38,9 @@ public class BotReplyTriggerTests
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var ranking = Substitute.For<IBotRankingService>();
-        ranking.RankAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns("{\"responders\": []}");
+        var decisions = Substitute.For<IDecisionsClient>();
+        decisions.DecideAsync(Arg.Any<object>(), Arg.Any<IReadOnlyDictionary<string, DecisionQuestion>>(), Arg.Any<CancellationToken>())
+            .Returns(new DecisionsResponse(null, null, [], null));
         var openRouter = Substitute.For<IOpenRouterService>();
         openRouter.GenerateResponseAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>())
             .Returns("it absolutely does");
@@ -52,12 +52,14 @@ public class BotReplyTriggerTests
         services.AddSingleton(openRouter);
         services.AddSingleton<IBotDecisionEngine>(new BotDecisionEngine(
             db,
-            new Tier3LlmJudge(ranking, NullLogger<Tier3LlmJudge>.Instance),
+            new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance),
+            new ChatBotState(),
             NullLogger<BotDecisionEngine>.Instance));
         var provider = services.BuildServiceProvider();
 
         var orchestrator = new BotResponseOrchestrator(
             provider.GetRequiredService<IServiceScopeFactory>(),
+            new ChatBotState(),
             NullLogger<BotResponseOrchestrator>.Instance,
             InstantBotOptions.Create());
 

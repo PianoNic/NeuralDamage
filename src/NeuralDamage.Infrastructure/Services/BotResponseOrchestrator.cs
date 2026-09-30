@@ -187,7 +187,7 @@ public class BotResponseOrchestrator(
                 // Both attempts failed or came back empty: say so rather than
                 // leave the room waiting on a bot that is never going to answer.
                 await notifications.NotifySystemMessage(chatId, $"{bot.Name} failed to respond.");
-                return;
+                return [];
             }
 
             // Saying the same thing twice is the quickest way to sound like a

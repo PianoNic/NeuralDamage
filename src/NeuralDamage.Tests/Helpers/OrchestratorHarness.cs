@@ -66,6 +66,7 @@ public sealed class OrchestratorHarness : IDisposable
 
         var orchestrator = new BotResponseOrchestrator(
             provider.GetRequiredService<IServiceScopeFactory>(),
+            new ChatBotState(),
             NullLogger<BotResponseOrchestrator>.Instance,
             options);
 
