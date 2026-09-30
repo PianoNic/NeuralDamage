@@ -26,7 +26,7 @@ const httpLoaderFactory = (httpClient: HttpClient) => {
         responseType: 'code',
         silentRenew: false,
         useRefreshToken: false,
-        secureRoutes: [environment.apiBaseUrl],
+        secureRoutes: [`${environment.apiBaseUrl}/api/`],
         unauthorizedRoute: '/login',
         logLevel: environment.production ? LogLevel.None : LogLevel.Debug,
       })),
