@@ -3,7 +3,9 @@ using NeuralDamage.Infrastructure.Models;
 namespace NeuralDamage.Infrastructure.Services;
 
 public record ChatMessage(string Role, string Content);
-public record OpenRouterModel(string Id, string Name, int? ContextLength);
+/// <summary>Dollars per million tokens.</summary>
+public record ModelPricing(decimal Prompt, decimal Completion);
+public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelPricing? Pricing = null);
 
 public interface IOpenRouterService
 {

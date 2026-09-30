@@ -55,6 +55,10 @@ Oidc__Scope=openid profile email
 # OpenRouter (AI models)
 OpenRouter__ApiKey=sk-or-v1-your-key-here
 
+# Model price caps ($/million tokens, 0 or unset = no limit)
+OpenRouter__MaxPromptPrice=0.25
+OpenRouter__MaxCompletionPrice=0.60
+
 # Bot response ranking - any OpenAI-compatible endpoint (optional)
 BotRanking__Endpoint=https://your-gateway.example.com/v1
 BotRanking__ApiKey=your-ranking-api-key

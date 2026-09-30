@@ -22,6 +22,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
+builder.Services.AddSingleton(ModelPriceCap.FromConfiguration(builder.Configuration));
 builder.Services.AddScoped<IOpenRouterService, OpenRouterAgentService>();
 builder.Services.AddSingleton<IBotRankingService, LlmRankingService>();
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();

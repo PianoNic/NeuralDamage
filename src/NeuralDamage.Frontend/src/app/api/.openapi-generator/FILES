@@ -24,6 +24,7 @@ model/chatMemberDto.ts
 model/createBotRequest.ts
 model/createChatRequest.ts
 model/messageDto.ts
+model/modelPricing.ts
 model/models.ts
 model/openRouterModel.ts
 model/problemDetails.ts

@@ -1,12 +1,28 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Domain;
+using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Tests.Helpers;
+using NSubstitute;
 
 namespace NeuralDamage.Tests.Commands;
 
 public class BotCrudHandlerTests
 {
+    private static readonly ModelPriceCap NoCap = new(0, 0);
+    private static readonly ModelPriceCap Cap = new(0.25m, 0.60m);
+
+    private static IOpenRouterService Catalogue()
+    {
+        var openRouter = Substitute.For<IOpenRouterService>();
+        openRouter.ListModelsAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new OpenRouterModel("cheap/model", "Cheap", 8000, new ModelPricing(0.10m, 0.40m)),
+            new OpenRouterModel("pricey/model", "Pricey", 8000, new ModelPricing(2.50m, 10m)),
+        ]);
+        return openRouter;
+    }
+
     private static async Task<(NeuralDamage.Infrastructure.NeuralDamageDbContext db, User user)> Setup()
     {
         var db = TestDbContext.Create();
@@ -22,7 +38,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db);
+        var handler = new CreateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap);
         var result = await handler.Handle(new CreateBotCommand("GPT", "openai/gpt-4o", "Be helpful", null, 0.7, null, "gpt,chatgpt", user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -41,7 +57,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new UpdateBotHandler(db);
+        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap);
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "GPT v2", null, "New prompt", null, 0.9, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -62,11 +78,81 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new UpdateBotHandler(db);
+        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap);
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, other.Id, "Hacked", null, null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(bot.Name).IsEqualTo("GPT");
+    }
+
+    [Test]
+    public async Task CreateBot_ModelOverCap_Fails()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+
+        var handler = new CreateBotHandler(db, Catalogue(), Cap);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "pricey/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(await db.Bots.CountAsync()).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CreateBot_ModelMissingFromCatalogue_FailsUnderCap()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+
+        var handler = new CreateBotHandler(db, Catalogue(), Cap);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "made/up", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateBot_ModelWithinCap_Succeeds()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+
+        var handler = new CreateBotHandler(db, Catalogue(), Cap);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task UpdateBot_ChangeToModelOverCap_Fails()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+        var bot = new Bot { Name = "GPT", ModelId = "cheap/model", SystemPrompt = "X", CreatedById = user.Id };
+        db.Bots.Add(bot);
+        await db.SaveChangesAsync();
+
+        var handler = new UpdateBotHandler(db, Catalogue(), Cap);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null, null), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(bot.ModelId).IsEqualTo("cheap/model");
+        await Assert.That(bot.Name).IsEqualTo("GPT");
+    }
+
+    [Test]
+    public async Task UpdateBot_UnchangedModelOverCap_StillEditable()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+        var bot = new Bot { Name = "GPT", ModelId = "pricey/model", SystemPrompt = "X", CreatedById = user.Id };
+        db.Bots.Add(bot);
+        await db.SaveChangesAsync();
+
+        var handler = new UpdateBotHandler(db, Catalogue(), Cap);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null, null), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(bot.Name).IsEqualTo("Renamed");
     }
 
     [Test]
