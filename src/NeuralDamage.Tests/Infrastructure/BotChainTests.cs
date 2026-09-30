@@ -73,6 +73,36 @@ public class BotChainTests
     }
 
     [Test]
+    public async Task ChainRound_NeverRepeatsAReplyTheBotAlreadySplitIntoParts()
+    {
+        var queue = new BotResponseQueue();
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2,
+            configure: s => s.AddSingleton<IBotResponseQueue>(queue));
+        var (gpt, claude) = (h.Bots[0], h.Bots[1]);
+        // Both answer the person; then GPT answers Claude, and Claude GPT.
+        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.ArgAt<Message>(1).SenderBotId switch
+            {
+                null => [gpt.Id, claude.Id],
+                var id when id == claude.Id => [gpt.Id],
+                _ => [claude.Id],
+            });
+        const string answer = "honestly pineapple is the best topping\n\nfight me on this one, I will not back down";
+        // GPT's answer to the person, Claude's, then GPT on the chain round
+        // saying the same thing twice more, regeneration included.
+        h.Reply(answer, "nah, mushrooms all the way", answer, answer);
+        var trigger = await h.SayAsync("what's the best pizza topping?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+        await DrainAsync(h, queue);
+
+        var fromGpt = await h.MessagesFromAsync(gpt);
+        await Assert.That(fromGpt.Select(m => m.Content)).IsEquivalentTo(
+            ["honestly pineapple is the best topping", "fight me on this one, I will not back down"]);
+        await h.OpenRouter.ReceivedWithAnyArgs(4).GenerateResponseAsync(default!, default, default!, default!, default);
+    }
+
+    [Test]
     public async Task PersonSpeaking_EndsTheChain()
     {
         var (h, queue) = await TwoChattyBotsAsync();

@@ -224,22 +224,27 @@ public class BotResponseOrchestrator(
             }
 
             // Saying the same thing twice is the quickest way to sound like a
-            // bot, so a near-repeat of a recent message gets one more try.
-            var ownRecent = recentMessages.Where(m => m.SenderBotId == bot.Id).TakeLast(5).Select(m => m.Content).ToList();
-            if (BotReplyFormatter.IsNearDuplicate(responseText, ownRecent))
+            // bot, so a near-repeat of a recent message gets one more try, and
+            // is dropped if the model repeats itself again. The check runs on
+            // what would actually be posted, and against whole earlier replies
+            // as well as their parts: a reply split into a few messages is
+            // never a near-duplicate of any one of them on its own.
+            var ownRecent = OwnRecentReplies(recentMessages, bot.Id);
+            var parts = ToParts(responseText, bot.Name);
+            if (Repeats(parts, ownRecent))
             {
                 logger.LogInformation("Bot {BotName} repeated itself; regenerating once", bot.Name);
                 var retry = await GenerateAsync(openRouter, bot,
                     systemPrompt + $"\n\nYou were about to say \"{responseText}\", which repeats something you already said. Say something different.",
                     history, ct);
-                if (!string.IsNullOrWhiteSpace(retry))
-                    responseText = retry;
+                parts = string.IsNullOrWhiteSpace(retry) ? [] : ToParts(retry, bot.Name);
+                if (parts.Count == 0 || Repeats(parts, ownRecent))
+                {
+                    logger.LogInformation("Bot {BotName} repeated itself again; dropping the reply", bot.Name);
+                    return [];
+                }
             }
 
-            // Strip any name prefix the model might add, and any lines it wrote
-            // for other people.
-            var ownTurn = BotReplyFormatter.DropOtherSpeakers(StripNamePrefix(responseText, bot.Name));
-            var parts = BotReplyFormatter.Split(ownTurn, _options.MaxReplyParts);
             var sent = new List<Message>();
 
             for (var i = 0; i < parts.Count; i++)
@@ -452,6 +457,38 @@ public class BotResponseOrchestrator(
 
         try { cts.Cancel(); }
         catch (ObjectDisposedException) { } // the round finished in between; nothing to cancel
+    }
+
+    /// <summary>
+    /// Cleans a model's reply into the messages that would be posted: its own
+    /// name prefix and any lines written for other people go, then it is split.
+    /// </summary>
+    private List<string> ToParts(string reply, string botName) =>
+        BotReplyFormatter.Split(BotReplyFormatter.DropOtherSpeakers(StripNamePrefix(reply, botName)), _options.MaxReplyParts);
+
+    private static bool Repeats(List<string> parts, List<string> ownRecent) =>
+        BotReplyFormatter.IsNearDuplicate(string.Join("\n", parts), ownRecent)
+        || parts.Any(p => BotReplyFormatter.IsNearDuplicate(p, ownRecent));
+
+    /// <summary>
+    /// The bot's last few messages, plus its last few replies put back
+    /// together: a reply starts with the message that carries the reply link,
+    /// and the parts after it carry on without one.
+    /// </summary>
+    private static List<string> OwnRecentReplies(IEnumerable<Message> chronological, Guid botId)
+    {
+        var own = chronological.Where(m => m.SenderBotId == botId).ToList();
+        var replies = new List<List<string>>();
+        foreach (var m in own)
+        {
+            if (m.ReplyToId is not null || replies.Count == 0)
+                replies.Add([]);
+            replies[^1].Add(m.Content);
+        }
+
+        return own.TakeLast(5).Select(m => m.Content)
+            .Concat(replies.TakeLast(3).Where(r => r.Count > 1).Select(r => string.Join("\n", r)))
+            .ToList();
     }
 
     private static string StripNamePrefix(string text, string botName)
