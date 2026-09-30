@@ -34,4 +34,9 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 COPY --from=frontend-build /src/frontend/dist/NeuralDamage.Frontend/browser ./wwwroot
+# Uploaded images (Attachments:Path). Created here, owned by the app user, so a
+# volume mounted on it starts out writable.
+USER root
+RUN mkdir -p /app/data/attachments && chown -R $APP_UID /app/data
+USER $APP_UID
 ENTRYPOINT ["dotnet", "NeuralDamage.API.dll"]

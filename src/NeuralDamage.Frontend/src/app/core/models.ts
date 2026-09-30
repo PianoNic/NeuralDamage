@@ -11,6 +11,7 @@
  * Give the endpoint a response type and regenerate instead.
  */
 export type {
+  AttachmentDto,
   BotDto,
   BotSummaryDto,
   ChatDetailDto,
@@ -23,7 +24,7 @@ export type {
   UserDto,
 } from '../api';
 
-import type { ReactionGroupDto, ReplyInfoDto } from '../api';
+import type { AttachmentDto, ReactionGroupDto, ReplyInfoDto } from '../api';
 
 /**
  * A message as the templates render it. The wire nests sender identity under
@@ -44,6 +45,8 @@ export interface Message {
   mentions: string[];
   reactions: ReactionGroupDto[];
   replyTo: ReplyInfoDto | null;
+  /** Images on the message; their `url` is relative to the API and needs the token. */
+  attachments: AttachmentDto[];
   createdAt: string;
 }
 

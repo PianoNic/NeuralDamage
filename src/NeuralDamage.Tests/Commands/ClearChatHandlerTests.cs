@@ -25,7 +25,7 @@ public class ClearChatHandlerTests
         db.Messages.Add(new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "msg 3" });
         await db.SaveChangesAsync();
 
-        var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>());
+        var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>(), Substitute.For<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>());
         var result = await handler.Handle(new ClearChatCommand(chat.Id, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -46,7 +46,7 @@ public class ClearChatHandlerTests
         db.Messages.Add(new Message { ChatId = chat.Id, SenderUserId = owner.Id, Content = "msg" });
         await db.SaveChangesAsync();
 
-        var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>());
+        var handler = new ClearChatHandler(db, Substitute.For<IChatNotificationService>(), Substitute.For<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>());
         var result = await handler.Handle(new ClearChatCommand(chat.Id, member.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();

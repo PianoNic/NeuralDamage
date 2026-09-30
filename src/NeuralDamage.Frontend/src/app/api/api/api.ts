@@ -1,5 +1,7 @@
 export * from './applicationConfiguration.service';
 import { ApplicationConfigurationService } from './applicationConfiguration.service';
+export * from './attachments.service';
+import { AttachmentsService } from './attachments.service';
 export * from './bots.service';
 import { BotsService } from './bots.service';
 export * from './chatActions.service';
@@ -20,4 +22,4 @@ export * from './reactions.service';
 import { ReactionsService } from './reactions.service';
 export * from './user.service';
 import { UserService } from './user.service';
-export const APIS = [ApplicationConfigurationService, BotsService, ChatActionsService, ChatBotsService, ChatMembersService, ChatsService, InternalDevOnlyService, MessagesService, NeuralDamageAPIService, ReactionsService, UserService];
+export const APIS = [ApplicationConfigurationService, AttachmentsService, BotsService, ChatActionsService, ChatBotsService, ChatMembersService, ChatsService, InternalDevOnlyService, MessagesService, NeuralDamageAPIService, ReactionsService, UserService];

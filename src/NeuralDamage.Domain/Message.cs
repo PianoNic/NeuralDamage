@@ -14,4 +14,5 @@ public class Message : BaseEntity
     public Bot? SenderBot { get; set; }
     public Message? ReplyTo { get; set; }
     public ICollection<Reaction> Reactions { get; set; } = [];
+    public ICollection<Attachment> Attachments { get; set; } = [];
 }

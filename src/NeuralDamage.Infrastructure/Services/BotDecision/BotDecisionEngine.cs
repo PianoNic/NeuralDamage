@@ -34,6 +34,7 @@ public class BotDecisionEngine(
             .Take(20)
             .Include(m => m.SenderUser)
             .Include(m => m.SenderBot)
+            .Include(m => m.Attachments)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -105,7 +106,8 @@ public class BotDecisionEngine(
                 TotalRecentMessages: recentMessages.Count,
                 // The bot just spoke and a person answered: it is in the conversation.
                 IsContinuation: message.SenderUserId is not null && justBefore.Any(m => m.SenderBotId == bot.Id),
-                MessageLength: message.Content.Length,
+                // A picture says something even without a caption.
+                MessageLength: message.Content.Length + 20 * message.Attachments.Count,
                 TotalBotsInChat: totalBotsInChat);
 
             var score = Tier2WeightedScore.ComputeScore(context);

@@ -23,7 +23,7 @@ public class DeleteChatHandlerTests
         db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = user.Id, Role = ChatMemberRole.Owner });
         await db.SaveChangesAsync();
 
-        var handler = new DeleteChatHandler(db, notifications);
+        var handler = new DeleteChatHandler(db, notifications, Substitute.For<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>());
         var result = await handler.Handle(new DeleteChatCommand(chat.Id, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -45,7 +45,7 @@ public class DeleteChatHandlerTests
         db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = other.Id, Role = ChatMemberRole.Member });
         await db.SaveChangesAsync();
 
-        var handler = new DeleteChatHandler(db, notifications);
+        var handler = new DeleteChatHandler(db, notifications, Substitute.For<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>());
         var result = await handler.Handle(new DeleteChatCommand(chat.Id, other.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();

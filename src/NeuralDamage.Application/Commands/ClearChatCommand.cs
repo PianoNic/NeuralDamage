@@ -2,6 +2,7 @@ using Mediator;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain.Enums;
@@ -10,7 +11,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record ClearChatCommand(Guid ChatId, Guid RequestingUserId) : ICommand<Result>;
 
-public class ClearChatHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<ClearChatCommand, Result>
+public class ClearChatHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IAttachmentStorage attachmentStorage) : ICommandHandler<ClearChatCommand, Result>
 {
     public async ValueTask<Result> Handle(ClearChatCommand request, CancellationToken cancellationToken)
     {
@@ -20,7 +21,9 @@ public class ClearChatHandler(NeuralDamageDbContext db, IChatNotificationService
 
         var messages = await db.Messages.Where(m => m.ChatId == request.ChatId).ToListAsync(cancellationToken);
         db.Messages.RemoveRange(messages);
+        db.Attachments.RemoveRange(await db.Attachments.Where(a => a.ChatId == request.ChatId).ToListAsync(cancellationToken));
         await db.SaveChangesAsync(cancellationToken);
+        attachmentStorage.DeleteChat(request.ChatId);
 
         await notifications.NotifyChatCleared(request.ChatId);
         return Result.Success();

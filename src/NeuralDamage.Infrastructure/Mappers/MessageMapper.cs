@@ -18,7 +18,17 @@ public static class MessageMapper
         message.SenderUser?.ToDto(),
         message.SenderBot?.ToSummaryDto(),
         message.Reactions.ToGroups(),
-        message.ReplyTo?.ToReplyInfo());
+        message.ReplyTo?.ToReplyInfo(),
+        message.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).Select(a => a.ToDto()).ToList());
+
+    public static AttachmentDto ToDto(this Attachment attachment) => new(
+        attachment.Id,
+        $"/api/chats/{attachment.ChatId}/attachments/{attachment.Id}",
+        attachment.ContentType,
+        attachment.SizeBytes,
+        attachment.Width,
+        attachment.Height,
+        attachment.Description);
 
     /// <summary>
     /// Collapses reactions by emoji. Requires the Reactions navigation, with

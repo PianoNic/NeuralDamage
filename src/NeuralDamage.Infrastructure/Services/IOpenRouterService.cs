@@ -11,6 +11,19 @@ public record ChatMessage(string Role, string Content)
     /// It is sent as a user turn, and never as part of the cached prefix.
     /// </summary>
     public const string Note = "note";
+
+    /// <summary>Pictures sent with the turn, for a model that can see them.</summary>
+    public IReadOnlyList<ImagePart> Images { get; init; } = [];
+}
+
+/// <summary>
+/// An image inlined into the request. It goes as a data URL rather than a link:
+/// the app is often not reachable from the internet, so OpenRouter could not
+/// fetch a URL, and a signed link would outlive the request anyway.
+/// </summary>
+public record ImagePart(string ContentType, byte[] Data)
+{
+    public string DataUrl => $"data:{ContentType};base64,{Convert.ToBase64String(Data)}";
 }
 /// <summary>Dollars per million tokens.</summary>
 public record ModelPricing(decimal Prompt, decimal Completion);

@@ -1,6 +1,9 @@
 import { TestBed } from '@angular/core/testing';
+import { of, throwError } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { AttachmentsService } from '../../api/api/attachments.service';
 import { ChatMember } from '../../core/models';
-import { Composer, MAX_MESSAGE_LENGTH } from './composer';
+import { Composer, MAX_MESSAGE_LENGTH, OutgoingMessage } from './composer';
 
 function member(id: string, displayName: string, memberType: 'user' | 'bot'): ChatMember {
   return {
@@ -21,8 +24,26 @@ function member(id: string, displayName: string, memberType: 'user' | 'bot'): Ch
 }
 
 describe('Composer', () => {
+  const uploads: Blob[] = [];
+  let failUpload: HttpErrorResponse | null = null;
+  const attachments = {
+    apiChatsChatIdAttachmentsPost: (_chatId: string, file: Blob) => {
+      if (failUpload) return throwError(() => failUpload);
+      uploads.push(file);
+      return of({ id: `att-${uploads.length}`, url: '/x', contentType: file.type, sizeBytes: file.size });
+    },
+  };
+
+  beforeEach(() => {
+    uploads.length = 0;
+    failUpload = null;
+  });
+
   async function setup() {
-    await TestBed.configureTestingModule({ imports: [Composer] }).compileComponents();
+    await TestBed.configureTestingModule({
+      imports: [Composer],
+      providers: [{ provide: AttachmentsService, useValue: attachments }],
+    }).compileComponents();
     const fixture = TestBed.createComponent(Composer);
     fixture.componentRef.setInput('members', [
       member('u1', 'Alice', 'user'),
@@ -31,6 +52,7 @@ describe('Composer', () => {
       member('b2', 'Grok', 'bot'),
     ]);
     fixture.componentRef.setInput('currentUserId', 'me');
+    fixture.componentRef.setInput('chatId', 'chat');
     await fixture.whenStable();
     const textarea = (fixture.nativeElement as HTMLElement).querySelector('textarea')!;
     const type = async (value: string) => {
@@ -124,5 +146,86 @@ describe('Composer', () => {
     await type('h');
     await type('');
     expect(typing).toBe(1);
+  });
+});
+
+describe('Composer images', () => {
+  beforeEach(() => {
+    URL.createObjectURL = () => 'blob:preview';
+    URL.revokeObjectURL = () => undefined;
+  });
+
+  function png(name = 'cat.png', size = 10): File {
+    return new File([new Uint8Array(size)], name, { type: 'image/png' });
+  }
+
+  async function setup(upload: (file: Blob) => unknown = (file) =>
+    of({ id: `att-${(file as File).name}`, url: '/x', contentType: 'image/png', sizeBytes: 1 })) {
+    await TestBed.configureTestingModule({
+      imports: [Composer],
+      providers: [{ provide: AttachmentsService, useValue: { apiChatsChatIdAttachmentsPost: (_: string, f: Blob) => upload(f) } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Composer);
+    fixture.componentRef.setInput('members', []);
+    fixture.componentRef.setInput('chatId', 'chat');
+    await fixture.whenStable();
+    const sent: OutgoingMessage[] = [];
+    fixture.componentInstance.send.subscribe((m) => sent.push(m));
+    return { fixture, component: fixture.componentInstance, sent };
+  }
+
+  it('uploads a pasted image and sends it, even without text', async () => {
+    const { fixture, component, sent } = await setup();
+    const textarea = (fixture.nativeElement as HTMLElement).querySelector('textarea')!;
+    const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(paste, 'clipboardData', { value: { files: [png()] } });
+    textarea.dispatchEvent(paste);
+    await fixture.whenStable();
+
+    expect(paste.defaultPrevented).toBe(true);
+    expect(component.images().map((i) => i.id)).toEqual(['att-cat.png']);
+    component.onSend();
+    expect(sent).toEqual([{ content: '', mentions: [], attachmentIds: ['att-cat.png'] }]);
+    expect(component.images()).toEqual([]);
+  });
+
+  it('takes dropped images', async () => {
+    const { fixture, component } = await setup();
+    const box = (fixture.nativeElement as HTMLElement).querySelector('textarea')!.parentElement!;
+    const drop = new Event('drop', { bubbles: true, cancelable: true }) as DragEvent;
+    Object.defineProperty(drop, 'dataTransfer', { value: { types: ['Files'], files: [png('a.png'), png('b.png')] } });
+    box.dispatchEvent(drop);
+    await fixture.whenStable();
+
+    expect(component.images().map((i) => i.id)).toEqual(['att-a.png', 'att-b.png']);
+  });
+
+  it('refuses other file types, oversized images and a fifth image before uploading', async () => {
+    const uploaded: string[] = [];
+    const { component } = await setup((file) => {
+      uploaded.push((file as File).name);
+      return of({ id: (file as File).name, url: '/x', contentType: 'image/png', sizeBytes: 1 });
+    });
+
+    component.addImages([new File(['<svg/>'], 'x.svg', { type: 'image/svg+xml' })]);
+    component.addImages([png('huge.png', 10 * 1024 * 1024 + 1)]);
+    component.addImages([png('1.png'), png('2.png'), png('3.png'), png('4.png'), png('5.png')]);
+
+    expect(uploaded).toEqual(['1.png', '2.png', '3.png', '4.png']);
+  });
+
+  it('holds the send button while an upload is in flight', async () => {
+    const { component } = await setup(() => new Promise(() => undefined) as never);
+    component.addImages([png()]);
+    expect(component.canSend()).toBe(false);
+  });
+
+  it('drops an image whose upload was refused', async () => {
+    const { component } = await setup(() =>
+      throwError(() => new HttpErrorResponse({ status: 429, error: "You're uploading images too fast." })),
+    );
+    component.addImages([png()]);
+    await Promise.resolve();
+    expect(component.images()).toEqual([]);
   });
 });

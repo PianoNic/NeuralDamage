@@ -10,6 +10,7 @@ import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
 import { Message, ReactionGroupDto } from '../../core/models';
 import { initials } from '../../shared/initials';
 import { providerIconUrl } from '../../shared/provider-icon';
+import { isAttachmentUrl, MessageImages } from './attachments';
 import { markMentions } from './mentions';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as const;
@@ -28,6 +29,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
     HlmButton,
     HlmPopoverImports,
     HlmTooltipImports,
+    MessageImages,
   ],
   providers: [provideIcons({ lucideReply, lucideSmilePlus })],
   host: {
@@ -78,23 +80,30 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
         <button
           type="button"
           class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex max-w-full min-w-0 items-center gap-1 rounded-sm text-xs outline-none focus-visible:ring-2"
-          [attr.aria-label]="'Replying to ' + reply.senderName + ': ' + reply.content + '. Go to that message.'"
+          [attr.aria-label]="'Replying to ' + reply.senderName + ': ' + (reply.content || 'an image') + '. Go to that message.'"
           (click)="jumpTo.emit(reply.id)"
         >
           <ng-icon name="lucideReply" class="shrink-0" />
           <span class="text-foreground shrink-0 font-medium">{{ reply.senderName }}</span>
-          <span class="truncate">{{ reply.content }}</span>
+          <span class="truncate">{{ reply.content || 'Image' }}</span>
         </button>
       }
 
       <div class="flex max-w-full items-center gap-1" [class.flex-row-reverse]="own()">
-        <div
-          class="max-w-[min(36rem,calc(100vw-7rem))] rounded-2xl px-3 py-2 wrap-anywhere"
-          [class.bg-primary]="own()"
-          [class.text-primary-foreground]="own()"
-          [class.bg-muted]="!own()"
-        >
-          <pk-markdown class="prose prose-chat block" [content]="body()" />
+        <div class="flex max-w-[min(36rem,calc(100vw-7rem))] flex-col gap-1" [class.items-end]="own()" [class.items-start]="!own()">
+          @if (message().attachments.length) {
+            <app-message-images [attachments]="message().attachments" [senderName]="message().senderName" />
+          }
+          @if (message().content) {
+            <div
+              class="max-w-full rounded-2xl px-3 py-2 wrap-anywhere"
+              [class.bg-primary]="own()"
+              [class.text-primary-foreground]="own()"
+              [class.bg-muted]="!own()"
+            >
+              <pk-markdown class="prose prose-chat block" [content]="body()" [allowImage]="allowImage" />
+            </div>
+          }
         </div>
 
         <!-- Visible on hover, and whenever focus is inside, so the keyboard can reach them. -->
@@ -184,6 +193,7 @@ export class MessageItem {
   readonly jumpTo = output<string>();
 
   protected readonly quickReactions = QUICK_REACTIONS;
+  protected readonly allowImage = isAttachmentUrl;
 
   protected readonly own = computed(
     () => !!this.currentUserId() && this.message().senderUserId === this.currentUserId(),

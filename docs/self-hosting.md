@@ -65,6 +65,32 @@ The web app reads the sign-in settings from `GET /api/app` at startup, so none o
 
 Out of the box, bots can only use cheap models whose providers keep no data. A model that fails any of these rules (over a price cap, without a fixed price such as `openrouter/auto`, without a zero-data-retention endpoint, a batch variant, or a model that always reasons while `DisableReasoning` is on) is hidden from the model picker and refused when a bot is created or switched to it. Every reply request also sends the caps as OpenRouter's `provider.max_price` and, with `ZdrOnly`, `provider.zdr`, so a request is never routed to a provider that charges more or retains data.
 
+### Images
+
+People can attach PNG, JPEG, WebP and GIF images to a message. Bots on a model that can see get the picture itself. For every other bot, a describer model writes a description of each image once, right after upload, and those bots (and the ranking below) read that instead.
+
+| Variable | Default | Description |
+|---|---|---|
+| `OpenRouter__VisionModel` | `google/gemma-3-12b-it` | The describer. It is held to the same policy as the bots (price caps, zero data retention, reasoning off), and `:free` variants are never used. |
+| `Attachments__Path` | `data/attachments` | Where uploads are stored, relative to the app. `compose.yml` mounts the `attachments` volume there. Deleting or clearing a chat deletes its files. |
+| `Attachments__MaxBytes` | `10485760` | Largest image, in bytes (10 MB). |
+| `Attachments__MaxPerMessage` | `4` | Most images on one message. |
+| `Attachments__DescriptionWaitSeconds` | `20` | How long a reply waits for a description that is still being written, before text-only bots answer with just "[image from alice]". |
+
+Images are only served to members of their chat.
+
+### Rate limits
+
+Each signed-in user gets a fixed window per endpoint; past it the API answers `429` and the app shows why.
+
+| Variable | Default | Description |
+|---|---|---|
+| `RateLimits__Messages__PermitLimit` / `__WindowSeconds` | `20` / `60` | Messages sent. Each one can wake paid bots. |
+| `RateLimits__Uploads__PermitLimit` / `__WindowSeconds` | `20` / `60` | Images uploaded. Each one is described by a paid model. |
+| `RateLimits__BotCreation__PermitLimit` / `__WindowSeconds` | `10` / `600` | Bots created. |
+
+A `PermitLimit` of `0` turns that limit off.
+
 ### Who replies (bot ranking)
 
 Every message goes through three tiers. Hard rules decide the clear cases (a bot is @mentioned, muted, or the chat is stopped), a weighted score settles the obvious rest, and the bots still undecided are ranked by Jev on the OpenRouter Decisions API. All of these are optional.
@@ -99,4 +125,4 @@ git pull
 docker compose up -d --build
 ```
 
-Migrations for the new version run when the container starts. The database lives in the `db-data` volume and survives rebuilds.
+Migrations for the new version run when the container starts. The database lives in the `db-data` volume and uploaded images in the `attachments` volume; both survive rebuilds.
