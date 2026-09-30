@@ -280,37 +280,6 @@ public class BotReplyFormatterTests
     }
 
     [Test]
-    [Arguments("(a long, slow breath as the quiet settles back in. she doesn't reach for the cup) so. what now?", "so. what now?")]
-    [Arguments("(smiles) (leans back) thanks", "thanks")]
-    [Arguments("ok\n(glancing at bob) you coming?", "ok\nyou coming?")]
-    [Arguments("see you at 5 (maybe)", "see you at 5 (maybe)")]
-    [Arguments("(: hi", "(: hi")]
-    [Arguments("(1) first", "(1) first")]
-    public async Task StripStageDirections(string text, string expected)
-    {
-        await Assert.That(BotReplyFormatter.StripStageDirections(text)).IsEqualTo(expected);
-    }
-
-    [Test]
-    [Arguments("Anne—wise of you", "Anne, wise of you")]
-    [Arguments("a riddle — it is a doctrine", "a riddle, it is a doctrine")]
-    [Arguments("I was going to—", "I was going to")]
-    [Arguments("— and another thing", "and another thing")]
-    [Arguments("fine; whatever", "fine, whatever")]
-    [Arguments("nice ;) see you ;-) later ;D", "nice ;) see you ;-) later ;D")]
-    public async Task ReplaceWriterPunctuation(string text, string expected)
-    {
-        await Assert.That(BotReplyFormatter.ReplaceWriterPunctuation(text)).IsEqualTo(expected);
-    }
-
-    [Test]
-    public async Task Split_StripsStageDirectionsAndWriterPunctuation()
-    {
-        await Assert.That(BotReplyFormatter.Split("(sighs) fine; whatever—go on", 3))
-            .IsEquivalentTo(["fine, whatever, go on"]);
-    }
-
-    [Test]
     public async Task Split_SingleParagraph_IsOneMessage()
     {
         await Assert.That(BotReplyFormatter.Split("just one line\nand its second line", 3))

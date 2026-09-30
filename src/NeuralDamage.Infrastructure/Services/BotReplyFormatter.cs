@@ -15,9 +15,7 @@ public static partial class BotReplyFormatter
     public static List<string> Split(string reply, int maxParts)
     {
         var parts = BlankLines().Split(reply)
-            .Select(StripStageDirections)
             .Select(StripMarkdown)
-            .Select(ReplaceWriterPunctuation)
             .Select(p => RepeatedSymbol().Replace(p, "$1$1$1"))
             .Where(p => p.Length > 0)
             .ToList();
@@ -69,28 +67,6 @@ public static partial class BotReplyFormatter
     /// inventing images nobody sent. A reply of nothing else ends up empty.
     /// </summary>
     public static string StripImageLines(string reply) => ImageLine().Replace(reply, "").Trim();
-
-    /// <summary>
-    /// Drops roleplay narration in parentheses at the start of a line: "(a long,
-    /// slow breath as the quiet settles back in) so." becomes "so.". Nobody in a
-    /// chat narrates themselves. Parentheses later in a line are ordinary text
-    /// ("see you at 5 (maybe)") and stay.
-    /// </summary>
-    public static string StripStageDirections(string text) => LeadingStageDirection().Replace(text, "").Trim();
-
-    /// <summary>
-    /// Replaces em dashes and semicolons, which people don't type in a chat and
-    /// which give a model away: "Anne—wise of you" becomes "Anne, wise of you",
-    /// "fine; whatever" becomes "fine, whatever". A dash opening or ending a line is dropped.
-    /// Winks (";)", ";D", ";-)") stay.
-    /// </summary>
-    public static string ReplaceWriterPunctuation(string text)
-    {
-        text = TrailingEmDash().Replace(text, "");
-        text = EmDash().Replace(text, ", ");
-        text = Semicolon().Replace(text, ",");
-        return text.Trim();
-    }
 
     /// <summary>Removes headings, bold/italic markers and list bullets.</summary>
     public static string StripMarkdown(string text)
@@ -162,22 +138,6 @@ public static partial class BotReplyFormatter
     // Bold or italic around text that hugs its markers, so "2 * 3 * 4" survives.
     [GeneratedRegex(@"(\*\*|__|\*)(\S(?:.*?\S)?)\1")]
     private static partial Regex Emphasis();
-
-    // One or more parenthesised asides with a letter in them, opening a line.
-    // The letter keeps emoticons and "(1)" style numbering.
-    [GeneratedRegex(@"^[ \t]*(?:\([^()\n]*\p{L}[^()\n]*\)[ \t]*)+", RegexOptions.Multiline)]
-    private static partial Regex LeadingStageDirection();
-
-    // A dash opening or ending a line, where a comma would be wrong.
-    [GeneratedRegex(@"^[ \t]*—[ \t]*|[ \t]*—[ \t]*$", RegexOptions.Multiline)]
-    private static partial Regex TrailingEmDash();
-
-    [GeneratedRegex(@"[ \t]*—[ \t]*")]
-    private static partial Regex EmDash();
-
-    // Not the eye of a wink: ";)", ";D", ";P", ";-)", ";(".
-    [GeneratedRegex(@";(?![)(DPp-])")]
-    private static partial Regex Semicolon();
 
     [GeneratedRegex(@"^(?:\s*\([^()]*\)\s*)+$")]
     private static partial Regex StageDirection();
