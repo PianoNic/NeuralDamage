@@ -60,10 +60,18 @@ public class Tier1HardRulesTests
     }
 
     [Test]
-    public async Task GroupAddress_MustRespond()
+    public async Task GroupAddress_IsGroupAddressed()
     {
         var bot = MakeBot();
         var msg = MakeMessage("hey everyone what's up?");
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.GroupAddressed);
+    }
+
+    [Test]
+    public async Task NamedAndGroupAddress_NameWins()
+    {
+        var bot = MakeBot("GPT");
+        var msg = MakeMessage("GPT and everyone else, thoughts?");
         await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustRespond);
     }
 

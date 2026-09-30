@@ -4,7 +4,7 @@ public record Tier2Context(
     bool IsGroupQuestion,
     int BotMessagesInLast20,
     int TotalRecentMessages,
-    int SecondsSinceLastBotMessage,
+    bool IsContinuation,
     int MessageLength,
     int TotalBotsInChat);
 
@@ -24,17 +24,16 @@ public static class Tier2WeightedScore
         if (context.IsGroupQuestion)
             score += 0.25;
 
-        // Recency penalty
-        if (context.SecondsSinceLastBotMessage >= 0)
-        {
-            if (context.SecondsSinceLastBotMessage < 30)
-                score -= 0.4;
-            else if (context.SecondsSinceLastBotMessage < 120)
-                score -= 0.2;
-        }
+        // Continuation bonus: the bot just spoke and a person answered, so it is
+        // in the conversation. This used to be a recency *penalty*, which made
+        // the bot go quiet exactly when the back-and-forth got going; spam is
+        // the rate cap's job now (BotBehaviorOptions.MaxRepliesPerMinute).
+        if (context.IsContinuation)
+            score += 0.35;
 
-        // Dominance penalty
-        if (context.TotalRecentMessages > 0)
+        // Dominance penalty. Not while continuing: a one-on-one exchange is half
+        // bot messages by nature, and the rate cap already stops a flood.
+        if (!context.IsContinuation && context.TotalRecentMessages > 0)
         {
             var ratio = (double)context.BotMessagesInLast20 / context.TotalRecentMessages;
             if (ratio > 0.4)

@@ -63,6 +63,11 @@ public class FuzzyNameMatcherTests
     [Arguments("y'all need to chill", true)]
     [Arguments("just a normal message", false)]
     [Arguments("what do you think?", false)]
+    [Arguments("@all standup in 5", true)]
+    [Arguments("can anyone help with this?", true)]
+    [Arguments("someone told me it rains tomorrow", false)]
+    [Arguments("i need somebody to talk to", false)]
+    [Arguments("the overall plan", false)]
     public async Task IsGroupAddress_DetectsCorrectly(string message, bool expected)
     {
         await Assert.That(FuzzyNameMatcher.IsGroupAddress(message)).IsEqualTo(expected);

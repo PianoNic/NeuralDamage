@@ -4,8 +4,16 @@ namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
 public static class FuzzyNameMatcher
 {
+    /// <summary>Addresses the whole room wherever it appears.</summary>
     private static readonly string[] GroupAddressPatterns =
-        ["everyone", "all bots", "you guys", "you all", "yall", "anyone", "somebody", "someone"];
+        ["everyone", "everybody", "@all", "all bots", "you guys", "you all", "yall"];
+
+    /// <summary>
+    /// Addresses the room only when asked: "can anyone help?" is, but
+    /// "someone told me..." is just a sentence.
+    /// </summary>
+    private static readonly string[] QuestionOnlyPatterns =
+        ["anyone", "anybody", "someone", "somebody"];
 
     public static bool IsNameMentioned(string message, string botName, string? aliases)
     {
@@ -54,12 +62,16 @@ public static class FuzzyNameMatcher
     {
         // Drop apostrophes so "y'all" and "yall" are the same term.
         var lower = message.ToLowerInvariant().Replace("'", "").Replace("’", "");
-        return GroupAddressPatterns.Any(p => lower.Contains(p));
+        if (GroupAddressPatterns.Any(p => IsWholeWordMatch(lower, p)))
+            return true;
+
+        return lower.Contains('?') && QuestionOnlyPatterns.Any(p => IsWholeWordMatch(lower, p));
     }
 
     private static bool IsWholeWordMatch(string text, string word)
     {
-        var pattern = $@"\b{Regex.Escape(word)}\b";
+        // Lookarounds rather than \b, so a term starting with a symbol ("@all") still matches.
+        var pattern = $@"(?<!\w){Regex.Escape(word)}(?!\w)";
         return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase);
     }
 }

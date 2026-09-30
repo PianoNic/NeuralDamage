@@ -8,10 +8,10 @@ public class Tier2WeightedScoreTests
         bool isQuestion = false,
         int botMessages = 0,
         int totalMessages = 20,
-        int secondsSince = -1,
+        bool isContinuation = false,
         int messageLength = 50,
         int totalBots = 2) =>
-        new(isQuestion, botMessages, totalMessages, secondsSince, messageLength, totalBots);
+        new(isQuestion, botMessages, totalMessages, isContinuation, messageLength, totalBots);
 
     [Test]
     public async Task BaseScore_IsPositive()
@@ -29,19 +29,19 @@ public class Tier2WeightedScoreTests
     }
 
     [Test]
-    public async Task RecentlySpokeUnder30s_HeavyPenalty()
+    public async Task Continuation_IncreasesScore()
     {
-        var normal = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 300));
-        var recent = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 10));
-        await Assert.That(normal > recent).IsTrue();
+        var fresh = Tier2WeightedScore.ComputeScore(DefaultContext());
+        var continuing = Tier2WeightedScore.ComputeScore(DefaultContext(isContinuation: true));
+        await Assert.That(continuing > fresh).IsTrue();
     }
 
     [Test]
-    public async Task RecentlySpoke30To120s_ModeratePenalty()
+    public async Task Continuation_OrdinaryReply_ClearsRespondThreshold()
     {
-        var normal = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 300));
-        var moderate = Tier2WeightedScore.ComputeScore(DefaultContext(secondsSince: 60));
-        await Assert.That(normal > moderate).IsTrue();
+        // The bot you are talking to must not go quiet mid-conversation.
+        var score = Tier2WeightedScore.ComputeScore(DefaultContext(isContinuation: true, botMessages: 3));
+        await Assert.That(score >= Tier2WeightedScore.RespondThreshold).IsTrue();
     }
 
     [Test]
@@ -71,12 +71,12 @@ public class Tier2WeightedScoreTests
     [Test]
     public async Task Score_NeverNegative()
     {
-        // Worst case: recently spoke, dominating, short message, many bots
+        // Worst case: dominating, short message, many bots
         var score = Tier2WeightedScore.ComputeScore(new Tier2Context(
             IsGroupQuestion: false,
             BotMessagesInLast20: 15,
             TotalRecentMessages: 20,
-            SecondsSinceLastBotMessage: 5,
+            IsContinuation: false,
             MessageLength: 2,
             TotalBotsInChat: 10));
         await Assert.That(score >= 0.0).IsTrue();
@@ -85,12 +85,12 @@ public class Tier2WeightedScoreTests
     [Test]
     public async Task Score_NeverAboveOne()
     {
-        // Best case: question, never spoke, long message, solo bot
+        // Best case: question, continuing, long message, solo bot
         var score = Tier2WeightedScore.ComputeScore(new Tier2Context(
             IsGroupQuestion: true,
             BotMessagesInLast20: 0,
             TotalRecentMessages: 20,
-            SecondsSinceLastBotMessage: -1,
+            IsContinuation: false,
             MessageLength: 500,
             TotalBotsInChat: 1));
         await Assert.That(score <= 1.0).IsTrue();
@@ -103,14 +103,14 @@ public class Tier2WeightedScoreTests
             IsGroupQuestion: true,
             BotMessagesInLast20: 0,
             TotalRecentMessages: 10,
-            SecondsSinceLastBotMessage: -1,
+            IsContinuation: false,
             MessageLength: 80,
             TotalBotsInChat: 1));
         var normalScore = Tier2WeightedScore.ComputeScore(new Tier2Context(
             IsGroupQuestion: false,
             BotMessagesInLast20: 0,
             TotalRecentMessages: 10,
-            SecondsSinceLastBotMessage: -1,
+            IsContinuation: false,
             MessageLength: 80,
             TotalBotsInChat: 1));
         await Assert.That(questionScore > normalScore).IsTrue();
@@ -124,7 +124,7 @@ public class Tier2WeightedScoreTests
             IsGroupQuestion: false,
             BotMessagesInLast20: 5,
             TotalRecentMessages: 10,
-            SecondsSinceLastBotMessage: 20,
+            IsContinuation: false,
             MessageLength: 2,
             TotalBotsInChat: 3));
         await Assert.That(score <= Tier2WeightedScore.SkipThreshold).IsTrue();

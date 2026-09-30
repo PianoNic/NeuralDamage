@@ -2,7 +2,18 @@ using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
-public enum Tier1Result { MustRespond, MustSkip, Undecided }
+public enum Tier1Result
+{
+    MustRespond,
+    MustSkip,
+    Undecided,
+
+    /// <summary>
+    /// Said to the whole room. Only some of the addressed bots answer; the
+    /// decision engine picks which.
+    /// </summary>
+    GroupAddressed
+}
 
 public static class Tier1HardRules
 {
@@ -27,10 +38,6 @@ public static class Tier1HardRules
             return mentioned ? Tier1Result.MustRespond : Tier1Result.MustSkip;
         }
 
-        // Group address ("everyone", "all bots", etc.)
-        if (FuzzyNameMatcher.IsGroupAddress(message.Content))
-            return Tier1Result.MustRespond;
-
         // Name mentioned in message
         if (FuzzyNameMatcher.IsNameMentioned(message.Content, bot.Name, bot.Aliases))
             return Tier1Result.MustRespond;
@@ -38,6 +45,11 @@ public static class Tier1HardRules
         // Reply to this bot's message
         if (message.ReplyToId is not null && message.ReplyTo?.SenderBotId == bot.Id)
             return Tier1Result.MustRespond;
+
+        // Group address ("everyone", "all bots", etc.) - checked after the
+        // direct forms so "GPT, and everyone else" still counts as GPT's.
+        if (FuzzyNameMatcher.IsGroupAddress(message.Content))
+            return Tier1Result.GroupAddressed;
 
         return Tier1Result.Undecided;
     }

@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
@@ -28,6 +28,7 @@ builder.Services.AddScoped<IOpenRouterService, OpenRouterAgentService>();
 builder.Services.AddSingleton(BotRankingOptions.FromConfiguration(builder.Configuration));
 builder.Services.AddHttpClient<IDecisionsClient, DecisionsClient>((sp, client) =>
     client.Timeout = sp.GetRequiredService<BotRankingOptions>().Timeout);
+builder.Services.Configure<BotBehaviorOptions>(builder.Configuration.GetSection(BotBehaviorOptions.SectionName));
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
 builder.Services.AddScoped<Tier3LlmJudge>();
 builder.Services.AddSingleton<BotResponseQueue>();
