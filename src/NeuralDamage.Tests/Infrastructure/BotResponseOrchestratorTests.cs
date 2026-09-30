@@ -91,6 +91,36 @@ public class BotPromptBuilderTests
         await Assert.That(totalChars <= 12_000).IsTrue();
         await Assert.That(history.Count < 100).IsTrue();
     }
+    [Test]
+    public async Task BuildHistory_OverBudget_DropsOldestAndKeepsNewest()
+    {
+        var botId = Guid.NewGuid();
+        var alice = new User { ExternalId = "e", Email = "a@b.com", DisplayName = "Alice" };
+        var messages = Enumerable.Range(0, 100)
+            .Select(i => new Message { ChatId = Guid.NewGuid(), SenderUserId = alice.Id, SenderUser = alice, Content = $"msg{i:D3} " + new string('a', 500) })
+            .ToList();
+
+        var history = BotPromptBuilder.BuildHistory(messages, botId);
+
+        await Assert.That(history[^1].Content).Contains("msg099");
+        await Assert.That(history[0].Content).DoesNotContain("msg000");
+    }
+
+    [Test]
+    public async Task BuildHistory_AlwaysKeepsTrigger_EvenPastTheBudget()
+    {
+        var botId = Guid.NewGuid();
+        var alice = new User { ExternalId = "e", Email = "a@b.com", DisplayName = "Alice" };
+        var trigger = new Message { ChatId = Guid.NewGuid(), SenderUserId = alice.Id, SenderUser = alice, Content = "the question" };
+        var messages = new List<Message> { trigger };
+        // Enough newer chatter to use the whole budget on its own.
+        messages.AddRange(Enumerable.Range(0, 40)
+            .Select(_ => new Message { ChatId = Guid.NewGuid(), SenderUserId = alice.Id, SenderUser = alice, Content = new string('b', 500) }));
+
+        var history = BotPromptBuilder.BuildHistory(messages, botId, trigger.Id);
+
+        await Assert.That(history[0].Content).Contains("the question");
+    }
 }
 
 public class BotResponseCancellationTests

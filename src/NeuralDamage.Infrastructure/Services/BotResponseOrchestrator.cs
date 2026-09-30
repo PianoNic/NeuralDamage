@@ -29,10 +29,12 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
             var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
             var notifications = scope.ServiceProvider.GetRequiredService<IChatNotificationService>();
 
-            // Load the trigger message
+            // Load the trigger message. ReplyTo is what lets a reply to a bot
+            // reach that bot - without it the reply-to rule never fires.
             var message = await db.Messages
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
+                .Include(m => m.ReplyTo)
                 .FirstOrDefaultAsync(m => m.Id == messageId, cts.Token);
 
             if (message is null) return;
@@ -89,7 +91,7 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
                 recentMessages.Reverse();
 
                 var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames);
-                var history = BotPromptBuilder.BuildHistory(recentMessages, bot.Id);
+                var history = BotPromptBuilder.BuildHistory(recentMessages, bot.Id, message.Id);
 
                 // Generate response. Sampling is non-deterministic and a model
                 // run hot will occasionally return nothing at all, so one empty
@@ -171,7 +173,8 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
         }
         finally
         {
-            _activeTasks.TryRemove(chatId, out _);
+            // Only remove our own entry: a newer round may already have replaced it.
+            _activeTasks.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(chatId, cts));
             cts.Dispose();
         }
     }
@@ -236,11 +239,14 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
 
     public void CancelPendingResponses(Guid chatId)
     {
-        if (_activeTasks.TryRemove(chatId, out var cts))
-        {
-            cts.Cancel();
-            cts.Dispose();
-        }
+        // Cancel only. The round that owns the source is still using its token
+        // and disposes it in its own finally; disposing here made an ordinary
+        // cancel surface as an ObjectDisposedException.
+        if (!_activeTasks.TryRemove(chatId, out var cts))
+            return;
+
+        try { cts.Cancel(); }
+        catch (ObjectDisposedException) { } // the round finished in between; nothing to cancel
     }
 
     private static string StripNamePrefix(string text, string botName)

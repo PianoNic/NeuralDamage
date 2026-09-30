@@ -40,14 +40,24 @@ public static class BotPromptBuilder
             """;
     }
 
-    public static List<ChatMessage> BuildHistory(List<Message> messages, Guid currentBotId)
+    /// <summary>
+    /// Formats chronological <paramref name="messages"/> for the model, keeping
+    /// the newest ones that fit the budget. The message being answered is always
+    /// kept, even when it alone would blow the budget - a bot that cannot see
+    /// what it is replying to answers something stale instead.
+    /// </summary>
+    public static List<ChatMessage> BuildHistory(List<Message> messages, Guid currentBotId, Guid? triggerMessageId = null)
     {
         var history = new List<ChatMessage>();
         var totalChars = 0;
+        var triggerId = triggerMessageId ?? messages.LastOrDefault()?.Id;
+        var triggerPending = messages.Any(m => m.Id == triggerId);
 
-        // Messages should be in chronological order
-        foreach (var msg in messages)
+        // Walk newest first so it is the oldest messages that fall off.
+        for (var i = messages.Count - 1; i >= 0; i--)
         {
+            var msg = messages[i];
+            var isTrigger = msg.Id == triggerId;
             var senderName = msg.SenderUser?.DisplayName ?? msg.SenderBot?.Name ?? "Unknown";
             var content = msg.Content.Length > MaxMessageChars
                 ? msg.Content[..MaxMessageChars] + "..."
@@ -55,14 +65,20 @@ public static class BotPromptBuilder
 
             var formatted = $"[{senderName}]: {content}";
 
-            if (totalChars + formatted.Length > MaxHistoryChars)
-                break;
+            if (totalChars + formatted.Length > MaxHistoryChars && !isTrigger)
+            {
+                // Out of budget: stop, unless the trigger is still further back.
+                if (!triggerPending) break;
+                continue;
+            }
 
             var role = msg.SenderBotId == currentBotId ? "assistant" : "user";
             history.Add(new ChatMessage(role, formatted));
             totalChars += formatted.Length;
+            triggerPending &= !isTrigger;
         }
 
+        history.Reverse();
         return history;
     }
 }
