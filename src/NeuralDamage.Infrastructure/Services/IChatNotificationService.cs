@@ -21,6 +21,9 @@ public interface IChatNotificationService
     Task NotifyBotResponseCancelled(Guid chatId);
     Task NotifySystemMessage(Guid chatId, string content);
 
+    /// <summary>An image on a sent message got its description, which is its alt text and caption.</summary>
+    Task NotifyAttachmentDescribed(Guid chatId, Guid messageId, Guid attachmentId, string description);
+
     /// <summary>A system message in a chat that only this user's open connections see.</summary>
     Task NotifyUserSystemMessage(Guid chatId, Guid userId, string content);
 }

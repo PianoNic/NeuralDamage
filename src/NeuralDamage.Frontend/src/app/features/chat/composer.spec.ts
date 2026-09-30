@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AttachmentsService } from '../../api/api/attachments.service';
+import { AppConfig } from '../../core/app-config';
 import { ChatMember } from '../../core/models';
 import { Composer, MAX_MESSAGE_LENGTH, OutgoingMessage } from './composer';
 
@@ -212,6 +213,22 @@ describe('Composer images', () => {
     component.addImages([png('1.png'), png('2.png'), png('3.png'), png('4.png'), png('5.png')]);
 
     expect(uploaded).toEqual(['1.png', '2.png', '3.png', '4.png']);
+  });
+
+  it('uses the limits the server serves instead of its own', async () => {
+    const uploaded: string[] = [];
+    const { component } = await setup((file) => {
+      uploaded.push((file as File).name);
+      return of({ id: (file as File).name, url: '/x', contentType: 'image/png', sizeBytes: 1 });
+    });
+    TestBed.inject(AppConfig).apply({
+      attachments: { maxBytes: 100, maxPerMessage: 2, contentTypes: ['image/png'] },
+    });
+
+    component.addImages([png('big.png', 101)]);
+    component.addImages([png('1.png'), png('2.png'), png('3.png')]);
+
+    expect(uploaded).toEqual(['1.png', '2.png']);
   });
 
   it('holds the send button while an upload is in flight', async () => {

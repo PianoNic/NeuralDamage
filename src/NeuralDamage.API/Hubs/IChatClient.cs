@@ -15,4 +15,5 @@ public interface IChatClient
     Task UserTyping(Guid chatId, Guid userId, string displayName);
     Task BotResponseCancelled(Guid chatId);
     Task SystemMessage(SystemMessageDto message);
+    Task AttachmentDescribed(Guid chatId, Guid messageId, Guid attachmentId, string description);
 }

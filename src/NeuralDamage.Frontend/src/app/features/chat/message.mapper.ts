@@ -65,3 +65,24 @@ export function toChatMember(dto: ChatMemberDto): ChatMember {
 export function toChatMembers(dtos: readonly ChatMemberDto[]): ChatMember[] {
   return dtos.map(toChatMember);
 }
+
+/**
+ * The messages with one image's description filled in, from `AttachmentDescribed`. The same list
+ * comes back when nothing matches, so nothing re-renders for an image this client has not loaded.
+ */
+export function withDescription(
+  messages: Message[],
+  messageId: string,
+  attachmentId: string,
+  description: string,
+): Message[] {
+  const index = messages.findIndex((m) => m.id === messageId);
+  if (index < 0 || !messages[index].attachments.some((a) => a.id === attachmentId)) return messages;
+  const message = messages[index];
+  const next = [...messages];
+  next[index] = {
+    ...message,
+    attachments: message.attachments.map((a) => (a.id === attachmentId ? { ...a, description } : a)),
+  };
+  return next;
+}

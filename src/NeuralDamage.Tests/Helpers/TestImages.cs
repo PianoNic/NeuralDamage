@@ -68,6 +68,8 @@ public sealed class InMemoryAttachmentStorage : IAttachmentStorage
     public Task<byte[]?> ReadAllAsync(Guid chatId, Guid attachmentId, CancellationToken ct = default) =>
         Task.FromResult(Files.TryGetValue((chatId, attachmentId), out var data) ? data : null);
 
+    public void Delete(Guid chatId, Guid attachmentId) => Files.TryRemove((chatId, attachmentId), out _);
+
     public void DeleteChat(Guid chatId)
     {
         foreach (var key in Files.Keys.Where(k => k.Chat == chatId))

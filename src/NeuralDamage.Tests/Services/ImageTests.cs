@@ -34,21 +34,22 @@ public class ImageInspectorTests
 
 public class ImageDescriberTests
 {
-    private sealed record Setup(ImageDescriber Describer, IOpenRouterService OpenRouter, DbContextOptions<NeuralDamageDbContext> DbOptions, Attachment Attachment, ServiceProvider Provider) : IDisposable
+    private sealed record Setup(ImageDescriber Describer, IOpenRouterService OpenRouter, IChatNotificationService Notifications, DbContextOptions<NeuralDamageDbContext> DbOptions, Attachment Attachment, ServiceProvider Provider) : IDisposable
     {
         public NeuralDamageDbContext Db() => new(DbOptions);
         public void Dispose() => Provider.Dispose();
     }
 
-    private static async Task<Setup> CreateAsync(string? visionModel = null)
+    private static async Task<Setup> CreateAsync(string? visionModel = null, bool sent = false)
     {
         var dbOptions = new DbContextOptionsBuilder<NeuralDamageDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         var user = new User { ExternalId = "ext-1", Email = "alice@test.com", DisplayName = "Alice" };
         var chat = new Chat { Name = "Chat", CreatedById = user.Id };
-        var attachment = new Attachment { ChatId = chat.Id, UploaderUserId = user.Id, ContentType = "image/png", SizeBytes = 64 };
+        var message = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "look" };
+        var attachment = new Attachment { ChatId = chat.Id, UploaderUserId = user.Id, ContentType = "image/png", SizeBytes = 64, MessageId = sent ? message.Id : null };
         await using (var db = new NeuralDamageDbContext(dbOptions))
         {
-            db.AddRange(user, chat, attachment);
+            db.AddRange(user, chat, message, attachment);
             await db.SaveChangesAsync();
         }
 
@@ -67,6 +68,8 @@ public class ImageDescriberTests
         services.AddScoped(_ => new NeuralDamageDbContext(dbOptions));
         services.AddSingleton<IAttachmentStorage>(storage);
         services.AddSingleton(openRouter);
+        var notifications = Substitute.For<IChatNotificationService>();
+        services.AddSingleton(notifications);
         services.AddSingleton(new ModelPolicy(ModelPolicy.DefaultMaxPromptPrice, ModelPolicy.DefaultMaxCompletionPrice, ZdrOnly: true));
         var provider = services.BuildServiceProvider();
 
@@ -74,7 +77,7 @@ public class ImageDescriberTests
             .AddInMemoryCollection(new Dictionary<string, string?> { ["OpenRouter:VisionModel"] = visionModel })
             .Build();
         var describer = new ImageDescriber(provider.GetRequiredService<IServiceScopeFactory>(), configuration, NullLogger<ImageDescriber>.Instance);
-        return new Setup(describer, openRouter, dbOptions, attachment, provider);
+        return new Setup(describer, openRouter, notifications, dbOptions, attachment, provider);
     }
 
     [Test]
@@ -94,6 +97,29 @@ public class ImageDescriberTests
             Arg.Is<List<ChatMessage>>(h => h.Single().Images.Single().ContentType == "image/png"), Arg.Any<CancellationToken>());
         await using var db = s.Db();
         await Assert.That((await db.Attachments.SingleAsync()).Description).IsEqualTo("A tabby cat asleep on a laptop keyboard.");
+    }
+
+    [Test]
+    public async Task ADescriptionOnASentMessage_IsPushedToTheChat()
+    {
+        using var s = await CreateAsync(sent: true);
+
+        await s.Describer.WaitAsync([s.Attachment.Id], TimeSpan.FromSeconds(10));
+
+        await s.Notifications.Received(1).NotifyAttachmentDescribed(
+            s.Attachment.ChatId, s.Attachment.MessageId!.Value, s.Attachment.Id, "A tabby cat asleep on a laptop keyboard.");
+    }
+
+    [Test]
+    public async Task ADescriptionOfAnUnsentUpload_IsNotBroadcast()
+    {
+        using var s = await CreateAsync();
+
+        await s.Describer.WaitAsync([s.Attachment.Id], TimeSpan.FromSeconds(10));
+
+        await using var db = s.Db();
+        await Assert.That((await db.Attachments.SingleAsync()).Description).IsNotNull();
+        await s.Notifications.DidNotReceiveWithAnyArgs().NotifyAttachmentDescribed(default, default, default, default!);
     }
 
     [Test]

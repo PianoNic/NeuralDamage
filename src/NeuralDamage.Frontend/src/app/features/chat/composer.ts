@@ -34,10 +34,11 @@ import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { AttachmentsService } from '../../api/api/attachments.service';
-import { describeApiError } from '../../core/http-errors';
+import { toastApiError } from '../../core/http-errors';
 import { ChatMember, Message } from '../../core/models';
 import { initials } from '../../shared/initials';
-import { IMAGE_TYPES, imageProblem, MAX_IMAGES_PER_MESSAGE } from './attachments';
+import { AppConfig } from '../../core/app-config';
+import { imageProblem } from './attachments';
 
 /** The server's limit on a message body (SendMessageValidator). */
 export const MAX_MESSAGE_LENGTH = 4000;
@@ -261,7 +262,7 @@ export interface Suggestion {
           type="file"
           class="hidden"
           multiple
-          [accept]="imageTypes"
+          [accept]="imageTypes()"
           (change)="onFilesPicked($event)"
         />
         <button
@@ -381,7 +382,8 @@ export class Composer {
   protected readonly counterId = `${this.textareaId}-counter`;
   protected readonly maxLength = MAX_MESSAGE_LENGTH;
   protected readonly emojis = QUICK_EMOJIS;
-  protected readonly imageTypes = IMAGE_TYPES.join(',');
+  private readonly limits = inject(AppConfig).uploadLimits;
+  protected readonly imageTypes = computed(() => this.limits().contentTypes.join(','));
 
   readonly content = signal('');
   readonly images = signal<PendingImage[]>([]);
@@ -508,12 +510,15 @@ export class Composer {
     const chatId = this.chatId();
     if (!chatId || files.length === 0) return;
 
-    const room = MAX_IMAGES_PER_MESSAGE - this.images().length;
+    const limits = this.limits();
+    const room = limits.maxPerMessage - this.images().length;
     if (files.length > room) {
-      toast.error(`A message can carry at most ${MAX_IMAGES_PER_MESSAGE} images.`);
+      toast.error(`A message can carry at most ${limits.maxPerMessage} images.`, {
+        id: 'too-many-images',
+      });
     }
     for (const file of files.slice(0, Math.max(room, 0))) {
-      const problem = imageProblem(file);
+      const problem = imageProblem(file, limits);
       if (problem) {
         toast.error(problem);
         continue;
@@ -579,7 +584,7 @@ export class Composer {
       this.images.update((list) => list.map((i) => (i.key === key ? { ...i, id: uploaded.id } : i)));
     } catch (error) {
       this.removeImage(key);
-      toast.error(describeApiError(error, { fallback: 'Could not upload the image.' }));
+      toastApiError(error, { fallback: 'Could not upload the image.' });
     }
   }
 

@@ -24,6 +24,8 @@ export interface ChatHubEvents {
   BotResponseCancelled: [chatId: string];
   /** Ephemeral notice (slash-command results and the like); never persisted. */
   SystemMessage: [message: SystemMessage];
+  /** An image on a sent message got its description (alt text and lightbox caption). */
+  AttachmentDescribed: [chatId: string, messageId: string, attachmentId: string, description: string];
 }
 
 export interface SystemMessage {

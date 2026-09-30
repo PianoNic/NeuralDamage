@@ -48,6 +48,7 @@ builder.Services.AddSingleton(attachmentOptions);
 builder.Services.AddSingleton<IAttachmentStorage>(new FileSystemAttachmentStorage(
     Path.GetFullPath(attachmentOptions.Path, builder.Environment.ContentRootPath)));
 builder.Services.AddSingleton<IImageDescriber, ImageDescriber>();
+builder.Services.AddHostedService<UnsentAttachmentSweeper>();
 
 // Rate limits
 builder.Services.AddChatRateLimits(builder.Configuration);
@@ -157,7 +158,6 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
-app.MapToamaisutaaConfiguration();
 app.MapHub<NeuralDamage.API.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<NeuralDamage.API.Hubs.UserHub>("/hubs/user");
 
