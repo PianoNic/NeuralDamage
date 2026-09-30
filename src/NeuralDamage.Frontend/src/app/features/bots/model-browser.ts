@@ -5,7 +5,7 @@ import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { OpenRouterModel } from '../../core/models';
 import { capabilityIcons, formatPricing, modelDisplayName, priceTierMarks } from './bot-meta';
-import { ModelCatalog, modelMatches } from './model-catalog';
+import { byNameMatchFirst, ModelCatalog, modelMatches } from './model-catalog';
 
 /** Rail key for every provider at once. */
 const ALL = '';
@@ -117,9 +117,10 @@ export class ModelBrowser {
   protected readonly visible = computed(() => {
     const provider = this.provider();
     const query = this.query();
-    return this.catalog
-      .models()
-      .filter((m) => (provider === ALL || m.provider === provider) && modelMatches(m, query));
+    return byNameMatchFirst(
+      this.catalog.models().filter((m) => (provider === ALL || m.provider === provider) && modelMatches(m, query)),
+      query,
+    );
   });
 
   focusSearch(): void {

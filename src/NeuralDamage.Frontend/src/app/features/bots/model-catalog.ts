@@ -61,3 +61,16 @@ export function modelMatches(model: OpenRouterModel, query: string): boolean {
     .toLowerCase()
     .includes(q);
 }
+
+/**
+ * Keeps the catalog order, but puts the models whose name matches the search ahead of those
+ * that only match on id, provider, description or capability: "mistral small 3" lists
+ * Mistral Small 3 before a model whose blurb compares itself to it.
+ */
+export function byNameMatchFirst(models: readonly OpenRouterModel[], query: string): OpenRouterModel[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...models];
+  const named = (model: OpenRouterModel) =>
+    modelDisplayName(model).toLowerCase().includes(q) || model.name.toLowerCase().includes(q) ? 0 : 1;
+  return [...models].sort((a, b) => named(a) - named(b));
+}
