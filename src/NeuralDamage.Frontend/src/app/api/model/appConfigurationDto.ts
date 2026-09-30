@@ -7,13 +7,15 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { AttachmentLimitsDto } from './attachmentLimitsDto';
 
 
-export interface ToamaisutaaClientConfiguration { 
+export interface AppConfigurationDto { 
     authority: string;
     clientId: string;
     redirectUri: string;
     postLogoutRedirectUri: string;
     scope: string;
+    attachments: AttachmentLimitsDto;
 }
 

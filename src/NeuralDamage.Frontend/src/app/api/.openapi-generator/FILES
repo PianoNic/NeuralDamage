@@ -19,7 +19,9 @@ encoder.ts
 git_push.sh
 index.ts
 model/addMemberRequest.ts
+model/appConfigurationDto.ts
 model/attachmentDto.ts
+model/attachmentLimitsDto.ts
 model/botCreatorDto.ts
 model/botDto.ts
 model/botSummaryDto.ts
@@ -36,7 +38,6 @@ model/problemDetails.ts
 model/reactionGroupDto.ts
 model/replyInfoDto.ts
 model/sendMessageRequest.ts
-model/toamaisutaaClientConfiguration.ts
 model/updateBotRequest.ts
 model/updateChatRequest.ts
 model/userDto.ts

@@ -1,5 +1,7 @@
+import { TestBed } from '@angular/core/testing';
 import { Message } from '../../core/models';
-import { buildTimeline, TimelineItem } from './message-list';
+import { withDescription } from './message.mapper';
+import { buildTimeline, MessageList, TimelineItem } from './message-list';
 
 function message(id: string, minute: number, replyTo?: string): Message {
   return {
@@ -51,5 +53,59 @@ describe('buildTimeline reply references', () => {
       now,
     );
     expect(shown(items)['b']).toBe(false);
+  });
+});
+
+describe('MessageList drops', () => {
+  function dragEvent(type: string, files: File[]): DragEvent {
+    const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
+    Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files, dropEffect: 'none' } });
+    return event;
+  }
+
+  it('takes images dropped anywhere on the list, with an overlay while dragging', async () => {
+    const fixture = TestBed.createComponent(MessageList);
+    // Empty, so the chat container (which needs a real layout engine) stays out of it.
+    fixture.componentRef.setInput('messages', []);
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    const dropped: File[][] = [];
+    fixture.componentInstance.filesDropped.subscribe((files) => dropped.push(files));
+
+    const over = dragEvent('dragover', []);
+    host.querySelector('hlm-empty')!.dispatchEvent(over);
+    await fixture.whenStable();
+    expect(over.defaultPrevented).toBe(true);
+    expect(host.textContent).toContain('Drop images to attach them');
+
+    const file = new File(['x'], 'cat.png', { type: 'image/png' });
+    const drop = dragEvent('drop', [file]);
+    host.dispatchEvent(drop);
+    await fixture.whenStable();
+    expect(drop.defaultPrevented).toBe(true);
+    expect(dropped).toEqual([[file]]);
+    expect(host.textContent).not.toContain('Drop images to attach them');
+  });
+});
+
+describe('withDescription', () => {
+  const withImage = (): Message => ({
+    ...message('a', 0),
+    attachments: [
+      { id: 'img', url: '/x', contentType: 'image/png', sizeBytes: 1, description: null },
+    ],
+  });
+
+  it('fills in the described image', () => {
+    const list = [withImage(), message('b', 1)];
+    const next = withDescription(list, 'a', 'img', 'A cat.');
+    expect(next[0].attachments[0].description).toBe('A cat.');
+    expect(next[1]).toBe(list[1]);
+  });
+
+  it('leaves the list alone for an image it does not have', () => {
+    const list = [withImage()];
+    expect(withDescription(list, 'a', 'other', 'x')).toBe(list);
+    expect(withDescription(list, 'zzz', 'img', 'x')).toBe(list);
   });
 });

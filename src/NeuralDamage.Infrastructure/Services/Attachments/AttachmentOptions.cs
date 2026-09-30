@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using NeuralDamage.Infrastructure.Dtos;
 
 namespace NeuralDamage.Infrastructure.Services.Attachments;
 
@@ -20,6 +21,15 @@ public record AttachmentOptions
     /// </summary>
     public TimeSpan DescriptionWait { get; init; } = TimeSpan.FromSeconds(20);
 
+    /// <summary>
+    /// How long an upload may wait for the message it was meant for. Older ones
+    /// were abandoned in the composer and are swept, file and row.
+    /// </summary>
+    public TimeSpan UnsentMaxAge { get; init; } = TimeSpan.FromHours(1);
+
+    /// <summary>The limits as the client sees them, served from <c>/api/app</c>.</summary>
+    public AttachmentLimitsDto Limits() => new(MaxBytes, MaxPerMessage, [.. ImageInspector.AllowedTypes]);
+
     public static AttachmentOptions FromConfiguration(IConfiguration configuration)
     {
         var section = configuration.GetSection(SectionName);
@@ -30,6 +40,7 @@ public record AttachmentOptions
             MaxBytes = section.GetValue("MaxBytes", defaults.MaxBytes),
             MaxPerMessage = section.GetValue("MaxPerMessage", defaults.MaxPerMessage),
             DescriptionWait = TimeSpan.FromSeconds(section.GetValue("DescriptionWaitSeconds", defaults.DescriptionWait.TotalSeconds)),
+            UnsentMaxAge = TimeSpan.FromMinutes(section.GetValue("UnsentMaxAgeMinutes", defaults.UnsentMaxAge.TotalMinutes)),
         };
     }
 }

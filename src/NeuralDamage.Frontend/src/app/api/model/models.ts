@@ -1,5 +1,7 @@
 export * from './addMemberRequest';
+export * from './appConfigurationDto';
 export * from './attachmentDto';
+export * from './attachmentLimitsDto';
 export * from './botCreatorDto';
 export * from './botDto';
 export * from './botSummaryDto';
@@ -15,7 +17,6 @@ export * from './problemDetails';
 export * from './reactionGroupDto';
 export * from './replyInfoDto';
 export * from './sendMessageRequest';
-export * from './toamaisutaaClientConfiguration';
 export * from './updateBotRequest';
 export * from './updateChatRequest';
 export * from './userDto';

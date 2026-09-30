@@ -1,3 +1,4 @@
+using NeuralDamage.Domain;
 using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -93,11 +94,33 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
             attachment.Description = text.Length > MaxDescriptionChars ? text[..MaxDescriptionChars] : text;
             await db.SaveChangesAsync();
             logger.LogInformation("Described image {AttachmentId} with {Model} ({Chars} chars)", attachmentId, Model, attachment.Description.Length);
+
+            await AnnounceAsync(scope.ServiceProvider, db, attachment);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Describing image {AttachmentId} with {Model} failed", attachmentId, Model);
         }
+    }
+
+    /// <summary>
+    /// Tells the chat, so the image gets its alt text and caption without a
+    /// reload. Only once it is on a sent message: an upload still sitting in
+    /// someone's composer is nobody else's business. One described before it
+    /// was sent goes out with the message itself.
+    /// </summary>
+    private async Task AnnounceAsync(IServiceProvider services, NeuralDamageDbContext db, Attachment attachment)
+    {
+        // Read fresh: the message may have been sent while the describer ran.
+        var messageId = await db.Attachments
+            .Where(a => a.Id == attachment.Id)
+            .Select(a => a.MessageId)
+            .FirstOrDefaultAsync();
+        if (messageId is not { } sentOn)
+            return;
+
+        await services.GetRequiredService<IChatNotificationService>()
+            .NotifyAttachmentDescribed(attachment.ChatId, sentOn, attachment.Id, attachment.Description!);
     }
 
     /// <summary>

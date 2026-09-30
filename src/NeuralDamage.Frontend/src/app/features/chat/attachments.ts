@@ -1,19 +1,39 @@
-import { Component, input, signal } from '@angular/core';
+import { Component, computed, input, signal } from '@angular/core';
 import { PkAuthImage } from '@prompt-kit/auth-image';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { environment } from '../../../environments/environment';
+import type { AttachmentLimitsDto } from '../../api';
 import { AttachmentDto } from '../../core/models';
 
-/** Mirrors the server's defaults (Attachments:*); the server has the last word. */
-export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-export const MAX_IMAGES_PER_MESSAGE = 4;
+const TYPE_NAMES: Record<string, string> = {
+  'image/png': 'PNG',
+  'image/jpeg': 'JPEG',
+  'image/webp': 'WebP',
+  'image/gif': 'GIF',
+};
 
-/** Why a file cannot be attached, or null when it can. */
-export function imageProblem(file: File): string | null {
-  if (!(IMAGE_TYPES as readonly string[]).includes(file.type))
-    return `${file.name || 'That file'} is not a PNG, JPEG, WebP or GIF image.`;
-  if (file.size > MAX_IMAGE_BYTES) return `${file.name || 'That image'} is over 10 MB.`;
+/** "PNG, JPEG, WebP or GIF". */
+function typeList(types: readonly string[]): string {
+  const names = types.map((t) => TYPE_NAMES[t] ?? t.replace(/^image\//, '').toUpperCase());
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : (names[0] ?? '');
+}
+
+/** "10 MB", "1.5 MB", "500 KB". */
+export function formatBytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+/**
+ * Why a file cannot be attached, or null when it can, against the limits `/api/app` serves. The
+ * server checks again; this only saves uploading something it would refuse.
+ */
+export function imageProblem(file: File, limits: AttachmentLimitsDto): string | null {
+  if (!limits.contentTypes.includes(file.type))
+    return `${file.name || 'That file'} is not a ${typeList(limits.contentTypes)} image.`;
+  if (file.size > limits.maxBytes)
+    return `${file.name || 'That image'} is over ${formatBytes(limits.maxBytes)}.`;
   return null;
 }
 
@@ -61,7 +81,7 @@ export function attachmentSrc(attachment: Pick<AttachmentDto, 'url'>): string {
           [style.aspect-ratio]="attachments().length === 1 ? ratio(image) : null"
           [style.width]="attachments().length === 1 ? singleWidth(image) : null"
           [attr.aria-label]="'Open image ' + (i + 1) + ' from ' + senderName()"
-          (click)="open.set(image)"
+          (click)="open.set(image.id)"
         >
           <pk-auth-image [url]="src(image)" [alt]="image.description ?? ''" class="size-full" />
         </button>
@@ -74,7 +94,7 @@ export function attachmentSrc(attachment: Pick<AttachmentDto, 'url'>): string {
         class="w-fit max-w-[calc(100vw-2rem)] p-2 sm:max-w-[min(90vw,72rem)]"
       >
         <h2 hlmDialogTitle class="sr-only">Image from {{ senderName() }}</h2>
-        @if (open(); as image) {
+        @if (openImage(); as image) {
           <pk-auth-image
             [url]="src(image)"
             [alt]="image.description ?? ''"
@@ -99,7 +119,11 @@ export class MessageImages {
   readonly attachments = input.required<AttachmentDto[]>();
   readonly senderName = input('');
 
-  protected readonly open = signal<AttachmentDto | null>(null);
+  /** By id, so a description that lands while it is open shows up in the caption. */
+  protected readonly open = signal<string | null>(null);
+  protected readonly openImage = computed(
+    () => this.attachments().find((a) => a.id === this.open()) ?? null,
+  );
 
   protected src(image: AttachmentDto): string {
     return attachmentSrc(image);

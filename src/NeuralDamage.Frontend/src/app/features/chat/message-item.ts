@@ -8,10 +8,12 @@ import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmPopoverImports } from '@spartan-ng/helm/popover';
 import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
 import { Message, ReactionGroupDto } from '../../core/models';
+import { formatTime } from '../../shared/dates';
 import { initials } from '../../shared/initials';
 import { providerIconUrl } from '../../shared/provider-icon';
 import { isAttachmentUrl, MessageImages } from './attachments';
 import { markMentions } from './mentions';
+import { replyLabel } from './reply-label';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as const;
 
@@ -80,7 +82,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
         <button
           type="button"
           class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex max-w-full min-w-0 items-center gap-1 rounded-sm text-xs outline-none focus-visible:ring-2"
-          [attr.aria-label]="'Replying to ' + reply.senderName + ': ' + (reply.content || 'an image') + '. Go to that message.'"
+          [attr.aria-label]="replyLabel(reply)"
           (click)="jumpTo.emit(reply.id)"
         >
           <ng-icon name="lucideReply" class="shrink-0" />
@@ -194,6 +196,7 @@ export class MessageItem {
 
   protected readonly quickReactions = QUICK_REACTIONS;
   protected readonly allowImage = isAttachmentUrl;
+  protected readonly replyLabel = replyLabel;
 
   protected readonly own = computed(
     () => !!this.currentUserId() && this.message().senderUserId === this.currentUserId(),
@@ -218,7 +221,7 @@ export class MessageItem {
     const date = new Date(this.message().createdAt);
     return Number.isNaN(date.getTime())
       ? ''
-      : date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      : formatTime(date);
   });
 
   protected isMine(reaction: ReactionGroupDto): boolean {

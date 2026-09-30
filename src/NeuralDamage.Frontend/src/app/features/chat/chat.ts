@@ -20,7 +20,7 @@ import { ChatsService } from '../../api/api/chats.service';
 import { MessagesService } from '../../api/api/messages.service';
 import { ReactionsService } from '../../api/api/reactions.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { describeApiError } from '../../core/http-errors';
+import { toastApiError } from '../../core/http-errors';
 import {
   ChatDetailDto,
   ChatDto,
@@ -36,7 +36,13 @@ import { PeopleSheet } from '../people/people-sheet';
 import { ChatHeader } from './chat-header';
 import { ChatList } from './chat-list';
 import { Composer } from './composer';
-import { toChatMember, toChatMembers, toMessage, toMessages } from './message.mapper';
+import {
+  toChatMember,
+  toChatMembers,
+  toMessage,
+  toMessages,
+  withDescription,
+} from './message.mapper';
 import { MessageList } from './message-list';
 import { Typer, TypingRow } from './typing-row';
 
@@ -78,6 +84,7 @@ const TYPING_SEND_INTERVAL_MS = 3000;
         (loadOlder)="loadOlder()"
         (replyTo)="replyingTo.set($event)"
         (react)="toggleReaction($event.messageId, $event.emoji)"
+        (filesDropped)="composer()?.addImages($event)"
       />
     }
 
@@ -198,6 +205,16 @@ export class Chat implements OnDestroy {
     );
   };
 
+  private readonly onAttachmentDescribed = (
+    chatId: string,
+    messageId: string,
+    attachmentId: string,
+    description: string,
+  ) => {
+    if (chatId !== this.currentChatId) return;
+    this.messages.update((list) => withDescription(list, messageId, attachmentId, description));
+  };
+
   private readonly onChatCleared = (chatId: string) => {
     if (chatId !== this.currentChatId) return;
     this.messages.set([]);
@@ -266,12 +283,9 @@ export class Chat implements OnDestroy {
     } catch (error) {
       this.composer()?.restoreDraft(content);
       const rejected = error instanceof HttpErrorResponse && error.status === 400;
-      toast.error(
-        rejected
-          ? describeApiError(error)
-          : describeApiError(error, {
-              network: 'Message not sent. Check your connection and try again.',
-            }),
+      toastApiError(
+        error,
+        rejected ? undefined : { network: 'Message not sent. Check your connection and try again.' },
       );
     }
   }
@@ -339,7 +353,7 @@ export class Chat implements OnDestroy {
         ),
       );
     } catch (error) {
-      toast.error(describeApiError(error, { fallback: 'Could not update the reaction.' }));
+      toastApiError(error, { fallback: 'Could not update the reaction.' });
     }
   }
 
@@ -416,6 +430,7 @@ export class Chat implements OnDestroy {
     this.signalr.onChatEvent('UserTyping', this.onUserTyping);
     this.signalr.onChatEvent('BotResponseCancelled', this.onBotResponseCancelled);
     this.signalr.onChatEvent('ReactionUpdated', this.onReactionUpdated);
+    this.signalr.onChatEvent('AttachmentDescribed', this.onAttachmentDescribed);
     this.signalr.onChatEvent('ChatCleared', this.onChatCleared);
     this.signalr.onChatEvent('ChatUpdated', this.onChatUpdated);
     this.signalr.onChatEvent('ChatDeleted', this.onChatGone);
@@ -431,6 +446,7 @@ export class Chat implements OnDestroy {
     this.signalr.offChatEvent('UserTyping', this.onUserTyping);
     this.signalr.offChatEvent('BotResponseCancelled', this.onBotResponseCancelled);
     this.signalr.offChatEvent('ReactionUpdated', this.onReactionUpdated);
+    this.signalr.offChatEvent('AttachmentDescribed', this.onAttachmentDescribed);
     this.signalr.offChatEvent('ChatCleared', this.onChatCleared);
     this.signalr.offChatEvent('ChatUpdated', this.onChatUpdated);
     this.signalr.offChatEvent('ChatDeleted', this.onChatGone);

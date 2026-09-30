@@ -8,6 +8,7 @@ import {
 import { map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApplicationConfigurationService } from '../../api/api/applicationConfiguration.service';
+import { AppConfig } from '../app-config';
 
 const AUTHORITY_KEY = 'neuraldamage.oidc.authority';
 
@@ -20,10 +21,11 @@ export function provideOidc(): EnvironmentProviders {
     provideAuth({
       loader: {
         provide: StsConfigLoader,
-        useFactory: (app: ApplicationConfigurationService) =>
+        useFactory: (app: ApplicationConfigurationService, appConfig: AppConfig) =>
           new StsConfigHttpLoader(
-            app.toamaisutaaClientConfiguration().pipe(
+            app.appConfiguration().pipe(
               map((config) => {
+                appConfig.apply(config);
                 forgetSessionOfOtherIssuer(config.authority);
                 return {
                   authority: config.authority,
@@ -41,7 +43,7 @@ export function provideOidc(): EnvironmentProviders {
               }),
             ),
           ),
-        deps: [ApplicationConfigurationService],
+        deps: [ApplicationConfigurationService, AppConfig],
       },
     }),
   ]);

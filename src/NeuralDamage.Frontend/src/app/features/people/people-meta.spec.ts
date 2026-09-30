@@ -14,9 +14,9 @@ describe('people labels', () => {
     expect(joinedLabel(new Date(2026, 8, 30, 9).toISOString(), now)).toBe('Joined today');
     expect(joinedLabel(new Date(2026, 8, 29, 9).toISOString(), now)).toBe('Joined yesterday');
     const sunday = new Date(2026, 8, 27, 9);
-    expect(joinedLabel(sunday.toISOString(), now)).toBe(
-      `Joined ${sunday.toLocaleDateString(undefined, { weekday: 'long' })}`,
-    );
+    expect(joinedLabel(sunday.toISOString(), now)).toBe('Joined Sunday');
+    expect(joinedLabel(new Date(2026, 8, 3, 9).toISOString(), now)).toBe('Joined 3 Sept');
+    expect(joinedLabel(new Date(2025, 8, 3, 9).toISOString(), now)).toBe('Joined 3 Sept 2025');
     expect(joinedLabel('nonsense', now)).toBe('');
   });
 

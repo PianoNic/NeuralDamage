@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { describeHttpError, type HttpErrorMessages } from '@prompt-kit/http-error';
+import { toast } from '@spartan-ng/brain/sonner';
 
 const DEFAULTS: HttpErrorMessages = {
   forbidden: 'You are not allowed to do that here.',
@@ -18,4 +19,17 @@ export function describeApiError(error: unknown, overrides?: HttpErrorMessages):
     if (first) return first;
   }
   return describeHttpError(error, { ...DEFAULTS, ...overrides });
+}
+
+/** The one toast every rate-limited request shares. */
+export const RATE_LIMIT_TOAST_ID = 'rate-limited';
+
+/**
+ * Shows a failed request as an error toast without piling them up: every 429 updates the same
+ * toast, and any other error replaces an identical one still on screen rather than stacking.
+ */
+export function toastApiError(error: unknown, overrides?: HttpErrorMessages): void {
+  const message = describeApiError(error, overrides);
+  const rateLimited = error instanceof HttpErrorResponse && error.status === 429;
+  toast.error(message, { id: rateLimited ? RATE_LIMIT_TOAST_ID : message });
 }

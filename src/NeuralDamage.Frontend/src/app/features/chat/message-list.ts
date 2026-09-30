@@ -9,12 +9,15 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideImagePlus } from '@ng-icons/lucide';
 import { PkChatContainerImports, PkChatContainerRoot } from '@prompt-kit/chat-container';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmEmptyImports } from '@spartan-ng/helm/empty';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { Message } from '../../core/models';
 import { SystemMessage } from '../../core/signalr/hub-events';
+import { formatDayLabel } from '../../shared/dates';
 import { MessageItem } from './message-item';
 
 /** Start fetching older messages this close to the top, in px. */
@@ -63,7 +66,7 @@ export function buildTimeline(
   for (const entry of entries) {
     const day = new Date(entry.at).toDateString();
     if (day !== lastDay) {
-      items.push({ kind: 'day', key: `day-${day}`, at: entry.at, label: dayLabel(new Date(entry.at), now) });
+      items.push({ kind: 'day', key: `day-${day}`, at: entry.at, label: formatDayLabel(new Date(entry.at), now) });
       lastDay = day;
       previous = null;
     }
@@ -89,24 +92,29 @@ function senderOf(message: Message): string {
   return message.senderBotId ?? message.senderUserId ?? message.senderName;
 }
 
-function dayLabel(date: Date, now: Date): string {
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOf(now) - startOf(date)) / 86_400_000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  return date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
-  });
-}
 
 @Component({
   selector: 'app-message-list',
-  imports: [PkChatContainerImports, HlmEmptyImports, HlmSpinner, MessageItem],
-  host: { class: 'flex min-h-0 flex-1 flex-col' },
+  imports: [NgIcon, PkChatContainerImports, HlmEmptyImports, HlmSpinner, MessageItem],
+  providers: [provideIcons({ lucideImagePlus })],
+  host: {
+    class: 'relative flex min-h-0 flex-1 flex-col',
+    '(dragenter)': 'onDragOver($event)',
+    '(dragover)': 'onDragOver($event)',
+    '(dragleave)': 'onDragLeave($event)',
+    '(drop)': 'onDrop($event)',
+  },
   template: `
+    @if (dragging()) {
+      <div
+        class="bg-background/80 border-primary pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed backdrop-blur-sm"
+        aria-hidden="true"
+      >
+        <ng-icon name="lucideImagePlus" size="32" class="text-primary" />
+        <p class="text-sm font-medium">Drop images to attach them</p>
+      </div>
+    }
+
     @if (timeline().length === 0) {
       <hlm-empty class="flex-1">
         <hlm-empty-header>
@@ -172,6 +180,10 @@ export class MessageList implements OnDestroy {
   readonly replyTo = output<Message>();
   readonly react = output<{ messageId: string; emoji: string }>();
   readonly loadOlder = output<void>();
+  /** Files dropped anywhere on the list, for the composer to attach. */
+  readonly filesDropped = output<File[]>();
+
+  protected readonly dragging = signal(false);
 
   readonly highlightedId = signal<string | null>(null);
   private highlightTimer?: ReturnType<typeof setTimeout>;
@@ -243,6 +255,27 @@ export class MessageList implements OnDestroy {
     clearTimeout(this.highlightTimer);
     this.highlightedId.set(messageId);
     this.highlightTimer = setTimeout(() => this.highlightedId.set(null), HIGHLIGHT_MS);
+  }
+
+  protected onDragOver(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    this.dragging.set(true);
+  }
+
+  protected onDragLeave(event: DragEvent): void {
+    // Moving onto a message inside the list is not leaving it.
+    const to = event.relatedTarget as Node | null;
+    if (to && (event.currentTarget as HTMLElement).contains(to)) return;
+    this.dragging.set(false);
+  }
+
+  protected onDrop(event: DragEvent): void {
+    this.dragging.set(false);
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    this.filesDropped.emit(Array.from(event.dataTransfer.files));
   }
 
   private measure(el: HTMLElement): void {

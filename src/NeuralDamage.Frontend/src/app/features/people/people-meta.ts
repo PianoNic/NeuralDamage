@@ -1,17 +1,14 @@
-/** "Joined today", "Joined Tuesday" within the week, then "Joined 3 Sep" (with the year when it differs). */
+import { daysAgo, formatFullDate, formatShortDate, formatWeekday } from '../../shared/dates';
+
+/** "Joined today", "Joined Tuesday" within the week, then "Joined 3 Sept" (with the year when it differs). */
 export function joinedLabel(joinedAt: string, now: Date = new Date()): string {
   const date = new Date(joinedAt);
   if (Number.isNaN(date.getTime())) return '';
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOf(now) - startOf(date)) / 86_400_000);
+  const days = daysAgo(date, now);
   if (days <= 0) return 'Joined today';
   if (days === 1) return 'Joined yesterday';
-  if (days < 7) return `Joined ${date.toLocaleDateString(undefined, { weekday: 'long' })}`;
-  return `Joined ${date.toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
-  })}`;
+  if (days < 7) return `Joined ${formatWeekday(date)}`;
+  return `Joined ${formatShortDate(date, now)}`;
 }
 
 /** "Public, made by You" / "Public, made by alice" / "Private to this chat". */
@@ -24,11 +21,11 @@ export function visibilityLabel(
   return `Public, made by ${by}`;
 }
 
-/** "30 Sep 2026", for the profile card; empty for an unreadable date. */
+/** "30 Sept 2026", for the profile card; empty for an unreadable date. */
 export function joinedDate(joinedAt: string): string {
   const date = new Date(joinedAt);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatFullDate(date);
 }
 
 /** A chat role as the People panel shows it. */

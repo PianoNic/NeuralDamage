@@ -45,5 +45,6 @@ public class ChatNotificationService(
     public Task NotifyBotTyping(Guid chatId, Guid botId, string botName) => chatHub.Clients.Group(chatId.ToString()).BotTyping(chatId, botId, botName);
     public Task NotifyBotResponseCancelled(Guid chatId) => chatHub.Clients.Group(chatId.ToString()).BotResponseCancelled(chatId);
     public Task NotifySystemMessage(Guid chatId, string content) => chatHub.Clients.Group(chatId.ToString()).SystemMessage(new SystemMessageDto(chatId, content, DateTimeOffset.UtcNow));
+    public Task NotifyAttachmentDescribed(Guid chatId, Guid messageId, Guid attachmentId, string description) => chatHub.Clients.Group(chatId.ToString()).AttachmentDescribed(chatId, messageId, attachmentId, description);
     public Task NotifyUserSystemMessage(Guid chatId, Guid userId, string content) => chatHub.Clients.Group(ChatHub.UserGroup(userId)).SystemMessage(new SystemMessageDto(chatId, content, DateTimeOffset.UtcNow));
 }

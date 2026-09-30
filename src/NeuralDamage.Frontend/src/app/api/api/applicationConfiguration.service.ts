@@ -17,7 +17,7 @@ import { CustomHttpParameterCodec }                          from '../encoder';
 import { Observable }                                        from 'rxjs';
 
 // @ts-ignore
-import { ToamaisutaaClientConfiguration } from '../model/toamaisutaaClientConfiguration';
+import { AppConfigurationDto } from '../model/appConfigurationDto';
 
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS }                     from '../variables';
@@ -91,15 +91,13 @@ export class ApplicationConfigurationService {
     }
 
     /**
-     * What the SPA reads at startup to configure its OIDC client.
-     * Anonymous, because it is needed before anyone has signed in. To serve your own fields alongside these, or from a different route, inject &#x60;IToamaisutaaClientConfigurationProvider&#x60; into an endpoint of your own instead of calling this.
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public toamaisutaaClientConfiguration(observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<ToamaisutaaClientConfiguration>;
-    public toamaisutaaClientConfiguration(observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<ToamaisutaaClientConfiguration>>;
-    public toamaisutaaClientConfiguration(observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<ToamaisutaaClientConfiguration>>;
-    public toamaisutaaClientConfiguration(observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public appConfiguration(observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<AppConfigurationDto>;
+    public appConfiguration(observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<AppConfigurationDto>>;
+    public appConfiguration(observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<AppConfigurationDto>>;
+    public appConfiguration(observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'text/plain' | 'application/json' | 'text/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
 
         let localVarHeaders = this.defaultHeaders;
 
@@ -114,7 +112,9 @@ export class ApplicationConfigurationService {
         if (localVarHttpHeaderAcceptSelected === undefined) {
             // to determine the Accept header
             const httpHeaderAccepts: string[] = [
-                'application/json'
+                'text/plain',
+                'application/json',
+                'text/json'
             ];
             localVarHttpHeaderAcceptSelected = this.configuration.selectHeaderAccept(httpHeaderAccepts);
         }
@@ -145,7 +145,7 @@ export class ApplicationConfigurationService {
         }
 
         let localVarPath = `/api/app`;
-        return this.httpClient.request<ToamaisutaaClientConfiguration>('get', `${this.configuration.basePath}${localVarPath}`,
+        return this.httpClient.request<AppConfigurationDto>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 responseType: <any>responseType_,

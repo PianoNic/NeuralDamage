@@ -10,6 +10,8 @@ public interface IAttachmentStorage
 
     Task<byte[]?> ReadAllAsync(Guid chatId, Guid attachmentId, CancellationToken ct = default);
 
+    void Delete(Guid chatId, Guid attachmentId);
+
     void DeleteChat(Guid chatId);
 }
 
@@ -32,6 +34,13 @@ public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
     {
         var path = PathOf(chatId, attachmentId);
         return File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
+    }
+
+    public void Delete(Guid chatId, Guid attachmentId)
+    {
+        var path = PathOf(chatId, attachmentId);
+        if (File.Exists(path))
+            File.Delete(path);
     }
 
     public void DeleteChat(Guid chatId)
