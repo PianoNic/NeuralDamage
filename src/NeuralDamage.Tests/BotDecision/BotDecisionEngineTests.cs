@@ -467,6 +467,92 @@ public class BotDecisionEngineTests
     }
 
     [Test]
+    public async Task APersonMentioningOneBot_OnlyThatBotReplies_OthersMayReact()
+    {
+        var logger = new ListLogger<BotDecisionEngine>();
+        // Everybody wants to answer; Gemini would laugh as a second choice.
+        var jev = new FakeJev(name => name == "Gemini"
+            ? new DecisionAnswer("choice", null, Reply, 0.8, new() { [Reply] = 0.8, [ReactLaugh] = 0.15, [Quiet] = 0.05 })
+            : FakeJev.Chose(Reply, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        var message = await h.SayAsync("@Claude whats up?");
+
+        var verdicts = await new BotDecisionEngine(h.Db, jev, new BotRankingOptions { ReactThreshold = 0.1 }, logger)
+            .DecideAsync(h.Chat.Id, message, h.Bots);
+
+        // Jev is still asked about every bot.
+        await Assert.That(jev.Calls.Single().State.Bots.Count).IsEqualTo(3);
+        await Assert.That(verdicts.Where(v => v.Action == BotAction.Reply).Select(v => v.Bot.Name)).IsEquivalentTo(["Claude"]);
+        await Assert.That(verdicts.Single(v => v.Bot.Name == "Gemini").Action).IsEqualTo(BotAction.React);
+        await Assert.That(verdicts.Single(v => v.Bot.Name == "Gemini").Emoji).IsEqualTo("😂");
+        await Assert.That(verdicts.Single(v => v.Bot.Name == "GPT").Action).IsEqualTo(BotAction.Quiet);
+        await Assert.That(logger.Entries.Any(e => e.Level == LogLevel.Information && e.Message.Contains("addressed to Claude"))).IsTrue();
+    }
+
+    [Test]
+    public async Task APersonMentioningABot_KeepsJevsDecisionForThatBot()
+    {
+        var jev = new FakeJev(name => name == "Claude" ? FakeJev.Chose(ReactThumbs, 0.8) : FakeJev.Chose(Reply, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        var message = await h.SayAsync("thanks @claude");
+
+        var verdicts = await DecideAsync(h, jev, message);
+
+        await Assert.That(verdicts.Single(v => v.Bot.Name == "Claude").Action).IsEqualTo(BotAction.React);
+        await Assert.That(verdicts.Single(v => v.Bot.Name == "GPT").Action).IsNotEqualTo(BotAction.Reply);
+    }
+
+    [Test]
+    public async Task APersonMentioningTwoBots_BothMayReply()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 4);
+        var message = await h.SayAsync("@GPT and @gemini, settle this");
+
+        var verdicts = await DecideAsync(h, jev, message);
+
+        await Assert.That(verdicts.Where(v => v.Action == BotAction.Reply).Select(v => v.Bot.Name)).IsEquivalentTo(["GPT", "Gemini"]);
+    }
+
+    [Test]
+    public async Task APersonReplyingToABot_AddressesThatBot()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        var claudeSaid = await h.SayAsync("pineapple belongs on pizza", asBot: h.Bots[1], at: DateTime.UtcNow.AddMinutes(-1));
+        var message = await h.SayAsync("no way", replyToId: claudeSaid.Id);
+
+        var verdicts = await DecideAsync(h, jev, message);
+
+        await Assert.That(verdicts.Where(v => v.Action == BotAction.Reply).Select(v => v.Bot.Name)).IsEquivalentTo(["Claude"]);
+    }
+
+    [Test]
+    public async Task ABotMentioningABot_IsUnchanged()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.9)) { Health = _ => 0 };
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
+        var message = await h.SayAsync("@GPT pineapple, obviously", asBot: h.Bots[2]);
+
+        var verdicts = await DecideAsync(h, jev, message, bots: h.Bots[..2]);
+
+        await Assert.That(verdicts.All(v => v.Action == BotAction.Reply)).IsTrue();
+    }
+
+    [Test]
+    public async Task NoMention_IsUnchanged()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        var message = await h.SayAsync("claude, gpt, whats up?");
+
+        var verdicts = await DecideAsync(h, jev, message);
+
+        await Assert.That(verdicts.All(v => v.Action == BotAction.Reply)).IsTrue();
+    }
+
+    [Test]
     [Arguments("hey @gpt", true)]
     [Arguments("@GPT, thoughts?", true)]
     [Arguments("ask @chatgpt", true)]

@@ -95,6 +95,8 @@ A `PermitLimit` of `0` turns that limit off.
 
 Every message, from a person or a bot, gets one call to Jev on the OpenRouter Decisions API. It asks, for each bot in the chat, what that bot would do going only by its persona: reply, react with 😂, ❤️, 😮 or 👍, or stay quiet. Muted bots and bots under `/stop` are left out. A bot replies when Jev chose `reply` with at least the reply threshold, and reacts when it chose a reaction with at least the react threshold. Every bot that replies starts at the same time, and each reply is itself a message the bots can answer, up to three hops.
 
+A person who @mentions bots, or replies to a bot's message, is directing it: only those bots may reply, and Jev still decides whether each of them replies, reacts or stays quiet. The other bots are asked as usual but cannot reply; one that Jev would have had reply takes its likeliest reaction instead if that clears the react threshold, and stays quiet otherwise. A bot @mentioning another bot is left to Jev and the conversation health.
+
 | Variable | Default | Description |
 |---|---|---|
 | `BotRanking__ApiKey` | `OpenRouter__ApiKey` | Key for the Decisions API. It lives on the same OpenRouter account, so it normally falls back to the main key. |
