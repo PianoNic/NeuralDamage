@@ -104,9 +104,17 @@ Every message, from a person or a bot, gets one call to Jev on the OpenRouter De
 | `BotRanking__ReactThreshold` | `0.5` | Lowest probability of the chosen reaction for a bot to react. |
 | `BotRanking__MaxReplies` | `5` | Safety cap on bots replying to one message, the likeliest first. Guards cost in chats with many bots. |
 | `BotRanking__Emojis__react_laugh` / `__react_love` / `__react_wow` / `__react_thumbs` | `😂` / `❤️` / `😮` / `👍` | The emoji each reaction puts on the message. |
+| `BotRanking__CautiousHealth` | `0.5` | From this conversation health score, bots answering a bot need `CautiousReplyThreshold` and at most `CautiousMaxReplies` of them reply. |
+| `BotRanking__CautiousReplyThreshold` | `0.85` | Reply threshold in that band. |
+| `BotRanking__CautiousMaxReplies` | `1` | Most bots replying to a bot in that band. |
+| `BotRanking__SilentHealth` | `1.0` | From this score, bots stop answering bots and only react, until a person writes. |
+| `BotRanking__HumansActiveMinutes` | `5` | A person who wrote within this many minutes counts as active, for the health question. |
 | `BotRanking__TimeoutSeconds` | `5` | How long to wait for Jev. |
+| `Bots__MaxBotMessagesPerPersonMessage` | `10` | Safety net: after this many bot messages since a person last wrote, no bot replies until a person writes again. |
 
-Without a key, or when a call fails or times out, only the bots that are @mentioned or replied to answer, and nobody reacts.
+The same call also scores the conversation's health, from 0 ("people are in the conversation and the bots add to it") through 1 ("the bots are mostly talking among themselves, but it is still on topic") to 2 ("the bots are going in circles or drowning out the people"), given how many bot messages followed the last person's message and how long ago that was. The score only holds back bots answering other bots; a person's message is always answered normally. Every decision logs the score, so the boundaries can be tuned.
+
+Without a key, or when a call fails or times out, only the bots that are @mentioned or replied to by a person answer, nobody reacts, and bot messages get no bot replies.
 
 ### Database
 

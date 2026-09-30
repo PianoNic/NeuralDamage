@@ -38,6 +38,22 @@ public record BotRankingOptions
     /// </summary>
     public int MaxReplies { get; init; } = 5;
 
+    /// <summary>
+    /// From this conversation health score (0 healthy, 2 spiralling) the bots
+    /// hold back when answering each other: only <see cref="CautiousMaxReplies"/>
+    /// of them, and only at <see cref="CautiousReplyThreshold"/> or above.
+    /// </summary>
+    public double CautiousHealth { get; init; } = 0.5;
+
+    /// <summary>From this conversation health score bots stop answering each other and only react.</summary>
+    public double SilentHealth { get; init; } = 1.0;
+
+    public double CautiousReplyThreshold { get; init; } = 0.85;
+    public int CautiousMaxReplies { get; init; } = 1;
+
+    /// <summary>A person who wrote within this long counts as active in the chat, for Jev's <c>flow</c>.</summary>
+    public TimeSpan HumansActiveWindow { get; init; } = TimeSpan.FromMinutes(5);
+
     public IReadOnlyDictionary<string, string> Emojis { get; init; } = DefaultEmojis;
 
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(5);
@@ -59,6 +75,11 @@ public record BotRankingOptions
             ReplyThreshold = section.GetValue<double?>("ReplyThreshold") ?? defaults.ReplyThreshold,
             ReactThreshold = section.GetValue<double?>("ReactThreshold") ?? defaults.ReactThreshold,
             MaxReplies = section.GetValue<int?>("MaxReplies") ?? defaults.MaxReplies,
+            CautiousHealth = section.GetValue<double?>("CautiousHealth") ?? defaults.CautiousHealth,
+            SilentHealth = section.GetValue<double?>("SilentHealth") ?? defaults.SilentHealth,
+            CautiousReplyThreshold = section.GetValue<double?>("CautiousReplyThreshold") ?? defaults.CautiousReplyThreshold,
+            CautiousMaxReplies = section.GetValue<int?>("CautiousMaxReplies") ?? defaults.CautiousMaxReplies,
+            HumansActiveWindow = section.GetValue<double?>("HumansActiveMinutes") is { } minutes ? TimeSpan.FromMinutes(minutes) : defaults.HumansActiveWindow,
             Emojis = emojis,
             Timeout = section.GetValue<double?>("TimeoutSeconds") is { } seconds ? TimeSpan.FromSeconds(seconds) : defaults.Timeout,
         };
