@@ -26,6 +26,7 @@ import {
   lucideX,
 } from '@ng-icons/lucide';
 import { toast } from '@spartan-ng/brain/sonner';
+import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
@@ -46,7 +47,7 @@ import { BotDialog } from '../bots/bot-dialog';
 import { BotDirectory } from '../bots/bot-directory';
 import { hasModelProblem, modelProblemLabel } from '../bots/bot-meta';
 import { MemberProfile } from './member-profile';
-import { canRemoveMember, joinedLabel } from './people-meta';
+import { canRemoveMember, joinedLabel, removalConfirmation } from './people-meta';
 
 /** Vertical room the profile card needs before it is pushed up from the row it belongs to. */
 const PROFILE_HEIGHT = 340;
@@ -60,6 +61,7 @@ const PROFILE_HEIGHT = 340;
   selector: 'app-people-sheet',
   imports: [
     NgIcon,
+    HlmAlertDialogImports,
     HlmBadge,
     HlmButton,
     HlmDropdownMenuImports,
@@ -308,6 +310,21 @@ const PROFILE_HEIGHT = 340;
       </hlm-dropdown-menu>
     </ng-template>
 
+    <hlm-alert-dialog [state]="confirmRemoval() ? 'open' : 'closed'" (closed)="confirmRemoval.set(null)">
+      <hlm-alert-dialog-content *hlmAlertDialogPortal="let ctx">
+        <hlm-alert-dialog-header>
+          <h2 hlmAlertDialogTitle>{{ confirmRemoval()?.copy?.title }}</h2>
+          <p hlmAlertDialogDescription>{{ confirmRemoval()?.copy?.description }}</p>
+        </hlm-alert-dialog-header>
+        <hlm-alert-dialog-footer>
+          <button hlmAlertDialogCancel (click)="ctx.close()">Cancel</button>
+          <button hlmAlertDialogAction variant="destructive" (click)="confirmRemove(); ctx.close()">
+            {{ confirmRemoval()?.copy?.action }}
+          </button>
+        </hlm-alert-dialog-footer>
+      </hlm-alert-dialog-content>
+    </hlm-alert-dialog>
+
     <app-bot-dialog
       [open]="dialogOpen()"
       [bot]="dialogBot()"
@@ -353,6 +370,12 @@ export class PeopleSheet implements OnDestroy {
   protected readonly addQuery = signal('');
   protected readonly invitable = signal<UserDto[]>([]);
   private inviteTimer?: ReturnType<typeof setTimeout>;
+
+  /** A removal waiting for the viewer to confirm it: removing a private bot deletes it. */
+  protected readonly confirmRemoval = signal<{
+    member: ChatMember;
+    copy: NonNullable<ReturnType<typeof removalConfirmation>>;
+  } | null>(null);
 
   protected readonly dialogOpen = signal(false);
   protected readonly dialogBot = signal<BotDto | null>(null);
@@ -512,6 +535,22 @@ export class PeopleSheet implements OnDestroy {
 
   protected async removeMember(member: ChatMember): Promise<void> {
     if (this.profileId() === member.id) this.profileId.set(null);
+    // Whether a bot is private decides whether removing it deletes it, so never guess without its details.
+    if (member.botId && !this.details().has(member.botId)) await this.loadDetails([member.botId]);
+    const copy = removalConfirmation(member, member.botId ? this.details().get(member.botId) : null);
+    if (copy) {
+      this.confirmRemoval.set({ member, copy });
+      return;
+    }
+    await this.remove(member);
+  }
+
+  protected confirmRemove(): void {
+    const pending = this.confirmRemoval();
+    if (pending) void this.remove(pending.member);
+  }
+
+  private async remove(member: ChatMember): Promise<void> {
     try {
       await firstValueFrom(this.membersApi.apiChatsChatIdMembersMemberIdDelete(this.chatId(), member.id));
     } catch (error) {

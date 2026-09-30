@@ -26,6 +26,16 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             && await modelPolicy.CheckModelAsync(openRouter, request.ModelId, cancellationToken) is { } refusal)
             return Result.Failure(refusal);
 
+        if (request.Name is not null && !string.Equals(request.Name, bot.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            var chatIds = await db.ChatMembers.Where(cm => cm.BotId == bot.Id).Select(cm => cm.ChatId).ToListAsync(cancellationToken);
+            foreach (var chatId in chatIds)
+                if (await BotNames.TakenInChatAsync(db, chatId, request.Name, bot.Id, cancellationToken))
+                    return Result.Failure(chatIds.Count == 1
+                        ? BotNames.Taken(request.Name)
+                        : $"A chat this bot is in already has a bot named {request.Name.Trim()}.");
+        }
+
         if (request.Name is not null) bot.Name = request.Name;
         if (request.ModelId is not null && request.ModelId != bot.ModelId)
         {

@@ -133,7 +133,12 @@ public class RunSlashCommandHandler(
                     return Mistake($"Bot '{command.Argument}' not found in this chat.");
 
                 var result = await sender.Send(new KickBotCommand(chatId, bot.Id, userId), ct);
-                return result.IsSuccess ? $"{userName} kicked {bot.Name} from the chat." : Mistake(result.Error!);
+                if (!result.IsSuccess)
+                    return Mistake(result.Error!);
+                // Kicking a private bot deletes it (see PrivateBots).
+                return bot.IsPublic
+                    ? $"{userName} kicked {bot.Name} from the chat."
+                    : $"{userName} kicked {bot.Name} from the chat. {bot.Name} was private to this chat, so it was deleted.";
             }
 
             case "/rename":

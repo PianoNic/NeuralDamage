@@ -9,7 +9,8 @@ public class BotConfiguration : IEntityTypeConfiguration<Bot>
     public void Configure(EntityTypeBuilder<Bot> builder)
     {
         builder.HasKey(b => b.Id);
-        builder.HasIndex(b => b.Name).IsUnique();
+        // No index on Name: names are unique within a chat, not across all bots, and the handlers
+        // enforce that (BotNames). Nothing looks a bot up by name in the database.
 
         builder.Property(b => b.Name).HasMaxLength(128).IsRequired();
         builder.Property(b => b.ModelId).HasMaxLength(256).IsRequired();
