@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Dtos;
@@ -17,14 +18,14 @@ public class BotDecisionEngineTests
     private static BotDecisionEngine Engine(OrchestratorHarness h, FakeJev jev, BotRankingOptions? ranking = null) =>
         new(h.Db, jev, ranking ?? new BotRankingOptions(), NullLogger<BotDecisionEngine>.Instance);
 
-    private static async Task<List<BotVerdict>> DecideAsync(OrchestratorHarness h, FakeJev jev, Message message, BotRankingOptions? ranking = null)
+    private static async Task<List<BotVerdict>> DecideAsync(OrchestratorHarness h, FakeJev jev, Message message, BotRankingOptions? ranking = null, List<Bot>? bots = null)
     {
         var loaded = await h.Db.Messages.AsNoTracking()
             .Include(m => m.SenderUser).Include(m => m.SenderBot).Include(m => m.Attachments)
             .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
             .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
             .FirstAsync(m => m.Id == message.Id);
-        return await Engine(h, jev, ranking).DecideAsync(h.Chat.Id, loaded, h.Bots);
+        return await Engine(h, jev, ranking).DecideAsync(h.Chat.Id, loaded, bots ?? h.Bots);
     }
 
     [Test]
@@ -39,7 +40,7 @@ public class BotDecisionEngineTests
         await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
 
         await Assert.That(jev.Calls).HasSingleItem();
-        await Assert.That(jev.Calls[0].Questions.Keys).IsEquivalentTo(Enumerable.Range(0, botCount).Select(i => $"bot_{i}"));
+        await Assert.That(jev.Calls[0].Questions.Keys).IsEquivalentTo(Enumerable.Range(0, botCount).Select(i => $"bot_{i}").Append(HealthKey));
         await Assert.That(jev.Calls[0].State.Bots.Values.Select(b => b.Name)).IsEquivalentTo(h.Bots.Select(b => b.Name));
     }
 
@@ -54,7 +55,7 @@ public class BotDecisionEngineTests
         await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
 
         await Assert.That(jev.Calls).HasSingleItem();
-        await Assert.That(jev.Calls[0].Questions.Count).IsEqualTo(2);
+        await Assert.That(jev.Calls[0].Questions.Count).IsEqualTo(3); // two bots and the health
         await Assert.That(jev.Calls[0].State.Bots.Values.Select(b => b.Name)).IsEquivalentTo([h.Bots[0].Name, h.Bots[2].Name]);
     }
 
@@ -92,7 +93,12 @@ public class BotDecisionEngineTests
         await Assert.That(root.GetProperty("model").GetString()).IsEqualTo("~typesafe/jev-latest");
 
         var s = root.GetProperty("state");
-        await Assert.That(s.EnumerateObject().Select(p => p.Name)).IsEquivalentTo(["chat", "recent_messages", "new_message", "bots"]);
+        await Assert.That(s.EnumerateObject().Select(p => p.Name)).IsEquivalentTo(["chat", "recent_messages", "new_message", "flow", "bots"]);
+        // A person just wrote: nothing has piled up behind them.
+        var flow = s.GetProperty("flow");
+        await Assert.That(flow.GetProperty("bot_messages_since_last_human").GetInt32()).IsEqualTo(0);
+        await Assert.That(flow.GetProperty("seconds_since_last_human").GetInt32()).IsLessThanOrEqualTo(1);
+        await Assert.That(flow.GetProperty("humans_active").GetBoolean()).IsTrue();
         await Assert.That(s.GetProperty("chat").GetString()).IsEqualTo("Chat");
         var recent = s.GetProperty("recent_messages");
         await Assert.That(recent.GetArrayLength()).IsEqualTo(1); // the new message is not repeated as history
@@ -123,8 +129,155 @@ public class BotDecisionEngineTests
             await Assert.That(criteria.GetProperty("react_thumbs").GetString()).IsEqualTo("A quick acknowledgement is enough.");
             await Assert.That(criteria.GetProperty("quiet").GetString()).IsEqualTo("It doesn't concern them; they scroll past.");
         }
+        // One more question, about the conversation, in the same call.
+        await Assert.That(root.GetProperty("questions").EnumerateObject().Select(p => p.Name))
+            .IsEquivalentTo(["bot_0", "bot_1", "conversation_health"]);
+        var health = root.GetProperty("questions").GetProperty("conversation_health");
+        await Assert.That(health.GetProperty("type").GetString()).IsEqualTo("score");
+        await Assert.That(health.GetProperty("instructions").GetString()).Contains("`flow`");
+        await Assert.That(health.GetProperty("criteria").EnumerateArray().Select(c => c.GetString()!)).IsEquivalentTo(
+        [
+            "People are in the conversation and the bots add to it.",
+            "The bots are mostly talking among themselves, but it is still on topic and fun to read.",
+            "The bots are going in circles, repeating themselves, drifting off topic, or drowning out the people.",
+        ]);
+
         // No steering: nothing about how many should answer, or about the others.
         await Assert.That(body.RootElement.GetRawText()).DoesNotContain("one or two");
+    }
+
+    [Test]
+    public async Task Flow_CountsTheBotMessagesSinceAPersonLastWrote()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Quiet, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        await h.SayAsync("old news", at: DateTime.UtcNow.AddMinutes(-20));
+        await h.SayAsync("what's the best pizza topping?", at: DateTime.UtcNow.AddSeconds(-90));
+        await h.SayAsync("pineapple", asBot: h.Bots[0], at: DateTime.UtcNow.AddSeconds(-60));
+        var message = await h.SayAsync("never", asBot: h.Bots[1], at: DateTime.UtcNow.AddSeconds(-30));
+
+        await DecideAsync(h, jev, message);
+
+        var flow = jev.Calls.Single().State.Flow;
+        await Assert.That(flow.BotMessagesSinceLastHuman).IsEqualTo(2);
+        await Assert.That(flow.SecondsSinceLastHuman!.Value).IsBetween(89, 95);
+        await Assert.That(flow.HumansActive).IsTrue();
+    }
+
+    [Test]
+    public async Task Flow_NobodyWroteLately_HumansAreNotActive()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Quiet, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        await h.SayAsync("pizza?", at: DateTime.UtcNow.AddMinutes(-10));
+        var message = await h.SayAsync("still thinking about pizza", asBot: h.Bots[0]);
+
+        await DecideAsync(h, jev, message);
+
+        var flow = jev.Calls.Single().State.Flow;
+        await Assert.That(flow.BotMessagesSinceLastHuman).IsEqualTo(1);
+        await Assert.That(flow.HumansActive).IsFalse();
+    }
+
+    /// <summary>GPT and Claude want to answer a bot's message with <paramref name="p"/>; Gemini laughs.</summary>
+    [Test]
+    [Arguments(0.0, 0.8, 2)]
+    [Arguments(0.99, 0.6, 2)]
+    [Arguments(1.0, 0.9, 1)]
+    [Arguments(1.2, 0.84, 0)]
+    [Arguments(1.49, 0.85, 1)]
+    [Arguments(1.5, 0.99, 0)]
+    [Arguments(2.0, 0.99, 0)]
+    public async Task Health_OnABotMessage_HoldsRepliesBack_ReactionsStay(double health, double p, int repliers)
+    {
+        var jev = new FakeJev(name => name == "Gemini" ? FakeJev.Chose(ReactLaugh, 0.7) : FakeJev.Chose(Reply, p)) { Health = _ => health };
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 4);
+        await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
+        var message = await h.SayAsync("pineapple, obviously", asBot: h.Bots[3]);
+
+        var verdicts = await DecideAsync(h, jev, message, bots: h.Bots[..3]);
+
+        await Assert.That(verdicts.Count(v => v.Action == BotAction.Reply)).IsEqualTo(repliers);
+        await Assert.That(verdicts.Single(v => v.Bot.Name == "Gemini").Action).IsEqualTo(BotAction.React);
+    }
+
+    [Test]
+    public async Task Health_OnAPersonsMessage_ChangesNothing()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.7)) { Health = _ => 2.0 };
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        var message = await h.SayAsync("ok you two, which is it?");
+
+        var verdicts = await DecideAsync(h, jev, message);
+
+        await Assert.That(verdicts.All(v => v.Action == BotAction.Reply)).IsTrue();
+    }
+
+    [Test]
+    public async Task HealthBoundaries_AreConfigurable()
+    {
+        var ranking = new BotRankingOptions { CautiousHealth = 0.3, SilentHealth = 0.8, CautiousReplyThreshold = 0.7, CautiousMaxReplies = 2 };
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
+        var message = await h.SayAsync("pineapple", asBot: h.Bots[2]);
+
+        var cautious = await DecideAsync(h, new FakeJev(_ => FakeJev.Chose(Reply, 0.75)) { Health = _ => 0.5 }, message, ranking, h.Bots[..2]);
+        var silent = await DecideAsync(h, new FakeJev(_ => FakeJev.Chose(Reply, 0.99)) { Health = _ => 0.8 }, message, ranking, h.Bots[..2]);
+
+        await Assert.That(cautious.Count(v => v.Action == BotAction.Reply)).IsEqualTo(2);
+        await Assert.That(silent.Count(v => v.Action == BotAction.Reply)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Health_IsLoggedForEveryDecision()
+    {
+        var logger = new ListLogger<BotDecisionEngine>();
+        var jev = new FakeJev(_ => FakeJev.Chose(Quiet, 0.9)) { Health = _ => 1.234 };
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
+        var message = await h.SayAsync("pineapple", asBot: h.Bots[0]);
+
+        await new BotDecisionEngine(h.Db, jev, new BotRankingOptions(), logger).DecideAsync(h.Chat.Id, message, h.Bots);
+
+        await Assert.That(logger.Entries.Any(e => e.Level == LogLevel.Information
+            && e.Message.Contains("health 1.23") && e.Message.Contains("Cautious") && e.Message.Contains("1 bot messages since a person"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Health_FallsBackToTheProbabilities_WhenTheScoreIsMissing()
+    {
+        var logger = new ListLogger<BotDecisionEngine>();
+        var decisions = Substitute.For<IDecisionsClient>();
+        decisions.DecideAsync(default!, default!, default).ReturnsForAnyArgs(new DecisionsResponse("gen", "jev", new Dictionary<string, DecisionAnswer>
+        {
+            ["bot_0"] = FakeJev.Chose(Reply, 0.99),
+            [HealthKey] = new("score", null, null, 0.8, new Dictionary<string, double> { ["0"] = 0.1, ["1"] = 0.1, ["2"] = 0.8 }),
+        }, null));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
+        var message = await h.SayAsync("pineapple", asBot: h.Bots[1]);
+
+        var verdicts = await new BotDecisionEngine(h.Db, decisions, new BotRankingOptions(), logger).DecideAsync(h.Chat.Id, message, h.Bots[..1]);
+
+        // 0.1 * 1 + 0.8 * 2 = 1.7: silent.
+        await Assert.That(verdicts.Single().Action).IsEqualTo(BotAction.Quiet);
+        await Assert.That(logger.Entries.Any(e => e.Message.Contains("health 1.70"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Ceiling_StopsReplies_AfterTooManyBotMessagesSinceAPerson()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.99)) { Health = _ => 0 };
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        await h.SayAsync("pizza?", at: DateTime.UtcNow.AddMinutes(-1));
+        for (var i = 0; i < 9; i++)
+            await h.SayAsync($"take {i}", asBot: h.Bots[2], at: DateTime.UtcNow.AddSeconds(-50 + i));
+        var message = await h.SayAsync("take 9", asBot: h.Bots[2]);
+
+        // The tenth bot message since the person wrote: the ceiling is reached.
+        var verdicts = await DecideAsync(h, jev, message, bots: h.Bots[..2]);
+
+        await Assert.That(verdicts.All(v => v.Action == BotAction.Quiet)).IsTrue();
     }
 
     [Test]
@@ -204,6 +357,11 @@ public class BotDecisionEngineTests
             ["BotRanking:ReactThreshold"] = "0.4",
             ["BotRanking:MaxReplies"] = "3",
             ["BotRanking:Emojis:react_love"] = "🥰",
+            ["BotRanking:CautiousHealth"] = "0.8",
+            ["BotRanking:SilentHealth"] = "1.2",
+            ["BotRanking:CautiousReplyThreshold"] = "0.9",
+            ["BotRanking:CautiousMaxReplies"] = "2",
+            ["BotRanking:HumansActiveMinutes"] = "10",
         }).Build();
 
         var options = BotRankingOptions.FromConfiguration(config);
@@ -213,6 +371,22 @@ public class BotDecisionEngineTests
         await Assert.That(options.MaxReplies).IsEqualTo(3);
         await Assert.That(options.Emojis[ReactLove]).IsEqualTo("🥰");
         await Assert.That(options.Emojis[ReactLaugh]).IsEqualTo("😂");
+        await Assert.That(options.CautiousHealth).IsEqualTo(0.8);
+        await Assert.That(options.SilentHealth).IsEqualTo(1.2);
+        await Assert.That(options.CautiousReplyThreshold).IsEqualTo(0.9);
+        await Assert.That(options.CautiousMaxReplies).IsEqualTo(2);
+        await Assert.That(options.HumansActiveWindow).IsEqualTo(TimeSpan.FromMinutes(10));
+    }
+
+    [Test]
+    public async Task HealthDefaults_MatchTheIssue()
+    {
+        var options = BotRankingOptions.FromConfiguration(new ConfigurationBuilder().Build());
+        await Assert.That(options.CautiousHealth).IsEqualTo(1.0);
+        await Assert.That(options.SilentHealth).IsEqualTo(1.5);
+        await Assert.That(options.CautiousReplyThreshold).IsEqualTo(0.85);
+        await Assert.That(options.CautiousMaxReplies).IsEqualTo(1);
+        await Assert.That(new NeuralDamage.Infrastructure.Services.BotBehaviorOptions().MaxBotMessagesPerPersonMessage).IsEqualTo(10);
     }
 
     [Test]
@@ -262,13 +436,14 @@ public class BotDecisionEngineTests
     }
 
     [Test]
-    public async Task JevUnavailable_ABotsReplyLink_PicksNobody()
+    public async Task JevUnavailable_ABotsMessage_PicksNobody()
     {
         var jev = new FakeJev { Unavailable = true };
         using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
         var gptSaid = await h.SayAsync("hot take", asBot: h.Bots[0], at: DateTime.UtcNow.AddMinutes(-1));
         // Every bot reply links what it answered; that is not addressing GPT.
-        var message = await h.SayAsync("colder take", asBot: h.Bots[1], replyToId: gptSaid.Id);
+        // Nor is a bot's @mention: without Jev, bots never answer bots.
+        var message = await h.SayAsync("colder take, @GPT", asBot: h.Bots[1], replyToId: gptSaid.Id);
 
         var verdicts = await DecideAsync(h, jev, message);
 

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -15,19 +16,80 @@ public class BotChainTests
     /// Bots that reply to every message they are asked about, so only the hop
     /// limit, the rate cap and a person speaking can end the chain.
     /// </summary>
-    private static async Task<(OrchestratorHarness H, BotResponseQueue Queue, FakeJev Jev)> ChattyBotsAsync(int botCount = 2)
+    private static async Task<(OrchestratorHarness H, BotResponseQueue Queue, FakeJev Jev)> ChattyBotsAsync(
+        int botCount = 2, BotBehaviorOptions? options = null, string replyPrefix = "")
     {
         var queue = new BotResponseQueue();
         var jev = new FakeJev(_ => FakeJev.Chose(BotDecisionEngine.Reply, 0.9));
-        var h = await OrchestratorHarness.CreateAsync(botCount: botCount, configure: s =>
+        var h = await OrchestratorHarness.CreateAsync(botCount: botCount, options: options is null ? null : Options.Create(options), configure: s =>
         {
             s.AddSingleton<IBotResponseQueue>(queue);
             jev.Engine()(s);
         });
         var n = 0;
         h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default)
-            .ReturnsForAnyArgs(_ => $"take number {Interlocked.Increment(ref n)}, on a whole new subject");
+            .ReturnsForAnyArgs(_ => $"{replyPrefix}take number {Interlocked.Increment(ref n)}, on a whole new subject");
         return (h, queue, jev);
+    }
+
+    /// <summary>No hop limit or rate cap to speak of, so only the health and the ceiling are left.</summary>
+    private static BotBehaviorOptions Unlimited()
+    {
+        var options = InstantBotOptions.Create().Value;
+        options.MaxBotChainDepth = 1000;
+        options.MaxRepliesPerMinute = 1000;
+        return options;
+    }
+
+    [Test]
+    public async Task Ceiling_StopsAChainAtTenBotMessages_AcrossHops()
+    {
+        var (h, queue, jev) = await ChattyBotsAsync(botCount: 3, options: Unlimited());
+        using var disposable = h;
+        jev.Health = _ => 0; // Jev wrongly thinks it is all going fine.
+        var trigger = await h.SayAsync("what's the best pizza topping?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+        var depths = await DrainAsync(h, queue);
+
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(10);
+        await Assert.That(depths.Max()).IsGreaterThan(1);
+    }
+
+    [Test]
+    public async Task SpirallingHealth_EndsTheChain_AndAPersonBringsTheBotsBack()
+    {
+        var (h, queue, jev) = await ChattyBotsAsync(options: Unlimited());
+        using var disposable = h;
+        // Fine while a person leads; a spiral from the second bot message on.
+        jev.Health = s => s.Flow.BotMessagesSinceLastHuman >= 2 ? 1.8 : 0;
+        var trigger = await h.SayAsync("what's the best pizza topping?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+        await DrainAsync(h, queue);
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(2);
+
+        var again = await h.SayAsync("ok but what about sushi?");
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, again.Id);
+        await DrainAsync(h, queue);
+
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(4);
+        var personCall = jev.Calls.Last(c => !c.State.NewMessage.IsBot);
+        await Assert.That(personCall.State.Flow.BotMessagesSinceLastHuman).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task JevUnavailable_BotMessagesNeverChain_EvenWithMentions()
+    {
+        var (h, queue, jev) = await ChattyBotsAsync(options: Unlimited(), replyPrefix: "@GPT @Claude ");
+        using var disposable = h;
+        jev.Unavailable = true;
+        var trigger = await h.SayAsync("@GPT @Claude pizza or sushi?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+        await DrainAsync(h, queue);
+
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(2);
     }
 
     /// <summary>Runs whatever the rounds queued, the way the per-chat worker would.</summary>

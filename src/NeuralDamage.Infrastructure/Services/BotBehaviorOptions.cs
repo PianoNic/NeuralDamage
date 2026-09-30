@@ -20,6 +20,14 @@ public class BotBehaviorOptions
     public int MaxBotChainDepth { get; set; } = 3;
 
     /// <summary>
+    /// Safety net for when Jev is wrong or down: after this many bot messages
+    /// since a person last wrote, across every hop, no bot replies until a
+    /// person writes again. Jev's conversation health should stop a chain
+    /// well before it.
+    /// </summary>
+    public int MaxBotMessagesPerPersonMessage { get; set; } = 10;
+
+    /// <summary>
     /// A pause before typing starts, as if reading the message first. Each
     /// replying bot draws its own, so they do not all start typing at once.
     /// </summary>

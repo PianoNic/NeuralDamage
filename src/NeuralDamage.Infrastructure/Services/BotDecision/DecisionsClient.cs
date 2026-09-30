@@ -22,10 +22,12 @@ public interface IDecisionsClient
 }
 
 /// <param name="Criteria">
-/// For a <c>choice</c> question, each option and what it means. Dictionary
-/// keys are sent as written; only property names become snake_case.
+/// For a <c>choice</c> question, a dictionary of each option and what it
+/// means; its keys are sent as written, only property names become
+/// snake_case. For a <c>score</c> question, a list of what each level means,
+/// lowest first: the API rejects a dictionary there.
 /// </param>
-public record DecisionQuestion(string Type, string Instructions, IReadOnlyDictionary<string, string>? Criteria = null);
+public record DecisionQuestion(string Type, string Instructions, object? Criteria = null);
 
 public record DecisionsRequest(string Model, object State, IReadOnlyDictionary<string, DecisionQuestion> Questions);
 
@@ -35,12 +37,19 @@ public record DecisionsResponse(
     Dictionary<string, DecisionAnswer>? Answers,
     DecisionUsage? Usage);
 
+/// <param name="Score">
+/// For a <c>score</c> question, the expected level: 0.01 is "almost surely
+/// level 0". Its <paramref name="Probabilities"/> are keyed by level ("0",
+/// "1", ...), and <paramref name="Legend"/> repeats the criteria.
+/// </param>
 public record DecisionAnswer(
     string? Type,
     double? Noul,
     string? Choice,
     double? Confidence,
-    Dictionary<string, double>? Probabilities);
+    Dictionary<string, double>? Probabilities,
+    double? Score = null,
+    Dictionary<string, string>? Legend = null);
 
 public record DecisionUsage(int InputTokens, int OutputTokens, decimal Cost);
 

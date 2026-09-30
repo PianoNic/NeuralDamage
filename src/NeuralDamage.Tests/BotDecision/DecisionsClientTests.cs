@@ -60,6 +60,8 @@ public class DecisionsClientTests
         await Assert.That(response!.Answers!["offsite_transaction"].Noul).IsEqualTo(0.05);
         await Assert.That(response.Answers["described_condition"].Confidence).IsEqualTo(1);
         await Assert.That(response.Answers["described_condition"].Probabilities!["1"]).IsEqualTo(1);
+        await Assert.That(response.Answers["described_condition"].Score).IsEqualTo(1);
+        await Assert.That(response.Answers["described_condition"].Legend!["1"]).IsEqualTo("Worn");
         await Assert.That(response.Usage!.InputTokens).IsEqualTo(492);
         await Assert.That(response.Usage.Cost).IsEqualTo(0.000020664m);
     }
@@ -82,6 +84,43 @@ public class DecisionsClientTests
         // Option keys are sent as written, not run through the naming policy.
         await Assert.That(question.GetProperty("criteria").GetProperty("reply").GetString()).IsEqualTo("yes");
         await Assert.That(question.GetProperty("criteria").GetProperty("quiet").GetString()).IsEqualTo("no");
+    }
+
+    [Test]
+    public async Task HealthScore_ParsesAsAnExpectedLevel_AndItsCriteriaGoAsAList()
+    {
+        // Recorded from the live API: the score is the expected level, not a whole one.
+        var handler = new StubHandler(HttpStatusCode.OK, """
+            {
+              "model": "typesafe/jev-1.13-20260917",
+              "answers": {
+                "conversation_health": {
+                  "type": "score", "score": 0.01,
+                  "legend": { "0": "People are in the conversation and the bots add to it.", "1": "b", "2": "c" },
+                  "probabilities": { "0": 0.99, "1": 0.01, "2": 0 },
+                  "confidence": 0.98
+                }
+              },
+              "usage": { "input_tokens": 449, "output_tokens": 18, "cost": 0.000018858 }
+            }
+            """);
+
+        var response = await Client(handler).DecideAsync(new { }, new Dictionary<string, DecisionQuestion>
+        {
+            [BotDecisionEngine.HealthKey] = BotDecisionEngine.HealthQuestion,
+        });
+
+        var health = response!.Answers![BotDecisionEngine.HealthKey];
+        await Assert.That(health.Score).IsEqualTo(0.01);
+        await Assert.That(health.Confidence).IsEqualTo(0.98);
+        await Assert.That(health.Probabilities!["0"]).IsEqualTo(0.99);
+        await Assert.That(health.Legend!["0"]).IsEqualTo("People are in the conversation and the bots add to it.");
+
+        // The API rejects criteria as an object for a score question.
+        using var body = JsonDocument.Parse(handler.RequestBody!);
+        var criteria = body.RootElement.GetProperty("questions").GetProperty(BotDecisionEngine.HealthKey).GetProperty("criteria");
+        await Assert.That(criteria.ValueKind).IsEqualTo(JsonValueKind.Array);
+        await Assert.That(criteria.GetArrayLength()).IsEqualTo(3);
     }
 
     [Test]
