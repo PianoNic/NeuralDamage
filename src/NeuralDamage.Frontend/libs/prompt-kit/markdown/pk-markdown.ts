@@ -45,6 +45,12 @@ export class PkMarkdown {
    * management, pass 'default' or 'dark' explicitly.
    */
   public readonly mermaidTheme = input<MermaidThemeMode>('auto');
+  /**
+   * Which image URLs may render as images. Every other image becomes a link to
+   * it: loading a remote image hands the viewer's IP address to whoever hosts
+   * it. By default none may.
+   */
+  public readonly allowImage = input<(src: string) => boolean>(() => false);
 
   private readonly platformId = inject(PLATFORM_ID);
   private readonly sanitizer = inject(DomSanitizer);
@@ -101,16 +107,37 @@ export class PkMarkdown {
       return parsed;
     }
 
-    return this.sanitizer.bypassSecurityTrustHtml(
-      DOMPurify.sanitize(parsed, {
-        // Mermaid and KaTeX render into this subtree, so SVG and MathML stay.
-        USE_PROFILES: { html: true, svg: true, mathMl: true },
-        // Markdown never produces forms (task-list checkboxes are bare inputs);
-        // from a message body one can only be a fake login that posts elsewhere.
-        FORBID_TAGS: ['form', 'button', 'textarea', 'select', 'option'],
-        FORBID_ATTR: ['action', 'formaction'],
-      }),
-    );
+    const fragment = DOMPurify.sanitize(parsed, {
+      // Mermaid and KaTeX render into this subtree, so SVG and MathML stay.
+      USE_PROFILES: { html: true, svg: true, mathMl: true },
+      // Markdown never produces forms (task-list checkboxes are bare inputs);
+      // from a message body one can only be a fake login that posts elsewhere.
+      // The rest can fetch a remote resource on render - media, SVG images and
+      // references, stylesheets - and markdown needs none of them.
+      FORBID_TAGS: [
+        'form',
+        'button',
+        'textarea',
+        'select',
+        'option',
+        'style',
+        'video',
+        'audio',
+        'source',
+        'track',
+        'picture',
+        'image',
+        'feImage',
+        'use',
+      ],
+      FORBID_ATTR: ['action', 'formaction', 'style', 'srcset', 'poster', 'background', 'ping'],
+      RETURN_DOM_FRAGMENT: true,
+    });
+    replaceImages(fragment, this.allowImage());
+
+    const holder = document.createElement('div');
+    holder.appendChild(fragment);
+    return this.sanitizer.bypassSecurityTrustHtml(holder.innerHTML);
   });
 
   private readonly delimiters = computed<KatexDelimiter[]>(() => {
@@ -362,6 +389,33 @@ export class PkMarkdown {
     if (t !== 'auto') return t;
     if (!isPlatformBrowser(this.platformId)) return 'default';
     return document.documentElement.classList.contains('dark') ? 'dark' : 'default';
+  }
+}
+
+/**
+ * Turns every image the policy does not allow into a link to it (or its alt
+ * text, when the source is not a web address), and drops `src` from anything
+ * else that could load it, such as `<input type="image">`.
+ */
+export function replaceImages(root: DocumentFragment | HTMLElement, allow: (src: string) => boolean): void {
+  for (const img of Array.from(root.querySelectorAll('img'))) {
+    const src = img.getAttribute('src') ?? '';
+    if (src && allow(src)) continue;
+
+    const label = img.getAttribute('alt')?.trim() || img.getAttribute('title')?.trim() || 'image';
+    if (/^https?:\/\//i.test(src)) {
+      const link = document.createElement('a');
+      link.href = src;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer nofollow';
+      link.textContent = `Image: ${label}`;
+      img.replaceWith(link);
+    } else {
+      img.replaceWith(document.createTextNode(label));
+    }
+  }
+  for (const el of Array.from(root.querySelectorAll('[src]'))) {
+    if (el.tagName.toLowerCase() !== 'img') el.removeAttribute('src');
   }
 }
 
