@@ -137,7 +137,7 @@ public class BotVisibilityTests
         var notifications = Substitute.For<IChatNotificationService>();
         var handler = new CreateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, notifications);
 
-        var result = await handler.Handle(new CreateBotCommand("Secret", "m/x", "x", null, 0.7, null, null, w.Owner.Id, IsPublic: false, ChatId: w.Chat.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("Secret", "m/x", "x", null, 0.7, null, w.Owner.Id, IsPublic: false, ChatId: w.Chat.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value!.IsPublic).IsFalse();
@@ -156,7 +156,7 @@ public class BotVisibilityTests
         using var _ = w.Db;
         var handler = new CreateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, Substitute.For<IChatNotificationService>());
 
-        var result = await handler.Handle(new CreateBotCommand("Secret", "m/x", "x", null, 0.7, null, null, w.Owner.Id, IsPublic: false), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("Secret", "m/x", "x", null, 0.7, null, w.Owner.Id, IsPublic: false), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
     }
@@ -168,7 +168,7 @@ public class BotVisibilityTests
         using var _ = w.Db;
         var handler = new CreateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, Substitute.For<IChatNotificationService>());
 
-        var result = await handler.Handle(new CreateBotCommand("Secret", "m/x", "x", null, 0.7, null, null, w.Stranger.Id, IsPublic: false, ChatId: w.Chat.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("Secret", "m/x", "x", null, 0.7, null, w.Stranger.Id, IsPublic: false, ChatId: w.Chat.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(await w.Db.Bots.AnyAsync(b => b.Name == "Secret")).IsFalse();

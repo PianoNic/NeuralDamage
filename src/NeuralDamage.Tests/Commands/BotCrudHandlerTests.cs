@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Services;
@@ -44,7 +44,7 @@ public class BotCrudHandlerTests
         using var _ = db;
 
         var handler = new CreateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, Substitute.For<IChatNotificationService>());
-        var result = await handler.Handle(new CreateBotCommand("GPT", "openai/gpt-4o", "Be helpful", null, 0.7, null, "gpt,chatgpt", user.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "openai/gpt-4o", "Be helpful", null, 0.7, "gpt,chatgpt", user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value!.Name).IsEqualTo("GPT");
@@ -63,7 +63,7 @@ public class BotCrudHandlerTests
         await db.SaveChangesAsync();
 
         var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
-        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "GPT v2", null, "New prompt", null, 0.9, null, null, null), CancellationToken.None);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "GPT v2", null, "New prompt", null, 0.9, null, null), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(bot.Name).IsEqualTo("GPT v2");
@@ -84,7 +84,7 @@ public class BotCrudHandlerTests
         await db.SaveChangesAsync();
 
         var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
-        var result = await handler.Handle(new UpdateBotCommand(bot.Id, other.Id, "Hacked", null, null, null, null, null, null, null), CancellationToken.None);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, other.Id, "Hacked", null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(bot.Name).IsEqualTo("GPT");
@@ -97,7 +97,7 @@ public class BotCrudHandlerTests
         using var _ = db;
 
         var handler = new CreateBotHandler(db, Catalogue(), Cap, Substitute.For<IChatNotificationService>());
-        var result = await handler.Handle(new CreateBotCommand("GPT", "pricey/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "pricey/model", "Be helpful", null, 0.7, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(await db.Bots.CountAsync()).IsEqualTo(0);
@@ -110,7 +110,7 @@ public class BotCrudHandlerTests
         using var _ = db;
 
         var handler = new CreateBotHandler(db, Catalogue(), Cap, Substitute.For<IChatNotificationService>());
-        var result = await handler.Handle(new CreateBotCommand("GPT", "made/up", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "made/up", "Be helpful", null, 0.7, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
     }
@@ -122,7 +122,7 @@ public class BotCrudHandlerTests
         using var _ = db;
 
         var handler = new CreateBotHandler(db, Catalogue(), Cap, Substitute.For<IChatNotificationService>());
-        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
     }
@@ -137,7 +137,7 @@ public class BotCrudHandlerTests
         await db.SaveChangesAsync();
 
         var handler = new UpdateBotHandler(db, Catalogue(), Cap, new ChatBotState());
-        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null, null), CancellationToken.None);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(bot.ModelId).IsEqualTo("cheap/model");
@@ -154,7 +154,7 @@ public class BotCrudHandlerTests
         await db.SaveChangesAsync();
 
         var handler = new UpdateBotHandler(db, Catalogue(), Cap, new ChatBotState());
-        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null, null), CancellationToken.None);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(bot.Name).IsEqualTo("Renamed");
@@ -167,7 +167,7 @@ public class BotCrudHandlerTests
         using var _ = db;
 
         var handler = new CreateBotHandler(db, Catalogue(), Safe, Substitute.For<IChatNotificationService>());
-        var result = await handler.Handle(new CreateBotCommand("GPT", "retaining/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "retaining/model", "Be helpful", null, 0.7, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error!).Contains("zero-data-retention");
@@ -181,7 +181,7 @@ public class BotCrudHandlerTests
         using var _ = db;
 
         var handler = new CreateBotHandler(db, Catalogue(), Safe, Substitute.For<IChatNotificationService>());
-        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model:batch", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model:batch", "Be helpful", null, 0.7, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error!).Contains("batch");
@@ -194,7 +194,7 @@ public class BotCrudHandlerTests
         using var _ = db;
 
         var handler = new CreateBotHandler(db, Catalogue(), Safe, Substitute.For<IChatNotificationService>());
-        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
     }
@@ -209,7 +209,7 @@ public class BotCrudHandlerTests
         await db.SaveChangesAsync();
 
         var handler = new UpdateBotHandler(db, Catalogue(), Safe, new ChatBotState());
-        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, "retaining/model", null, null, null, null, null, null), CancellationToken.None);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, "retaining/model", null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error!).Contains("zero-data-retention");
@@ -225,7 +225,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new DeleteBotHandler(db, Substitute.For<IChatNotificationService>());
+        var handler = new DeleteBotHandler(db, Substitute.For<IChatNotificationService>(), new InMemoryAttachmentStorage());
         var result = await handler.Handle(new DeleteBotCommand(bot.Id, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -248,7 +248,7 @@ public class BotCrudHandlerTests
         await db.SaveChangesAsync();
         var notifications = Substitute.For<IChatNotificationService>();
 
-        var result = await new DeleteBotHandler(db, notifications).Handle(new DeleteBotCommand(bot.Id, user.Id), CancellationToken.None);
+        var result = await new DeleteBotHandler(db, notifications, new InMemoryAttachmentStorage()).Handle(new DeleteBotCommand(bot.Id, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(await db.ChatMembers.AnyAsync(cm => cm.BotId == bot.Id)).IsFalse();
@@ -266,7 +266,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new DeleteBotHandler(db, Substitute.For<IChatNotificationService>());
+        var handler = new DeleteBotHandler(db, Substitute.For<IChatNotificationService>(), new InMemoryAttachmentStorage());
         var result = await handler.Handle(new DeleteBotCommand(bot.Id, other.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();

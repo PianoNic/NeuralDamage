@@ -1,6 +1,17 @@
-import { Component, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronRight, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
+import { lucideCamera, lucideChevronRight, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmCollapsibleImports } from '@spartan-ng/helm/collapsible';
@@ -26,6 +37,8 @@ import {
 } from './bot-meta';
 import { ModelBrowser } from './model-browser';
 import { ModelCatalog } from './model-catalog';
+import { cropAvatar } from '../../shared/crop-avatar';
+import { MemberAvatar } from '../../shared/member-avatar';
 import { providerIconUrl } from '../../shared/provider-icon';
 
 const DEFAULT_TEMPERATURE = 0.8;
@@ -49,9 +62,10 @@ const DEFAULT_TEMPERATURE = 0.8;
     HlmSliderImports,
     HlmSpinner,
     HlmTextarea,
+    MemberAvatar,
     ModelBrowser,
   ],
-  providers: [provideIcons({ lucideChevronRight, lucideTriangleAlert, lucideX })],
+  providers: [provideIcons({ lucideCamera, lucideChevronRight, lucideTriangleAlert, lucideX })],
   template: `
     <hlm-dialog [state]="open() ? 'open' : 'closed'" (closed)="closed.emit()">
       <hlm-dialog-content
@@ -87,6 +101,45 @@ const DEFAULT_TEMPERATURE = 0.8;
               <p hlmAlertDescription>{{ warning }}</p>
             </div>
           }
+
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="focus-visible:ring-ring/50 group relative shrink-0 rounded-full outline-none focus-visible:ring-2"
+              aria-label="Choose a picture"
+              (click)="picker.click()"
+            >
+              <app-member-avatar [name]="name().trim() || '?'" [avatarUrl]="shownAvatar()" [modelId]="modelId()" [px]="56" />
+              <span
+                class="bg-foreground/50 text-background absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              >
+                <ng-icon name="lucideCamera" size="18" />
+              </span>
+            </button>
+            <input
+              #picker
+              type="file"
+              class="hidden"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              (change)="pickAvatar(picker)"
+            />
+            <div class="flex min-w-0 flex-col gap-0.5">
+              <span class="text-sm font-medium">Picture</span>
+              <span class="text-muted-foreground text-xs">
+                @if (shownAvatar()) {
+                  <button type="button" class="hover:text-foreground underline-offset-2 hover:underline" (click)="picker.click()">
+                    Change
+                  </button>
+                  ·
+                  <button type="button" class="hover:text-foreground underline-offset-2 hover:underline" (click)="removeAvatar()">
+                    Remove
+                  </button>
+                } @else {
+                  Optional. Without one it shows the model's icon.
+                }
+              </span>
+            </div>
+          </div>
 
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div hlmField [attr.data-invalid]="nameInvalid() || null">
@@ -283,6 +336,13 @@ export class BotDialog {
   protected readonly advancedOpen = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** A picture picked but not uploaded yet: it goes up when the bot is saved. */
+  private readonly newAvatar = signal<{ blob: Blob; preview: string } | null>(null);
+  /** The bot's current picture is to go when the bot is saved. */
+  private readonly avatarRemoved = signal(false);
+  protected readonly shownAvatar = computed(
+    () => this.newAvatar()?.preview ?? (this.avatarRemoved() ? null : (this.bot()?.avatarUrl ?? null)),
+  );
 
   protected readonly nameInvalid = computed(() => this.nameTouched() && !this.name().trim());
   protected readonly selectedModel = computed(() => this.catalog.find(this.modelId()));
@@ -316,8 +376,11 @@ export class BotDialog {
         this.nameTouched.set(false);
         this.error.set(null);
         this.saving.set(false);
+        this.setNewAvatar(null);
+        this.avatarRemoved.set(false);
       });
     });
+    inject(DestroyRef).onDestroy(() => this.setNewAvatar(null));
     effect(() => {
       const browser = this.browser();
       if (browser && this.open() && untracked(() => this.focusModel())) browser.focusSearch();
@@ -334,6 +397,46 @@ export class BotDialog {
 
   protected tierOf(tier: number) {
     return priceTierMarks(tier);
+  }
+
+  protected async pickAvatar(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    // Cleared so picking the same file again still fires a change.
+    input.value = '';
+    if (!file) return;
+    this.error.set(null);
+    try {
+      const blob = await cropAvatar(file);
+      this.setNewAvatar({ blob, preview: URL.createObjectURL(blob) });
+      this.avatarRemoved.set(false);
+    } catch {
+      this.error.set('That picture could not be read. Try a PNG, JPEG, WebP or GIF.');
+    }
+  }
+
+  protected removeAvatar(): void {
+    this.setNewAvatar(null);
+    this.avatarRemoved.set(!!this.bot()?.avatarUrl);
+  }
+
+  private setNewAvatar(next: { blob: Blob; preview: string } | null): void {
+    const previous = this.newAvatar();
+    if (previous) URL.revokeObjectURL(previous.preview);
+    this.newAvatar.set(next);
+  }
+
+  /** Uploads or removes the picture once the bot exists. Returns the bot's avatar URL after. */
+  private async saveAvatar(botId: string, current: string | null | undefined): Promise<string | null | undefined> {
+    const picked = this.newAvatar();
+    if (picked) {
+      const result = await firstValueFrom(this.api.apiBotsBotIdAvatarPut(botId, picked.blob));
+      return result.avatarUrl;
+    }
+    if (this.avatarRemoved() && current) {
+      await firstValueFrom(this.api.apiBotsBotIdAvatarDelete(botId));
+      return null;
+    }
+    return current;
   }
 
   protected async save(): Promise<void> {
@@ -357,6 +460,7 @@ export class BotDialog {
             systemPrompt: this.systemPrompt().trim(),
           }),
         );
+        await this.saveAvatar(bot.id, bot.avatarUrl);
         this.saved.emit({ bot: null, id: bot.id });
       } else {
         const created = await firstValueFrom(
@@ -375,7 +479,15 @@ export class BotDialog {
             ),
           ),
         );
-        this.saved.emit({ bot: created, id: created.id });
+        // The bot exists now, so a failed upload must not read as a failed create:
+        // it is saved without a picture, which can be added by editing it.
+        let avatarUrl = created.avatarUrl;
+        try {
+          avatarUrl = await this.saveAvatar(created.id, created.avatarUrl);
+        } catch {
+          // Kept quiet on purpose; the bot shows its model's icon.
+        }
+        this.saved.emit({ bot: { ...created, avatarUrl }, id: created.id });
       }
       this.closed.emit();
     } catch (error) {

@@ -22,6 +22,7 @@ model/addMemberRequest.ts
 model/appConfigurationDto.ts
 model/attachmentDto.ts
 model/attachmentLimitsDto.ts
+model/botAvatarDto.ts
 model/botCreatorDto.ts
 model/botDto.ts
 model/botSummaryDto.ts

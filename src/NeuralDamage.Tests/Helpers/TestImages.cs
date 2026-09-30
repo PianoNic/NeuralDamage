@@ -56,6 +56,8 @@ public sealed class InMemoryAttachmentStorage : IAttachmentStorage
 {
     public ConcurrentDictionary<(Guid Chat, Guid Id), byte[]> Files { get; } = new();
 
+    public ConcurrentDictionary<Guid, byte[]> BotAvatars { get; } = new();
+
     public Task SaveAsync(Guid chatId, Guid attachmentId, byte[] data, CancellationToken ct = default)
     {
         Files[(chatId, attachmentId)] = data;
@@ -75,4 +77,15 @@ public sealed class InMemoryAttachmentStorage : IAttachmentStorage
         foreach (var key in Files.Keys.Where(k => k.Chat == chatId))
             Files.TryRemove(key, out _);
     }
+
+    public Task SaveBotAvatarAsync(Guid botId, byte[] data, CancellationToken ct = default)
+    {
+        BotAvatars[botId] = data;
+        return Task.CompletedTask;
+    }
+
+    public Task<byte[]?> ReadBotAvatarAsync(Guid botId, CancellationToken ct = default) =>
+        Task.FromResult(BotAvatars.TryGetValue(botId, out var data) ? data : null);
+
+    public void DeleteBotAvatar(Guid botId) => BotAvatars.TryRemove(botId, out _);
 }

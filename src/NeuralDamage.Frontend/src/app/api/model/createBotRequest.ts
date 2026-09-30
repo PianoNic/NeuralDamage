@@ -15,7 +15,6 @@ export interface CreateBotRequest {
     systemPrompt: string;
     personality?: string | null;
     temperature: number;
-    avatarUrl?: string | null;
     aliases?: string | null;
     isPublic: boolean;
     chatId?: string | null;
