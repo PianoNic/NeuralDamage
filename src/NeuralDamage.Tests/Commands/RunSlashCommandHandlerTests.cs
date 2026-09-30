@@ -91,14 +91,15 @@ public class RunSlashCommandHandlerTests
     }
 
     [Test]
-    public async Task Mute_UnknownBot_ReportsNotFound()
+    public async Task Mute_UnknownBot_TellsOnlyTheCaller()
     {
         var h = await BuildAsync();
         using var _ = h.Db;
 
         await RunAsync(h, "/mute Nobody");
 
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Bot 'Nobody' not found in this chat.");
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, "Bot 'Nobody' not found in this chat.");
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]
@@ -128,7 +129,7 @@ public class RunSlashCommandHandlerTests
     }
 
     [Test]
-    public async Task Clear_Refused_ReportsTheReason()
+    public async Task Clear_Refused_TellsOnlyTheCallerWhy()
     {
         var h = await BuildAsync();
         using var _ = h.Db;
@@ -137,7 +138,8 @@ public class RunSlashCommandHandlerTests
 
         await RunAsync(h, "/clear");
 
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Only the chat owner can clear messages.");
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, "Only the chat owner can clear messages.");
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]
@@ -177,7 +179,8 @@ public class RunSlashCommandHandlerTests
         await RunAsync(h, "/rename " + new string('x', 257));
 
         await h.Sender.DidNotReceiveWithAnyArgs().Send(default(UpdateChatCommand)!, default);
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, NeuralDamage.Application.Validators.UpdateChatValidator.TooLongName);
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, NeuralDamage.Application.Validators.UpdateChatValidator.TooLongName);
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]

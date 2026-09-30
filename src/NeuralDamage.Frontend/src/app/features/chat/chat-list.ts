@@ -23,6 +23,12 @@ export class ChatList {
   );
   readonly unread = signal<ReadonlyMap<string, number>>(new Map());
 
+  /** Whether the signed-in user owns `chatId`: only the owner may rename or delete it. */
+  owns(chatId: string): boolean {
+    const me = this.auth.user()?.id;
+    return !!me && this.list().some((chat) => chat.id === chatId && chat.createdById === me);
+  }
+
   /** The chat on screen, whose messages are not unread. */
   readonly activeId = signal<string | null>(null);
 

@@ -134,6 +134,7 @@ export class PkMarkdown {
       RETURN_DOM_FRAGMENT: true,
     });
     replaceImages(fragment, this.allowImage());
+    openLinksInNewTab(fragment);
 
     const holder = document.createElement('div');
     holder.appendChild(fragment);
@@ -389,6 +390,18 @@ export class PkMarkdown {
     if (t !== 'auto') return t;
     if (!isPlatformBrowser(this.platformId)) return 'default';
     return document.documentElement.classList.contains('dark') ? 'dark' : 'default';
+  }
+}
+
+/**
+ * Opens every web link in a new tab without telling the site where it came from,
+ * the way image links already do: following one must not navigate the app away.
+ */
+export function openLinksInNewTab(root: DocumentFragment | HTMLElement): void {
+  for (const link of Array.from(root.querySelectorAll('a[href]'))) {
+    if (!/^https?:\/\//i.test(link.getAttribute('href') ?? '')) continue;
+    link.setAttribute('target', '_blank');
+    link.setAttribute('rel', 'noopener noreferrer nofollow');
   }
 }
 

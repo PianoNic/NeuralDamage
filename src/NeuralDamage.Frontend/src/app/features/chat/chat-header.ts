@@ -7,6 +7,7 @@ import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
 import { ChatMember } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { ChatRef, DeleteChatDialog, RenameChatDialog } from './chat-dialogs';
+import { ChatList } from './chat-list';
 
 const MAX_AVATARS = 4;
 
@@ -54,9 +55,12 @@ const MAX_AVATARS = 4;
       <ng-icon name="lucideUsers" />
     </button>
 
-    <button hlmBtn variant="ghost" size="icon" aria-label="Chat menu" [hlmDropdownMenuTrigger]="menu" align="end">
-      <ng-icon name="lucideEllipsis" />
-    </button>
+    <!-- Rename and delete are the owner's; the server refuses them to anyone else. -->
+    @if (chatList.owns(chatId())) {
+      <button hlmBtn variant="ghost" size="icon" aria-label="Chat menu" [hlmDropdownMenuTrigger]="menu" align="end">
+        <ng-icon name="lucideEllipsis" />
+      </button>
+    }
     <ng-template #menu>
       <hlm-dropdown-menu class="w-44">
         <button hlmDropdownMenuItem (triggered)="renaming.set(chatRef())">
@@ -76,6 +80,7 @@ const MAX_AVATARS = 4;
 })
 export class ChatHeader {
   protected readonly sidebar = inject(HlmSidebarService);
+  protected readonly chatList = inject(ChatList);
 
   readonly chatId = input.required<string>();
   readonly name = input.required<string>();

@@ -54,17 +54,19 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4];
                     {{ count }}<span class="sr-only"> unread</span>
                   </div>
                 }
-                <button
-                  hlmSidebarMenuAction
-                  showOnHover
-                  [hlmDropdownMenuTrigger]="menu"
-                  [hlmDropdownMenuTriggerData]="{ $implicit: chat }"
-                  [side]="sidebar.isMobile() ? 'bottom' : 'right'"
-                  align="start"
-                >
-                  <ng-icon name="lucideEllipsis" />
-                  <span class="sr-only">Actions for {{ chat.name }}</span>
-                </button>
+                @if (chatList.owns(chat.id)) {
+                  <button
+                    hlmSidebarMenuAction
+                    showOnHover
+                    [hlmDropdownMenuTrigger]="menu"
+                    [hlmDropdownMenuTriggerData]="{ $implicit: chat }"
+                    [side]="sidebar.isMobile() ? 'bottom' : 'right'"
+                    align="start"
+                  >
+                    <ng-icon name="lucideEllipsis" />
+                    <span class="sr-only">Actions for {{ chat.name }}</span>
+                  </button>
+                }
               </li>
             }
           </ul>

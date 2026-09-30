@@ -545,7 +545,7 @@ public class BotResponseOrchestrator(
     /// name prefix and any lines written for other people go, then it is split.
     /// </summary>
     private List<string> ToParts(string reply, string botName) =>
-        BotReplyFormatter.Split(BotReplyFormatter.DropOtherSpeakers(StripNamePrefix(reply, botName)), _options.MaxReplyParts);
+        BotReplyFormatter.Split(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName)), _options.MaxReplyParts);
 
     private static bool Repeats(List<string> parts, List<string> ownRecent) =>
         BotReplyFormatter.IsNearDuplicate(string.Join("\n", parts), ownRecent)
@@ -570,17 +570,5 @@ public class BotResponseOrchestrator(
         return own.TakeLast(5).Select(m => m.Content)
             .Concat(replies.TakeLast(3).Where(r => r.Count > 1).Select(r => string.Join("\n", r)))
             .ToList();
-    }
-
-    private static string StripNamePrefix(string text, string botName)
-    {
-        // Strip patterns like "[BotName]: " or "BotName: "
-        var prefixes = new[] { $"[{botName}]: ", $"[{botName}]:", $"{botName}: " };
-        foreach (var prefix in prefixes)
-        {
-            if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return text[prefix.Length..].TrimStart();
-        }
-        return text;
     }
 }

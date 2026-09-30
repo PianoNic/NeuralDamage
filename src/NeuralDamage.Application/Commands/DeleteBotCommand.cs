@@ -9,7 +9,11 @@ namespace NeuralDamage.Application.Commands;
 
 public record DeleteBotCommand(Guid BotId, Guid RequestingUserId) : ICommand<Result>;
 
-public class DeleteBotHandler(NeuralDamageDbContext db) : ICommandHandler<DeleteBotCommand, Result>
+/// <summary>
+/// Retires a bot: it stops answering and leaves every chat it is in. The row
+/// stays, so the messages it already sent keep their sender.
+/// </summary>
+public class DeleteBotHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<DeleteBotCommand, Result>
 {
     public async ValueTask<Result> Handle(DeleteBotCommand request, CancellationToken cancellationToken)
     {
@@ -21,7 +25,12 @@ public class DeleteBotHandler(NeuralDamageDbContext db) : ICommandHandler<Delete
             return Result.Failure("Only the bot creator can delete this bot.");
 
         bot.IsActive = false;
+        var memberships = await db.ChatMembers.Where(cm => cm.BotId == bot.Id).ToListAsync(cancellationToken);
+        db.ChatMembers.RemoveRange(memberships);
         await db.SaveChangesAsync(cancellationToken);
+
+        foreach (var member in memberships)
+            await notifications.NotifyMemberRemoved(member.ChatId, member.Id);
         return Result.Success();
     }
 }

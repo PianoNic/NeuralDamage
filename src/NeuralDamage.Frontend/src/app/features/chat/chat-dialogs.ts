@@ -1,5 +1,5 @@
 import { Component, effect, inject, input, output, signal, untracked } from '@angular/core';
-import { form, FormField, FormRoot, required } from '@angular/forms/signals';
+import { form, FormField, FormRoot, maxLength, requiredError, SchemaPathTree, validate } from '@angular/forms/signals';
 import { Router } from '@angular/router';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
@@ -10,6 +10,15 @@ import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { describeApiError } from '../../core/http-errors';
 import { ChatList } from './chat-list';
+
+/** The server's limit on a chat name (UpdateChatValidator.MaxNameLength). */
+export const MAX_CHAT_NAME = 256;
+
+/** A chat name needs something besides spaces, and fits the server's limit. */
+export function chatNameRules(path: SchemaPathTree<{ name: string }>): void {
+  validate(path.name, ({ value }) => (value().trim() ? null : requiredError()));
+  maxLength(path.name, MAX_CHAT_NAME);
+}
 
 /** The chat a dialog acts on. */
 export interface ChatRef {
@@ -56,7 +65,7 @@ export class NewChatDialog {
 
   protected readonly saving = signal(false);
   private readonly model = signal({ name: '' });
-  protected readonly chatForm = form(this.model, (path) => required(path.name), {
+  protected readonly chatForm = form(this.model, chatNameRules, {
     submission: { action: () => this.save() },
   });
 
@@ -120,7 +129,7 @@ export class RenameChatDialog {
 
   protected readonly saving = signal(false);
   private readonly model = signal({ name: '' });
-  protected readonly renameForm = form(this.model, (path) => required(path.name), {
+  protected readonly renameForm = form(this.model, chatNameRules, {
     submission: { action: () => this.save() },
   });
 

@@ -16,6 +16,7 @@ public static partial class BotReplyFormatter
     {
         var parts = BlankLines().Split(reply)
             .Select(StripMarkdown)
+            .Select(p => RepeatedSymbol().Replace(p, "$1$1$1"))
             .Where(p => p.Length > 0)
             .ToList();
 
@@ -45,6 +46,19 @@ public static partial class BotReplyFormatter
 
         var other = SpeakerHeader().Match(reply);
         return other.Success ? reply[..other.Index].TrimEnd() : reply;
+    }
+
+    /// <summary>
+    /// Drops the bot's own name when the model opens its reply with it:
+    /// "Gus: hi", "[Gus]: hi", "**Gus:** hi", or the name on a line of its own -
+    /// which some models also repeat before each paragraph.
+    /// </summary>
+    public static string StripOwnName(string reply, string botName)
+    {
+        var name = Regex.Escape(botName);
+        var prefix = new Regex($@"^\s*(?:\*\*|__)?\[?{name}\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?\s*", RegexOptions.IgnoreCase);
+        var headerLine = new Regex($@"^[ \t]*(?:\*\*|__)?\[?{name}\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*(?:\r?\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        return headerLine.Replace(prefix.Replace(reply, "", 1), "");
     }
 
     /// <summary>Removes headings, bold/italic markers and list bullets.</summary>
@@ -88,6 +102,11 @@ public static partial class BotReplyFormatter
     // The history's line headers: "[Alice]:", "[Alice, 2h later] (→ Bob):".
     [GeneratedRegex(@"^[ \t]*\[[^\]\n]{1,60}\](?:[ \t]*\([^)\n]*\))*[ \t]*:", RegexOptions.Multiline)]
     private static partial Regex SpeakerHeader();
+
+    // A symbol repeated past three ("!!!!!!!!"): what a model that has
+    // degenerated sends, hundreds of times over. Nobody types more than three.
+    [GeneratedRegex(@"([^\p{L}\p{N}\s])\1{3,}")]
+    private static partial Regex RepeatedSymbol();
 
     [GeneratedRegex(@"\n\s*\n")]
     private static partial Regex BlankLines();

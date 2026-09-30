@@ -143,6 +143,14 @@ public class BotReplyFormatterTests
     }
 
     [Test]
+    public async Task Split_CollapsesRunawaySymbolRuns()
+    {
+        var reply = new string('!', 400) + " zig's a cool one... really?? 😂😂😂😂";
+        await Assert.That(BotReplyFormatter.Split(reply, 3))
+            .IsEquivalentTo(["!!! zig's a cool one... really?? 😂😂😂😂"]);
+    }
+
+    [Test]
     public async Task StripMarkdown_RemovesHeadingsBoldAndBullets()
     {
         var text = BotReplyFormatter.StripMarkdown("## Verdict\n- **yes** it is\n* __really__ *stellar*, 2 * 3 * 4");
@@ -158,6 +166,20 @@ public class BotReplyFormatterTests
     public async Task DropOtherSpeakers_KeepsOnlyTheBotsOwnTurn(string reply, string expected)
     {
         await Assert.That(BotReplyFormatter.DropOtherSpeakers(reply)).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments("Gloomy Gus:\nMushrooms decompose", "Mushrooms decompose")]
+    [Arguments("Gloomy Gus: rain again", "rain again")]
+    [Arguments("[gloomy gus]: rain again", "rain again")]
+    [Arguments("**Gloomy Gus:** rain again", "rain again")]
+    [Arguments("**Gloomy Gus**: rain again", "rain again")]
+    [Arguments("Gloomy Gustav: rain again", "Gloomy Gustav: rain again")]
+    [Arguments("rain again, Gloomy Gus: sad", "rain again, Gloomy Gus: sad")]
+    [Arguments("Gloomy Gus:\nRust or Go\n\nGloomy Gus:\nRain again", "Rust or Go\n\nRain again")]
+    public async Task StripOwnName_DropsTheBotsNameOpeningTheReply(string reply, string expected)
+    {
+        await Assert.That(BotReplyFormatter.StripOwnName(reply, "Gloomy Gus")).IsEqualTo(expected);
     }
 
     [Test]

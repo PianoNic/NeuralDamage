@@ -22,6 +22,17 @@ describe('message markdown', () => {
     expect(el.textContent).toContain('hi');
   });
 
+  it('opens links in a new tab, so following one does not leave the chat', async () => {
+    const el = await render('see https://example.com/a and [docs](https://example.com/b)');
+
+    const links = Array.from(el.querySelectorAll('a'));
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['https://example.com/a', 'https://example.com/b']);
+    for (const link of links) {
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toContain('noopener');
+    }
+  });
+
   it('still renders markdown', async () => {
     const el = await render('**bold** and `code`');
 
