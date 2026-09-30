@@ -20,4 +20,7 @@ public interface IChatNotificationService
     Task NotifyBotTyping(Guid chatId, Guid botId, string botName);
     Task NotifyBotResponseCancelled(Guid chatId);
     Task NotifySystemMessage(Guid chatId, string content);
+
+    /// <summary>A system message in a chat that only this user's open connections see.</summary>
+    Task NotifyUserSystemMessage(Guid chatId, Guid userId, string content);
 }

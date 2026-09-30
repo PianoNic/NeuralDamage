@@ -164,7 +164,8 @@ public class RunSlashCommandHandlerTests
         await RunAsync(h, "/rename Bot Party");
 
         await h.Sender.Received(1).Send(new UpdateChatCommand(h.ChatId, "Bot Party", h.UserId), Arg.Any<CancellationToken>());
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Alice renamed the chat to \"Bot Party\".");
+        // The rename itself tells the chat, so the command does not say it twice.
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]
@@ -176,7 +177,8 @@ public class RunSlashCommandHandlerTests
 
         await RunAsync(h, "/bots");
 
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Bots in this chat:\n• Grumpy (openai/gpt-4o) - muted");
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, "Bots in this chat:\n• Grumpy (openai/gpt-4o) - muted");
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]
@@ -187,8 +189,9 @@ public class RunSlashCommandHandlerTests
 
         await RunAsync(h, "/help");
 
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, Arg.Is<string>(s =>
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, Arg.Is<string>(s =>
             SlashCommand.Help.All(c => s.Contains(c.Usage))));
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]
@@ -199,6 +202,7 @@ public class RunSlashCommandHandlerTests
 
         await RunAsync(h, "/dance");
 
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Unknown command /dance. Type /help to see available commands.");
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, "Unknown command /dance. Type /help to see available commands.");
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 }

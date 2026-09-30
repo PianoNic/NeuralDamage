@@ -13,6 +13,9 @@ using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using System.Text.Json.Serialization;
 
+// Validation messages and formatting stay English whatever the host's locale.
+ValidationCulture.Pin();
+
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 

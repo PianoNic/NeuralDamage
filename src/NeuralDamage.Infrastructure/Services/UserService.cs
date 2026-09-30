@@ -1,6 +1,8 @@
 ﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
 using NeuralDamage.Domain;
 using Toamaisutaa.Abstractions;
 
@@ -15,7 +17,9 @@ namespace NeuralDamage.Infrastructure.Services
     public class UserService(
         ICurrentUser currentUser,
         IHttpContextAccessor httpContextAccessor,
-        NeuralDamageDbContext dbContext) : IUserService
+        NeuralDamageDbContext dbContext,
+        DbContextOptions<NeuralDamageDbContext> dbOptions,
+        ILogger<UserService> logger) : IUserService
     {
         public async Task<bool> ExistsAsync(string externalId, CancellationToken cancellationToken = default)
         {
@@ -80,22 +84,7 @@ namespace NeuralDamage.Infrastructure.Services
                     AvatarUrl = avatarUrl,
                     LastLoginAt = DateTime.UtcNow
                 };
-                dbContext.Users.Add(created);
-
-                try
-                {
-                    await dbContext.SaveChangesAsync(cancellationToken);
-                }
-                catch (DbUpdateException)
-                {
-                    // Right after sign-in the web app fires several requests at
-                    // once, and each one finds no row and tries to create it.
-                    // One insert wins; the others lose on the unique index and
-                    // must not fail the request.
-                    dbContext.Entry(created).State = EntityState.Detached;
-                    if (!await ExistsAsync(externalId, cancellationToken))
-                        throw;
-                }
+                await CreateAsync(created, cancellationToken);
                 return;
             }
 
@@ -105,6 +94,36 @@ namespace NeuralDamage.Infrastructure.Services
             user.LastLoginAt = DateTime.UtcNow;
 
             await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Inserts a new user. Right after sign-in the web app fires several
+        /// requests at once, and each one finds no row and tries to create it.
+        /// One insert wins; the others lose on the unique index and must not
+        /// fail the request - nor log an error for what is expected. The insert
+        /// runs in a context of its own whose failed-save events are logged at
+        /// debug; anything else still surfaces as the exception it is.
+        /// </summary>
+        private async Task CreateAsync(User created, CancellationToken cancellationToken)
+        {
+            var quietOptions = new DbContextOptionsBuilder<NeuralDamageDbContext>(dbOptions)
+                .ConfigureWarnings(w => w.Log(
+                    (CoreEventId.SaveChangesFailed, LogLevel.Debug),
+                    (RelationalEventId.CommandError, LogLevel.Debug)))
+                .Options;
+            await using var quiet = new NeuralDamageDbContext(quietOptions);
+            quiet.Users.Add(created);
+
+            try
+            {
+                await quiet.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex)
+            {
+                if (!await ExistsAsync(created.ExternalId, cancellationToken))
+                    throw;
+                logger.LogDebug(ex, "User {ExternalId} was created by a concurrent request", created.ExternalId);
+            }
         }
 
         private string RequireSubject() =>
