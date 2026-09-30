@@ -11,6 +11,7 @@ using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure.Services.Attachments;
 using System.Text.Json.Serialization;
 
 // Validation messages and formatting stay English whatever the host's locale.
@@ -40,6 +41,13 @@ builder.Services.AddSingleton<BotResponseQueue>();
 builder.Services.AddSingleton<IBotResponseQueue>(sp => sp.GetRequiredService<BotResponseQueue>());
 builder.Services.AddSingleton<IBotResponseOrchestrator, BotResponseOrchestrator>();
 builder.Services.AddHostedService<BotResponseBackgroundService>();
+
+// Images
+var attachmentOptions = AttachmentOptions.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(attachmentOptions);
+builder.Services.AddSingleton<IAttachmentStorage>(new FileSystemAttachmentStorage(
+    Path.GetFullPath(attachmentOptions.Path, builder.Environment.ContentRootPath)));
+builder.Services.AddSingleton<IImageDescriber, ImageDescriber>();
 
 // Mediator & Validation
 builder.Services.AddMediator(options =>

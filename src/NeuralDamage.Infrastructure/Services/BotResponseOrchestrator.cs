@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Domain;
 
@@ -38,12 +39,17 @@ public class BotResponseOrchestrator(
             var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
             var notifications = scope.ServiceProvider.GetRequiredService<IChatNotificationService>();
 
+            // Text-only bots and Jev read a picture through its description,
+            // which was started on upload and is usually done by now.
+            await WaitForDescriptionsAsync(scope.ServiceProvider, db, messageId, cts.Token);
+
             // Load the trigger message. ReplyTo is what lets a reply to a bot
             // reach that bot - without it the reply-to rule never fires.
             var message = await db.Messages
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
                 .Include(m => m.ReplyTo)
+                .Include(m => m.Attachments)
                 .FirstOrDefaultAsync(m => m.Id == messageId, cts.Token);
 
             if (message is null) return;
@@ -92,6 +98,9 @@ public class BotResponseOrchestrator(
             var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").Order(StringComparer.Ordinal).ToList();
             var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
 
+            var canSee = await VisionModelsAsync(openRouter, cts.Token);
+            var storage = scope.ServiceProvider.GetService<IAttachmentStorage>();
+
             var roundSent = new List<Message>();
             foreach (var bot in responders)
             {
@@ -102,7 +111,8 @@ public class BotResponseOrchestrator(
                 await Task.Delay(BotBehaviorOptions.Between(_options.ReadDelayMin, _options.ReadDelayMax), cts.Token);
 
                 typingShown = true;
-                roundSent.AddRange(await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, cts.Token));
+                var images = canSee.Contains(bot.ModelId) ? storage : null;
+                roundSent.AddRange(await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, images, cts.Token));
             }
 
             // One hop per round, however many bots answered: chaining from each
@@ -193,6 +203,7 @@ public class BotResponseOrchestrator(
         Bot bot,
         List<string> participantNames,
         string? chatName,
+        IAttachmentStorage? images,
         CancellationToken ct)
     {
         using var typingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -213,6 +224,7 @@ public class BotResponseOrchestrator(
                 .Take(BotPromptBuilder.MaxHistoryMessages * 2)
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
+                .Include(m => m.Attachments)
                 .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
                 .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
                 .ToListAsync(ct);
@@ -223,7 +235,8 @@ public class BotResponseOrchestrator(
                 botState.SetHistoryStart(chatId, bot.Id, window[0].CreatedAt);
 
             var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames, chatName);
-            var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id);
+            var pictures = images is null ? null : await LoadImagesAsync(images, window, ct);
+            var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures);
 
             var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote()], ct);
             if (string.IsNullOrWhiteSpace(responseText))
@@ -307,6 +320,63 @@ public class BotResponseOrchestrator(
             await typingCts.CancelAsync();
             await typing;
         }
+    }
+
+    /// <summary>
+    /// Waits, for at most <see cref="AttachmentOptions.DescriptionWait"/>, for
+    /// the describer to finish the trigger message's images. Past that the
+    /// round goes on and text-only bots see a bare "[image from alice]".
+    /// </summary>
+    private static async Task WaitForDescriptionsAsync(IServiceProvider services, NeuralDamageDbContext db, Guid messageId, CancellationToken ct)
+    {
+        if (services.GetService<IImageDescriber>() is not { } describer)
+            return;
+        var pending = await db.Attachments
+            .Where(a => a.MessageId == messageId && a.Description == null)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+        if (pending.Count == 0)
+            return;
+        var wait = (services.GetService<AttachmentOptions>() ?? new AttachmentOptions()).DescriptionWait;
+        await describer.WaitAsync(pending, wait, ct);
+    }
+
+    /// <summary>
+    /// The ids of the models that can see images, from the catalogue. When it
+    /// cannot be read every bot is treated as text-only, which always works.
+    /// </summary>
+    private async Task<IReadOnlySet<string>> VisionModelsAsync(IOpenRouterService openRouter, CancellationToken ct)
+    {
+        try
+        {
+            var models = await openRouter.ListModelsAsync(ct);
+            return (models ?? []).Where(m => m.Capabilities.Contains(ModelMetadata.Vision)).Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Model catalogue unavailable; every bot gets image descriptions instead of images");
+            return new HashSet<string>();
+        }
+    }
+
+    /// <summary>
+    /// How many of the history's most recent images a vision model gets as
+    /// pictures. Each one is resent on every turn, so older ones go as their
+    /// descriptions instead.
+    /// </summary>
+    public const int MaxHistoryImages = 4;
+
+    private static async Task<Dictionary<Guid, ImagePart>> LoadImagesAsync(IAttachmentStorage storage, List<Message> window, CancellationToken ct)
+    {
+        var recent = window
+            .SelectMany(m => m.Attachments)
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(MaxHistoryImages);
+        var images = new Dictionary<Guid, ImagePart>();
+        foreach (var attachment in recent)
+            if (await storage.ReadAllAsync(attachment.ChatId, attachment.Id, ct) is { } data)
+                images[attachment.Id] = new ImagePart(attachment.ContentType, data);
+        return images;
     }
 
     /// <summary>

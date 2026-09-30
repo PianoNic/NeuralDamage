@@ -64,7 +64,9 @@ public class OpenRouterAgentService : IOpenRouterService
 
         var cacheUpTo = MarksCache(modelId) ? history.FindLastIndex(m => m.Role != ChatMessage.Note) : -1;
         var messages = history
-            .Select(m => new AgentChatMessage(m.Role == "assistant" ? ChatRole.Assistant : ChatRole.User, m.Content))
+            .Select(m => new AgentChatMessage(
+                m.Role == "assistant" ? ChatRole.Assistant : ChatRole.User,
+                [new TextContent(m.Content), .. m.Images.Select(i => new DataContent(i.Data, i.ContentType))]))
             .ToList();
 
         var effort = await ReasoningEffortAsync(modelId, ct);
@@ -145,11 +147,23 @@ public class OpenRouterAgentService : IOpenRouterService
             .Select((m, i) => new
             {
                 role = m.Role == "assistant" ? "assistant" : "user",
-                content = i == breakpoint
-                    ? (object)new[] { new { type = "text", text = m.Content, cache_control = new { type = "ephemeral" } } }
-                    : m.Content,
+                content = i == breakpoint || m.Images.Count > 0 ? (object)Parts(m, i == breakpoint) : m.Content,
             })
             .Prepend(new { role = "system", content = (object)systemPrompt }));
+
+    /// <summary>A turn as content parts: the text, then its images, with the cache marker on the last part.</summary>
+    private static List<Dictionary<string, object>> Parts(ChatMessage message, bool breakpoint)
+    {
+        var parts = new List<Dictionary<string, object>> { new() { ["type"] = "text", ["text"] = message.Content } };
+        parts.AddRange(message.Images.Select(image => new Dictionary<string, object>
+        {
+            ["type"] = "image_url",
+            ["image_url"] = new { url = image.DataUrl },
+        }));
+        if (breakpoint)
+            parts[^1]["cache_control"] = new { type = "ephemeral" };
+        return parts;
+    }
 
     /// <summary>
     /// Bots are chat participants, not problem solvers: reasoning only makes a

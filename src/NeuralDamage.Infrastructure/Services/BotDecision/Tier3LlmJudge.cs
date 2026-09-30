@@ -36,13 +36,13 @@ public class Tier3LlmJudge(IDecisionsClient decisions, BotRankingOptions options
                 RecentMessages = recentHistory
                     .Where(m => m.Id != message.Id)
                     .TakeLast(HistoryMessages)
-                    .Select(m => new { Sender = SenderName(m), IsBot = m.SenderBotId is not null, Text = Trim(m.Content, MaxMessageChars) })
+                    .Select(m => new { Sender = SenderName(m), IsBot = m.SenderBotId is not null, Text = Text(m) })
                     .ToList(),
                 NewMessage = new
                 {
                     Sender = SenderName(recentHistory.FirstOrDefault(m => m.Id == message.Id) ?? message),
                     IsBot = message.SenderBotId is not null,
-                    Text = Trim(message.Content, MaxMessageChars),
+                    Text = Text(message.Attachments.Count > 0 ? message : recentHistory.FirstOrDefault(m => m.Id == message.Id) ?? message),
                 },
                 Bots = keyed.ToDictionary(k => k.Key, k => new { k.Bot.Name, Persona = Persona(k.Bot) }),
             };
@@ -84,6 +84,9 @@ public class Tier3LlmJudge(IDecisionsClient decisions, BotRankingOptions options
 
     private static string SenderName(Message m) =>
         m.SenderUser?.DisplayName is { Length: > 0 } user ? user : m.SenderBot?.Name ?? "Unknown";
+
+    /// <summary>The text with any images written in as their descriptions, so a food photo can wake the cook.</summary>
+    private static string Text(Message m) => BotPromptBuilder.WithImages(m, maxContentChars: MaxMessageChars);
 
     private static string Persona(Bot bot) =>
         string.Join(" ", new[] { bot.Personality, Trim(bot.SystemPrompt, MaxSystemPromptChars) }

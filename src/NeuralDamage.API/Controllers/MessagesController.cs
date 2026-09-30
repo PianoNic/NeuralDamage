@@ -21,7 +21,7 @@ public class MessagesController(ISender sender, IUserService userService) : Cont
     public async Task<IActionResult> Send(Guid chatId, SendMessageRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new SendMessageCommand(chatId, userId, request.Content, request.ReplyToId), ct);
+        var result = await sender.Send(new SendMessageCommand(chatId, userId, request.Content, request.ReplyToId, request.AttachmentIds), ct);
         return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 

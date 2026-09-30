@@ -50,6 +50,7 @@ public static class BotPromptBuilder
             - No markdown: no headings, bold, bullet points or numbered lists. To send separate thoughts, leave a blank line between them - each becomes its own message.
             - Other people's messages appear as [Name]: text. Yours have no prefix; never write a name prefix yourself. You are only {bot.Name}; never speak for anyone else.
             - The last line, in parentheses, is a note from the chat app, not a message: never answer or mention it.
+            - Pictures people send reach you either as the picture itself or as [image from Name: what it shows]. Talk about them as if you had seen them; never mention a description.
             - To address another bot, use @TheirName.
             - Don't echo what someone just said.
             - Never say "As an AI" or break character.
@@ -124,7 +125,12 @@ public static class BotPromptBuilder
     /// what came before it is not in the window, and whether it was loaded must
     /// not change how the start of the history reads.
     /// </remarks>
-    public static List<ChatMessage> BuildHistory(List<Message> messages, Guid currentBotId, Guid? triggerMessageId = null)
+    /// <param name="images">
+    /// For a bot on a model that can see: the pictures to send as images, by
+    /// attachment id. Every other attachment is written out as its description,
+    /// which is all a text-only model ever gets.
+    /// </param>
+    public static List<ChatMessage> BuildHistory(List<Message> messages, Guid currentBotId, Guid? triggerMessageId = null, IReadOnlyDictionary<Guid, ImagePart>? images = null)
     {
         var triggerId = triggerMessageId ?? messages.LastOrDefault()?.Id;
         var window = TrimHistory(messages, triggerId);
@@ -134,16 +140,48 @@ public static class BotPromptBuilder
                 var isOwn = msg.SenderBotId == currentBotId;
                 return new ChatMessage(
                     isOwn ? "assistant" : "user",
-                    Format(msg, i > 0 ? window[i - 1] : null, msg.Id == triggerId, isOwn));
+                    Format(msg, i > 0 ? window[i - 1] : null, msg.Id == triggerId, isOwn, images))
+                {
+                    Images = images is null
+                        ? []
+                        : Ordered(msg).Where(a => images.ContainsKey(a.Id)).Select(a => images[a.Id]).ToList(),
+                };
             })
             .ToList();
     }
 
-    private static string Format(Message msg, Message? previous, bool isTrigger, bool ownTurn)
+    /// <summary>Descriptions are long; past this they are cut, like long messages.</summary>
+    private const int MaxDescriptionChars = 800;
+
+    /// <summary>
+    /// A message's text with its images written in: "[image from Alice: a cat
+    /// asleep on a keyboard]", or just "[image from Alice]" when there is no
+    /// description (yet) or the model gets the picture itself.
+    /// </summary>
+    public static string WithImages(Message msg, IReadOnlyDictionary<Guid, ImagePart>? images = null, int maxContentChars = MaxMessageChars)
     {
-        var content = msg.Content.Length > MaxMessageChars
-            ? msg.Content[..MaxMessageChars] + "..."
+        var content = msg.Content.Length > maxContentChars
+            ? msg.Content[..maxContentChars] + "..."
             : msg.Content;
+        if (msg.Attachments.Count == 0)
+            return content;
+
+        var sender = SenderName(msg);
+        var lines = Ordered(msg).Select(a =>
+            images?.ContainsKey(a.Id) != true && !string.IsNullOrWhiteSpace(a.Description)
+                ? $"[image from {sender}: {Cut(a.Description.Trim(), MaxDescriptionChars)}]"
+                : $"[image from {sender}]");
+        return string.Join("\n", new[] { content }.Where(c => c.Length > 0).Concat(lines));
+    }
+
+    private static IEnumerable<Attachment> Ordered(Message msg) =>
+        msg.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id);
+
+    private static string Cut(string text, int max) => text.Length > max ? text[..max] + "..." : text;
+
+    private static string Format(Message msg, Message? previous, bool isTrigger, bool ownTurn, IReadOnlyDictionary<Guid, ImagePart>? images = null)
+    {
+        var content = WithImages(msg, images);
         return ownTurn ? content : $"{Header(msg, previous, isTrigger)}: {content}";
     }
 

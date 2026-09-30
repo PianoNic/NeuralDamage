@@ -25,6 +25,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=db;Database=neuraldamage;Username=neuraldamage;Password=changeme
+    volumes:
+      - attachments:/app/data/attachments
     ports:
       - "3000:8080"
     depends_on:
@@ -38,3 +40,4 @@ services:
 
 volumes:
   db-data:
+  attachments:

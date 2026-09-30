@@ -12,4 +12,5 @@ public record MessageDto(
     UserDto? SenderUser,
     BotSummaryDto? SenderBot,
     List<ReactionGroupDto> Reactions,
-    ReplyInfoDto? ReplyTo);
+    ReplyInfoDto? ReplyTo,
+    List<AttachmentDto> Attachments);

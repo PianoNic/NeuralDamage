@@ -2,6 +2,7 @@ using Mediator;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
+using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain.Enums;
@@ -10,7 +11,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record DeleteChatCommand(Guid ChatId, Guid RequestingUserId) : ICommand<Result>;
 
-public class DeleteChatHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<DeleteChatCommand, Result>
+public class DeleteChatHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IAttachmentStorage attachmentStorage) : ICommandHandler<DeleteChatCommand, Result>
 {
     public async ValueTask<Result> Handle(DeleteChatCommand request, CancellationToken cancellationToken)
     {
@@ -24,6 +25,7 @@ public class DeleteChatHandler(NeuralDamageDbContext db, IChatNotificationServic
 
         db.Chats.Remove(chat);
         await db.SaveChangesAsync(cancellationToken);
+        attachmentStorage.DeleteChat(request.ChatId);
 
         await notifications.NotifyChatDeleted(request.ChatId);
         return Result.Success();
