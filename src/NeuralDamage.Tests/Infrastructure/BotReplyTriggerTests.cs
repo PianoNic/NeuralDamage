@@ -50,6 +50,7 @@ public class BotReplyTriggerTests
         services.AddSingleton(db);
         services.AddSingleton(notifications);
         services.AddSingleton(openRouter);
+        services.AddSingleton(new ModelPolicy(0, 0));
         services.AddSingleton<IBotDecisionEngine>(new BotDecisionEngine(
             db,
             new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance),

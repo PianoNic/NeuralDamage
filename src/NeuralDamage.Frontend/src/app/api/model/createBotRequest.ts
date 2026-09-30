@@ -17,5 +17,7 @@ export interface CreateBotRequest {
     temperature: number;
     avatarUrl?: string | null;
     aliases?: string | null;
+    isPublic: boolean;
+    chatId?: string | null;
 }
 

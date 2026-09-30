@@ -15,5 +15,9 @@ export interface OpenRouterModel {
     name: string;
     contextLength?: number | null;
     pricing?: ModelPricing;
+    provider: string;
+    description?: string | null;
+    capabilities: Array<string>;
+    priceTier: number;
 }
 

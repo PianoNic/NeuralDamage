@@ -11,6 +11,12 @@ public class Bot : BaseEntity
     public string? Aliases { get; set; }
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Public bots are listed for everyone and can join any chat.</summary>
+    public bool IsPublic { get; set; } = true;
+    /// <summary>The one chat a private bot belongs to; null for public bots.</summary>
+    public Guid? ChatId { get; set; }
+    public Chat? Chat { get; set; }
+
     public required Guid CreatedById { get; init; }
     public User CreatedBy { get; set; } = null!;
 

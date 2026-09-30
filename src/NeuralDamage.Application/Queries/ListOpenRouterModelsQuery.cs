@@ -15,7 +15,7 @@ public class ListOpenRouterModelsHandler(IOpenRouterService openRouter, ModelPol
         try
         {
             var models = await modelPolicy.FilterAsync(openRouter, await openRouter.ListModelsAsync(cancellationToken), cancellationToken);
-            return Result<List<OpenRouterModel>>.Success(models);
+            return Result<List<OpenRouterModel>>.Success(models.Select(m => m with { PriceTier = modelPolicy.PriceTier(m.Pricing) }).ToList());
         }
         catch (Exception ex)
         {

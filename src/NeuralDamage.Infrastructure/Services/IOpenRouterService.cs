@@ -5,7 +5,21 @@ namespace NeuralDamage.Infrastructure.Services;
 public record ChatMessage(string Role, string Content);
 /// <summary>Dollars per million tokens.</summary>
 public record ModelPricing(decimal Prompt, decimal Completion);
-public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelPricing? Pricing = null);
+
+public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelPricing? Pricing = null)
+{
+    /// <summary>The vendor's display name, e.g. DeepSeek for <c>deepseek/...</c>.</summary>
+    public string Provider { get; init; } = ModelMetadata.Provider(Id);
+
+    /// <summary>The first sentence of OpenRouter's description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Any of reasoning, vision, code and fast.</summary>
+    public IReadOnlyList<string> Capabilities { get; init; } = ModelMetadata.Capabilities(Id, Name);
+
+    /// <summary>1 (cheap) to 3 (expensive), relative to the configured price caps.</summary>
+    public int PriceTier { get; init; }
+}
 
 public interface IOpenRouterService
 {

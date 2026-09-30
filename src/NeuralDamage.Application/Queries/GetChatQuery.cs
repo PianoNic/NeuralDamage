@@ -2,7 +2,6 @@ using Mediator;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
-using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Models;
@@ -11,7 +10,7 @@ namespace NeuralDamage.Application.Queries;
 
 public record GetChatQuery(Guid ChatId, Guid RequestingUserId) : IQuery<Result<ChatDetailDto>>;
 
-public class GetChatHandler(NeuralDamageDbContext db) : IQueryHandler<GetChatQuery, Result<ChatDetailDto>>
+public class GetChatHandler(NeuralDamageDbContext db, IChatBotState botState, IOpenRouterService openRouter, ModelPolicy modelPolicy) : IQueryHandler<GetChatQuery, Result<ChatDetailDto>>
 {
     public async ValueTask<Result<ChatDetailDto>> Handle(GetChatQuery request, CancellationToken cancellationToken)
     {
@@ -30,6 +29,7 @@ public class GetChatHandler(NeuralDamageDbContext db) : IQueryHandler<GetChatQue
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        return Result<ChatDetailDto>.Success(chat.ToDetailDto(members.Select(m => m.ToDto()).ToList()));
+        var modelLookup = await modelPolicy.StatusLookupAsync(openRouter, cancellationToken);
+        return Result<ChatDetailDto>.Success(chat.ToDetailDto(members.Select(m => m.ToDto(botState, modelLookup)).ToList()));
     }
 }

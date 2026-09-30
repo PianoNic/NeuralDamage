@@ -71,6 +71,70 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
         return Refusal(modelId, pricing, zdr);
     }
 
+    /// <summary>
+    /// 1 to 3 by prompt plus completion price: thirds of the combined cap, or
+    /// fixed bands of 1 and 5 dollars per million tokens when a side is uncapped.
+    /// A model without a fixed price is put in the top tier.
+    /// </summary>
+    public int PriceTier(ModelPricing? pricing)
+    {
+        if (pricing is null || pricing.Prompt < 0 || pricing.Completion < 0)
+            return 3;
+
+        var total = pricing.Prompt + pricing.Completion;
+        var cap = MaxPromptPrice + MaxCompletionPrice;
+        var (cheap, mid) = MaxPromptPrice > 0 && MaxCompletionPrice > 0 ? (cap / 3, cap * 2 / 3) : (1m, 5m);
+        return total <= cheap ? 1 : total <= mid ? 2 : 3;
+    }
+
+    /// <summary>
+    /// A lookup of whether a bot's model still works, built from one read of the
+    /// catalogue. When the catalogue cannot be read (or comes back empty) every
+    /// model counts as available: a flaky fetch must not silence every bot.
+    /// </summary>
+    public async Task<Func<string, ModelStatus>> StatusLookupAsync(IOpenRouterService openRouter, CancellationToken ct = default)
+    {
+        try
+        {
+            var models = await openRouter.ListModelsAsync(ct);
+            if (models is not { Count: > 0 })
+                return _ => ModelStatus.Ok;
+
+            var zdr = await ZdrIdsAsync(openRouter, ct);
+            var catalogue = new Dictionary<string, OpenRouterModel>(StringComparer.Ordinal);
+            foreach (var model in models)
+                catalogue.TryAdd(model.Id, model);
+            return modelId => Status(modelId, catalogue, zdr);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return _ => ModelStatus.Ok;
+        }
+    }
+
+    public ModelStatus Status(string modelId, IReadOnlyDictionary<string, OpenRouterModel> catalogue, IReadOnlySet<string> zdrModelIds)
+    {
+        if (!catalogue.TryGetValue(modelId, out var model))
+            return new ModelStatus(ModelStatus.Missing, $"Model '{modelId}' is no longer offered on OpenRouter.");
+        return Refusal(modelId, model.Pricing, zdrModelIds) is { } refusal
+            ? new ModelStatus(ModelStatus.NotAllowed, refusal)
+            : ModelStatus.Ok;
+    }
+
     private async Task<IReadOnlySet<string>> ZdrIdsAsync(IOpenRouterService openRouter, CancellationToken ct) =>
-        ZdrOnly ? await openRouter.ListZdrModelIdsAsync(ct) : new HashSet<string>();
+        ZdrOnly ? await openRouter.ListZdrModelIdsAsync(ct) ?? new HashSet<string>() : new HashSet<string>();
+}
+
+/// <summary>Whether a bot's model can still be used, and why not when it cannot.</summary>
+public record ModelStatus(string Status, string? Reason)
+{
+    public const string Available = "available";
+    /// <summary>The id is no longer in OpenRouter's catalogue.</summary>
+    public const string Missing = "missing";
+    /// <summary>The model exists but <see cref="ModelPolicy"/> refuses it.</summary>
+    public const string NotAllowed = "notAllowed";
+
+    public static readonly ModelStatus Ok = new(Available, null);
+
+    public bool IsAvailable => Status == Available;
 }

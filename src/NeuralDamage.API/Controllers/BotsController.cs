@@ -17,19 +17,21 @@ namespace NeuralDamage.API.Controllers;
 public class BotsController(ISender sender, IUserService userService) : ControllerBase
 {
     [HttpPost]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
-    public async Task<IActionResult> Create(CreateBotRequest request, CancellationToken ct)
+    [ProducesResponseType<BotDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<BotDto>> Create(CreateBotRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new CreateBotCommand(request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.AvatarUrl, request.Aliases, userId), ct);
-        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+        var result = await sender.Send(new CreateBotCommand(request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.AvatarUrl, request.Aliases, userId, request.IsPublic, request.ChatId), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    /// <summary>The public bots; with <paramref name="mine"/>, only the ones the caller made.</summary>
     [HttpGet]
     [ProducesResponseType<List<BotDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<BotDto>>> GetAll(CancellationToken ct)
+    public async Task<ActionResult<List<BotDto>>> GetAll([FromQuery] bool mine = false, CancellationToken ct = default)
     {
-        var result = await sender.Send(new GetBotsQuery(), ct);
+        Guid? createdById = mine ? await userService.GetCurrentUserIdAsync(ct) : null;
+        var result = await sender.Send(new GetBotsQuery(createdById), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
@@ -37,7 +39,8 @@ public class BotsController(ISender sender, IUserService userService) : Controll
     [ProducesResponseType<BotDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<BotDto>> Get(Guid botId, CancellationToken ct)
     {
-        var result = await sender.Send(new GetBotQuery(botId), ct);
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetBotQuery(botId, userId), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

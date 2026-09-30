@@ -9,7 +9,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? AvatarUrl, string? Aliases, bool? IsActive) : ICommand<Result>;
 
-public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy) : ICommandHandler<UpdateBotCommand, Result>
+public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy, IChatBotState botState) : ICommandHandler<UpdateBotCommand, Result>
 {
     public async ValueTask<Result> Handle(UpdateBotCommand request, CancellationToken cancellationToken)
     {
@@ -27,7 +27,12 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             return Result.Failure(refusal);
 
         if (request.Name is not null) bot.Name = request.Name;
-        if (request.ModelId is not null) bot.ModelId = request.ModelId;
+        if (request.ModelId is not null && request.ModelId != bot.ModelId)
+        {
+            bot.ModelId = request.ModelId;
+            // A fixed bot starts fresh: if the new model breaks too, the chat hears about it again.
+            botState.ClearModelNotices(bot.Id);
+        }
         if (request.SystemPrompt is not null) bot.SystemPrompt = request.SystemPrompt;
         if (request.Personality is not null) bot.Personality = request.Personality;
         if (request.Temperature is not null) bot.Temperature = request.Temperature.Value;

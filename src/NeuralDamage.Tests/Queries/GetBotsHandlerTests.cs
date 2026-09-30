@@ -1,6 +1,8 @@
 ﻿using NeuralDamage.Application.Queries;
 using NeuralDamage.Domain;
 using NeuralDamage.Tests.Helpers;
+using NeuralDamage.Infrastructure.Services;
+using NSubstitute;
 
 namespace NeuralDamage.Tests.Queries;
 
@@ -17,7 +19,7 @@ public class GetBotsHandlerTests
         db.Bots.Add(new Bot { Name = "Also Active", ModelId = "m3", SystemPrompt = "x", CreatedById = user.Id, IsActive = true });
         await db.SaveChangesAsync();
 
-        var handler = new GetBotsHandler(db);
+        var handler = new GetBotsHandler(db, Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new GetBotsQuery(), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -38,7 +40,7 @@ public class GetBotsHandlerTests
         db.Bots.Add(new Bot { Name = "Alpha", ModelId = "m2", SystemPrompt = "x", CreatedById = user.Id });
         await db.SaveChangesAsync();
 
-        var handler = new GetBotsHandler(db);
+        var handler = new GetBotsHandler(db, Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new GetBotsQuery(), CancellationToken.None);
 
         await Assert.That(result.Value![0].Name).IsEqualTo("Alpha");

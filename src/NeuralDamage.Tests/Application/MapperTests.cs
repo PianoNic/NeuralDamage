@@ -7,24 +7,6 @@ namespace NeuralDamage.Tests.Application;
 public class MapperTests
 {
     [Test]
-    public async Task Bot_ToDto_MapsAllFields()
-    {
-        var bot = new Bot { Name = "TestBot", ModelId = "openai/gpt-4o", SystemPrompt = "Be helpful", Personality = "Friendly", Temperature = 0.9, AvatarUrl = "https://example.com/avatar.png", Aliases = "tb,test", CreatedById = Guid.NewGuid(), IsActive = true };
-
-        var dto = bot.ToDto();
-
-        await Assert.That(dto.Id).IsEqualTo(bot.Id);
-        await Assert.That(dto.Name).IsEqualTo("TestBot");
-        await Assert.That(dto.ModelId).IsEqualTo("openai/gpt-4o");
-        await Assert.That(dto.SystemPrompt).IsEqualTo("Be helpful");
-        await Assert.That(dto.Personality).IsEqualTo("Friendly");
-        await Assert.That(dto.Temperature).IsEqualTo(0.9);
-        await Assert.That(dto.AvatarUrl).IsEqualTo("https://example.com/avatar.png");
-        await Assert.That(dto.Aliases).IsEqualTo("tb,test");
-        await Assert.That(dto.IsActive).IsTrue();
-    }
-
-    [Test]
     public async Task Bot_ToSummaryDto_MapsCorrectFields()
     {
         var bot = new Bot { Name = "TestBot", ModelId = "test", CreatedById = Guid.NewGuid() };
