@@ -12,6 +12,7 @@ public interface IChatClient
     Task MessageNew(MessageDto message);
     Task ReactionUpdated(Guid messageId, List<ReactionGroupDto> reactions);
     Task BotTyping(Guid chatId, Guid botId, string botName);
+    Task UserTyping(Guid chatId, Guid userId, string displayName);
     Task BotResponseCancelled(Guid chatId);
     Task SystemMessage(SystemMessageDto message);
 }

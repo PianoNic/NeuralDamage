@@ -20,7 +20,16 @@ export interface ChatHubEvents {
   MessageNew: [message: MessageDto];
   ReactionUpdated: [messageId: string, reactions: ReactionGroupDto[]];
   BotTyping: [chatId: string, botId: string, botName: string];
+  UserTyping: [chatId: string, userId: string, displayName: string];
   BotResponseCancelled: [chatId: string];
+  /** Ephemeral notice (slash-command results and the like); never persisted. */
+  SystemMessage: [message: SystemMessage];
+}
+
+export interface SystemMessage {
+  chatId: string;
+  content: string;
+  timestamp: string;
 }
 
 /** Mirrors `IUserClient` on the server. */

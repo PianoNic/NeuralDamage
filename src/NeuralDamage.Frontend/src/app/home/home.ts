@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { HlmSidebarTrigger } from '@spartan-ng/helm/sidebar';
 
 @Component({
   selector: 'app-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [],
+  imports: [HlmSidebarTrigger],
   templateUrl: './home.html',
   host: { class: 'flex flex-1' },
 })

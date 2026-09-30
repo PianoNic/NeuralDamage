@@ -43,6 +43,25 @@ public class ChatHub(NeuralDamageDbContext db, IUserService userService, ILogger
     }
 
     /// <summary>
+    /// Tells the chat's other members this user is typing. Clients call it
+    /// repeatedly (throttled) while typing and expire the indicator themselves,
+    /// so there is no matching "stop".
+    /// </summary>
+    public async Task StartTyping(Guid chatId)
+    {
+        var userId = await GetUserIdAsync();
+        if (userId == null) return;
+
+        var displayName = await db.ChatMembers
+            .Where(cm => cm.ChatId == chatId && cm.UserId == userId.Value)
+            .Select(cm => cm.User!.DisplayName != "" ? cm.User.DisplayName : cm.User.Email)
+            .FirstOrDefaultAsync(Context.ConnectionAborted);
+        if (displayName == null) return;
+
+        await Clients.OthersInGroup(chatId.ToString()).UserTyping(chatId, userId.Value, displayName);
+    }
+
+    /// <summary>
     /// The token's subject is the OIDC external id, not Users.Id, so it has to be
     /// translated before it can be matched against ChatMembers.
     /// </summary>

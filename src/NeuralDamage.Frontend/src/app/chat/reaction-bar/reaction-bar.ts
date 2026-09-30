@@ -10,7 +10,13 @@ import { ReactionGroupDto } from '@app/models';
 })
 export class ReactionBarComponent {
   readonly reactions = input.required<ReactionGroupDto[]>();
+  readonly currentUserId = input<string | null>(null);
   readonly toggleReaction = output<string>();
+
+  isMine(reaction: ReactionGroupDto): boolean {
+    const userId = this.currentUserId();
+    return !!userId && reaction.userIds.includes(userId);
+  }
 
   onToggle(emoji: string): void {
     this.toggleReaction.emit(emoji);

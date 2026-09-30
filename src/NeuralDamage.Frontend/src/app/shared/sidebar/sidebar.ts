@@ -9,7 +9,7 @@ import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
-import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
+import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideBrain,
@@ -69,6 +69,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly signalr = inject(SignalRService);
   private readonly chatsApi = inject(ChatsService);
+  private readonly sidebar = inject(HlmSidebarService);
 
   readonly chats = signal<ChatDto[]>([]);
   readonly searchQuery = signal('');
@@ -111,6 +112,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   openChat(chatId: string): void {
     void this.router.navigate(['/chat', chatId]);
+    // On phones the sidebar is a sheet over the chat; get it out of the way.
+    this.sidebar.setOpenMobile(false);
   }
 
 
