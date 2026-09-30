@@ -1,164 +1,92 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using NeuralDamage.Domain;
-using NeuralDamage.Domain.Enums;
-using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Dtos;
-using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Tests.Helpers;
 using NSubstitute;
+using static NeuralDamage.Infrastructure.Services.BotDecision.BotDecisionEngine;
 
 namespace NeuralDamage.Tests.Infrastructure;
 
-/// <summary>
-/// Covers the emoji reactions bots leave on messages they chose not to answer.
-/// The service that picks the emoji was always there; nothing called it, so
-/// these assert the orchestrator actually reaches it.
-/// </summary>
+/// <summary>Reactions come from Jev's react choices, alongside the replies.</summary>
 public class BotReactionOrchestrationTests
 {
-    /// <summary>
-    /// Reacting is deliberately occasional, so a single run proves nothing -
-    /// the odds of no reaction across this many are about one in ten million.
-    /// </summary>
-    private const int Runs = 100;
-
-    private sealed record Harness(
-        BotResponseOrchestrator Orchestrator,
-        NeuralDamageDbContext Db,
-        IChatNotificationService Notifications,
-        IBotDecisionEngine Decisions,
-        IOpenRouterService OpenRouter,
-        IChatBotState BotState,
-        Guid ChatId,
-        Bot Bot);
-
-    private static async Task<Harness> BuildAsync()
-    {
-        var db = TestDbContext.Create();
-
-        var user = new User { ExternalId = "ext-1", Email = "owner@test.com", DisplayName = "Alice" };
-        db.Users.Add(user);
-        var bot = new Bot { Name = "GPT", ModelId = "openai/gpt-4o", SystemPrompt = "x", CreatedById = user.Id };
-        db.Bots.Add(bot);
-        var chat = new Chat { Name = "Chat", CreatedById = user.Id };
-        db.Chats.Add(chat);
-        db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = user.Id, Role = ChatMemberRole.Owner });
-        db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, BotId = bot.Id });
-        await db.SaveChangesAsync();
-
-        var notifications = Substitute.For<IChatNotificationService>();
-        var decisions = Substitute.For<IBotDecisionEngine>();
-        var openRouter = Substitute.For<IOpenRouterService>();
-
-        var services = new ServiceCollection();
-        services.AddSingleton(db);
-        services.AddSingleton(notifications);
-        services.AddSingleton(decisions);
-        services.AddSingleton(openRouter);
-        services.AddSingleton(new ModelPolicy(0, 0));
-        var provider = services.BuildServiceProvider();
-
-        var botState = new ChatBotState();
-        var orchestrator = new BotResponseOrchestrator(
-            provider.GetRequiredService<IServiceScopeFactory>(),
-            botState,
-            NullLogger<BotResponseOrchestrator>.Instance,
-            InstantBotOptions.Create());
-
-        return new Harness(orchestrator, db, notifications, decisions, openRouter, botState, chat.Id, bot);
-    }
-
-    /// <summary>A fresh message each run, so the duplicate guard never hides a reaction.</summary>
-    private static async Task<Message> AddMessageAsync(NeuralDamageDbContext db, Guid chatId, string content)
-    {
-        var user = await db.Users.FirstAsync();
-        var message = new Message { ChatId = chatId, SenderUserId = user.Id, Content = content };
-        db.Messages.Add(message);
-        await db.SaveChangesAsync();
-        return message;
-    }
-
     [Test]
-    public async Task SilentBot_Reacts_AndBroadcasts()
+    public async Task ReactChoice_PutsTheMappedEmojiOnTheMessage_AndBroadcasts()
     {
-        var h = await BuildAsync();
-        // Nobody answers, so the bot is free to react instead.
-        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns([]);
-
-        for (var i = 0; i < Runs; i++)
+        var jev = new FakeJev(name => name switch
         {
-            var message = await AddMessageAsync(h.Db, h.ChatId, $"that is hilarious {i}");
-            await h.Orchestrator.ProcessMessageAsync(h.ChatId, message.Id);
-        }
+            "GPT" => FakeJev.Chose(ReactWow, 0.55),
+            "Claude" => FakeJev.Chose(ReactLaugh, 0.8),
+            _ => FakeJev.Chose(Quiet, 0.9),
+        });
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3, configure: jev.Engine());
+        var message = await h.SayAsync("i saw dune twice today");
 
-        var reactions = await h.Db.Reactions.ToListAsync();
-        await Assert.That(reactions).IsNotEmpty();
-        await Assert.That(reactions.All(r => r.BotId == h.Bot.Id)).IsTrue();
-        await Assert.That(reactions.All(r => r.UserId is null)).IsTrue();
-        // The keyword map owns the choice; the orchestrator must not override it.
-        await Assert.That(reactions.All(r => r.Emoji == "😂")).IsTrue();
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
 
-        await h.Notifications.ReceivedWithAnyArgs().NotifyReactionUpdated(default, default, default!);
-        // A silent bot must stay silent otherwise.
+        var reactions = await h.Db.Reactions.AsNoTracking().ToListAsync();
+        await Assert.That(reactions.Select(r => (r.BotId!.Value, r.Emoji))).IsEquivalentTo(
+            [(h.Bots[0].Id, "😮"), (h.Bots[1].Id, "😂")]);
+        await Assert.That(reactions.All(r => r.MessageId == message.Id && r.UserId == null)).IsTrue();
+        await h.Notifications.Received(2).NotifyReactionUpdated(h.Chat.Id, message.Id, Arg.Any<List<ReactionGroupDto>>());
+        // Reacting is all they do.
         await h.Notifications.DidNotReceiveWithAnyArgs().NotifyMessageNew(default, default!);
-        h.Db.Dispose();
+        await h.OpenRouter.DidNotReceiveWithAnyArgs().GenerateResponseAsync(default!, default, default!, default!, default);
     }
 
     [Test]
-    public async Task RespondingBot_DoesNotAlsoReact()
+    public async Task ConfiguredEmoji_IsUsed()
     {
-        var h = await BuildAsync();
-        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns([h.Bot.Id]);
-        h.OpenRouter.GenerateResponseAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>())
-            .Returns("sure thing");
+        var jev = new FakeJev(_ => FakeJev.Chose(ReactLove, 0.9));
+        var emojis = BotRankingOptions.DefaultEmojis.ToDictionary(e => e.Key, e => e.Value);
+        emojis[ReactLove] = "🥰";
+        using var h = await OrchestratorHarness.CreateAsync(configure: jev.Engine(new BotRankingOptions { Emojis = emojis }));
+        var message = await h.SayAsync("made you all cookies");
 
-        for (var i = 0; i < Runs; i++)
-        {
-            var message = await AddMessageAsync(h.Db, h.ChatId, $"that is hilarious {i}");
-            await h.Orchestrator.ProcessMessageAsync(h.ChatId, message.Id);
-        }
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
+
+        await Assert.That((await h.Db.Reactions.SingleAsync()).Emoji).IsEqualTo("🥰");
+    }
+
+    [Test]
+    public async Task RepliesAndReactions_HappenInTheSameRound()
+    {
+        var jev = new FakeJev(name => name == "GPT" ? FakeJev.Chose(Reply, 0.8) : FakeJev.Chose(ReactThumbs, 0.7));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2, configure: jev.Engine());
+        h.Reply("dune part two was better");
+        var message = await h.SayAsync("anyone seen the new dune movie?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
+
+        await Assert.That((await h.MessagesFromAsync(h.Bots[0])).Select(m => m.Content)).IsEquivalentTo(["dune part two was better"]);
+        var reaction = await h.Db.Reactions.AsNoTracking().SingleAsync();
+        await Assert.That(reaction.BotId).IsEqualTo(h.Bots[1].Id);
+        await Assert.That(reaction.Emoji).IsEqualTo("👍");
+    }
+
+    [Test]
+    public async Task QuietOrUnsure_NoReaction()
+    {
+        var jev = new FakeJev(name => name == "GPT" ? FakeJev.Chose(Quiet, 0.9) : FakeJev.Chose(ReactLaugh, 0.3));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2, configure: jev.Engine());
+        var message = await h.SayAsync("that is hilarious");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
 
         await Assert.That(await h.Db.Reactions.AnyAsync()).IsFalse();
-        await h.Notifications.DidNotReceiveWithAnyArgs().NotifyReactionUpdated(default, default, default!);
-        h.Db.Dispose();
     }
 
     [Test]
-    public async Task MutedBot_DoesNotReact()
+    public async Task MutedBot_NeitherReactsNorReplies()
     {
-        var h = await BuildAsync();
-        h.BotState.Mute(h.ChatId, h.Bot.Id);
-        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns([]);
+        var jev = new FakeJev(_ => FakeJev.Chose(ReactLaugh, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(configure: jev.Engine());
+        h.BotState.Mute(h.Chat.Id, h.Bots[0].Id);
+        var message = await h.SayAsync("that is hilarious");
 
-        for (var i = 0; i < Runs; i++)
-        {
-            var message = await AddMessageAsync(h.Db, h.ChatId, $"that is hilarious {i}");
-            await h.Orchestrator.ProcessMessageAsync(h.ChatId, message.Id);
-        }
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
 
+        await Assert.That(jev.Calls).IsEmpty();
         await Assert.That(await h.Db.Reactions.AnyAsync()).IsFalse();
-        h.Db.Dispose();
-    }
-
-    [Test]
-    public async Task FailedReply_PostsSystemMessage()
-    {
-        var h = await BuildAsync();
-        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns([h.Bot.Id]);
-        h.OpenRouter.GenerateResponseAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>())
-            .Returns<string>(_ => throw new HttpRequestException("boom"));
-
-        var message = await AddMessageAsync(h.Db, h.ChatId, "hello");
-        await h.Orchestrator.ProcessMessageAsync(h.ChatId, message.Id);
-
-        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "GPT failed to respond.");
-        h.Db.Dispose();
     }
 }

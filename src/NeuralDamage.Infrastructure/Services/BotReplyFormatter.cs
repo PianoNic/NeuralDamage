@@ -96,6 +96,13 @@ public static partial class BotReplyFormatter
         return false;
     }
 
+    /// <summary>
+    /// True for a message nobody would send: only a stage direction in
+    /// parentheses ("(ignores bob completely)") or only punctuation ("...").
+    /// </summary>
+    public static bool IsFiller(string part) =>
+        StageDirection().IsMatch(part) || OnlyPunctuation().IsMatch(part);
+
     private static HashSet<string> Words(string text) =>
         Word().Matches(text.ToLowerInvariant()).Select(m => m.Value).ToHashSet();
 
@@ -120,6 +127,12 @@ public static partial class BotReplyFormatter
     // Bold or italic around text that hugs its markers, so "2 * 3 * 4" survives.
     [GeneratedRegex(@"(\*\*|__|\*)(\S(?:.*?\S)?)\1")]
     private static partial Regex Emphasis();
+
+    [GeneratedRegex(@"^(?:\s*\([^()]*\)\s*)+$")]
+    private static partial Regex StageDirection();
+
+    [GeneratedRegex(@"^[\p{P}\s]*$")]
+    private static partial Regex OnlyPunctuation();
 
     [GeneratedRegex(@"[\p{L}\p{N}']+")]
     private static partial Regex Word();

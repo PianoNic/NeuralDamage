@@ -37,7 +37,6 @@ builder.Services.AddHttpClient<IDecisionsClient, DecisionsClient>((sp, client) =
     client.Timeout = sp.GetRequiredService<BotRankingOptions>().Timeout);
 builder.Services.Configure<BotBehaviorOptions>(builder.Configuration.GetSection(BotBehaviorOptions.SectionName));
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
-builder.Services.AddScoped<Tier3LlmJudge>();
 builder.Services.AddSingleton<BotResponseQueue>();
 builder.Services.AddSingleton<IBotResponseQueue>(sp => sp.GetRequiredService<BotResponseQueue>());
 builder.Services.AddSingleton<IBotResponseOrchestrator, BotResponseOrchestrator>();

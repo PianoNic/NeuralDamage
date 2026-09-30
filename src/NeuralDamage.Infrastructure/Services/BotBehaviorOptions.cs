@@ -14,24 +14,15 @@ public class BotBehaviorOptions
     public int MaxRepliesPerMinute { get; set; } = 4;
 
     /// <summary>
-    /// At most this many bots answer any one message, chosen by how strongly
-    /// they were addressed. Stops dogpiles and caps what one message can cost.
-    /// </summary>
-    public int MaxRespondersPerMessage { get; set; } = 2;
-
-    /// <summary>
     /// How many bot-to-bot hops can follow a person's message before the bots
     /// wait for a person again.
     /// </summary>
     public int MaxBotChainDepth { get; set; } = 3;
 
     /// <summary>
-    /// A bot answers another bot when named in its message; otherwise only
-    /// with this probability.
+    /// A pause before typing starts, as if reading the message first. Each
+    /// replying bot draws its own, so they do not all start typing at once.
     /// </summary>
-    public double BotChainChance { get; set; } = 0.1;
-
-    /// <summary>A pause before typing starts, as if reading the message first.</summary>
     public TimeSpan ReadDelayMin { get; set; } = TimeSpan.FromMilliseconds(500);
     public TimeSpan ReadDelayMax { get; set; } = TimeSpan.FromMilliseconds(2500);
 
@@ -53,7 +44,10 @@ public class BotBehaviorOptions
     /// <summary>A reply split on blank lines becomes at most this many messages.</summary>
     public int MaxReplyParts { get; set; } = 3;
 
-    /// <summary>Reactions land a moment after the message, not the instant it arrives.</summary>
+    /// <summary>
+    /// Reactions land a moment after the message, not the instant it arrives;
+    /// each reacting bot draws its own.
+    /// </summary>
     public TimeSpan ReactionDelayMin { get; set; } = TimeSpan.FromSeconds(1);
     public TimeSpan ReactionDelayMax { get; set; } = TimeSpan.FromSeconds(4);
 

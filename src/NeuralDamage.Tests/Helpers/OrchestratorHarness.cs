@@ -88,9 +88,15 @@ public sealed class OrchestratorHarness : IDisposable
         };
     }
 
+    /// <summary>These bots reply, if they are asked; everyone else asked stays quiet.</summary>
     public void Respond(params Bot[] bots) =>
-        Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns(bots.Select(b => b.Id).ToList());
+        Decide((_, asked) => asked.Select(b => new BotVerdict(b,
+            bots.Any(r => r.Id == b.Id) ? BotAction.Reply : BotAction.Quiet, Probability: 0.9)).ToList());
+
+    /// <summary>Decides each message with <paramref name="decide"/>, given the message and the bots asked.</summary>
+    public void Decide(Func<Message, List<Bot>, List<BotVerdict>> decide) =>
+        Decisions.DecideAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => decide(ci.ArgAt<Message>(1), ci.ArgAt<List<Bot>>(2)));
 
     public void Reply(params string[] replies) =>
         OpenRouter.GenerateResponseAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>())

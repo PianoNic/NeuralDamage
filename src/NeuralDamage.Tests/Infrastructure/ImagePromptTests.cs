@@ -135,8 +135,12 @@ public class ImagePromptTests
             .Returns((DecisionsResponse?)null);
         var cook = new Bot { Name = "Cook", ModelId = "m", SystemPrompt = "a chef", CreatedById = alice.Id };
 
-        await new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance)
-            .JudgeAsync(message, [(cook, 0.3)], [message], CancellationToken.None);
+        using var db = TestDbContext.Create();
+        db.Messages.Add(message);
+        await db.SaveChangesAsync();
+
+        await new BotDecisionEngine(db, decisions, new BotRankingOptions(), NullLogger<BotDecisionEngine>.Instance)
+            .DecideAsync(message.ChatId, message, [cook], CancellationToken.None);
 
         await Assert.That(JsonSerializer.Serialize(state)).Contains("[image from alice: A steaming bowl of ramen.]");
     }

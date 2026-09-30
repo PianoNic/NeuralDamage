@@ -98,43 +98,171 @@ public class BotDeliveryTests
         await h.Notifications.DidNotReceiveWithAnyArgs().NotifyMessageNew(default, default!);
     }
 
+
     [Test]
-    public async Task BotMessage_OtherBotsMayReact_ButNeverTheSender()
+    [Arguments("(ignores bob completely)")]
+    [Arguments("...")]
+    [Arguments("…")]
+    [Arguments("(sighs)\n\n(leaves the chat)")]
+    public async Task StageDirectionOrPunctuationOnly_IsDropped(string reply)
     {
-        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
-        var (gpt, claude) = (h.Bots[0], h.Bots[1]);
-        h.Respond();
+        using var h = await OrchestratorHarness.CreateAsync();
+        var gpt = h.Bots[0];
+        h.Respond(gpt);
+        h.Reply(reply.Replace("\\n", "\n"));
+        var trigger = await h.SayAsync("bob says hi");
 
-        // Reacting is occasional; across this many runs a reaction is all but certain.
-        for (var i = 0; i < 100; i++)
-        {
-            var message = await h.SayAsync($"that is hilarious {i}", asBot: claude);
-            await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
-        }
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
 
-        var reactions = await h.Db.Reactions.AsNoTracking().ToListAsync();
-        await Assert.That(reactions).IsNotEmpty();
-        await Assert.That(reactions.All(r => r.BotId == gpt.Id)).IsTrue();
+        await Assert.That(await h.MessagesFromAsync(gpt)).IsEmpty();
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifyMessageNew(default, default!);
+        // Dropped quietly: the bot did answer, it just had nothing to say.
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]
-    public async Task NoKeyword_NoReaction()
+    public async Task StageDirectionPart_IsDropped_TheRestPosted()
     {
         using var h = await OrchestratorHarness.CreateAsync();
-        h.Respond();
+        var gpt = h.Bots[0];
+        h.Respond(gpt);
+        h.Reply("(rolls eyes)\n\nfine, dune was good\n\n...");
+        var trigger = await h.SayAsync("admit it");
 
-        for (var i = 0; i < 100; i++)
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+
+        var sent = await h.MessagesFromAsync(gpt);
+        await Assert.That(sent.Select(m => m.Content)).IsEquivalentTo(["fine, dune was good"]);
+        await Assert.That(sent[0].ReplyToId).IsEqualTo(trigger.Id);
+    }
+
+    [Test]
+    public async Task ReplyingBots_AllStartTyping_BeforeAnyPosts()
+    {
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        h.Respond(h.Bots[0], h.Bots[1], h.Bots[2]);
+        var typing = new System.Collections.Concurrent.ConcurrentDictionary<Guid, byte>();
+        var allTyping = new TaskCompletionSource();
+        h.Notifications.NotifyBotTyping(default, default, default!).ReturnsForAnyArgs(ci =>
         {
-            var message = await h.SayAsync($"my cat died this morning {i}");
-            await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
-        }
+            typing[ci.ArgAt<Guid>(1)] = 0;
+            if (typing.Count == 3) allTyping.TrySetResult();
+            return Task.CompletedTask;
+        });
+        // Generation only finishes once every bot is typing: run one after
+        // another, the first bot would wait forever.
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(async ci =>
+        {
+            await allTyping.Task.WaitAsync(ci.ArgAt<CancellationToken>(4));
+            return $"my take, as {ci.ArgAt<string>(0)}";
+        });
+        var posted = 0;
+        var typersWhenFirstPosted = -1;
+        h.Notifications.NotifyMessageNew(default, default!).ReturnsForAnyArgs(_ =>
+        {
+            if (Interlocked.Increment(ref posted) == 1) typersWhenFirstPosted = typing.Count;
+            return Task.CompletedTask;
+        });
+        var trigger = await h.SayAsync("anyone seen the new dune movie?");
 
-        await Assert.That(await h.Db.Reactions.AnyAsync()).IsFalse();
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id).WaitAsync(TimeSpan.FromSeconds(10));
+
+        await Assert.That(typersWhenFirstPosted).IsEqualTo(3);
+        foreach (var bot in h.Bots)
+        {
+            var sent = await h.MessagesFromAsync(bot);
+            await Assert.That(sent).HasSingleItem();
+            // Each answers the person's message, not another bot's reply.
+            await Assert.That(sent[0].ReplyToId).IsEqualTo(trigger.Id);
+        }
+    }
+
+    [Test]
+    public async Task ParallelReplies_ReadTheHistoryAsTheRoundStarted()
+    {
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        var (gpt, claude) = (h.Bots[0], h.Bots[1]);
+        h.Respond(gpt, claude);
+        var gptPosted = new TaskCompletionSource();
+        var prompts = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(async ci =>
+        {
+            var model = ci.ArgAt<string>(0);
+            if (model == claude.ModelId)
+                await gptPosted.Task.WaitAsync(TimeSpan.FromSeconds(5)); // GPT's reply is already in the chat
+            prompts[model] = string.Join("\n", ci.ArgAt<List<ChatMessage>>(3).Select(m => m.Content));
+            return model == gpt.ModelId ? "gpt was here first" : "claude, on its own";
+        });
+        h.Notifications.NotifyMessageNew(default, default!).ReturnsForAnyArgs(ci =>
+        {
+            if (ci.ArgAt<MessageDto>(1).SenderBotId == gpt.Id) gptPosted.TrySetResult();
+            return Task.CompletedTask;
+        });
+        var trigger = await h.SayAsync("thoughts?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+
+        await Assert.That(prompts[claude.ModelId]).DoesNotContain("gpt was here first");
+    }
+
+    [Test]
+    public async Task NewMessage_CancelsEveryReplyingBot()
+    {
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        h.Respond(h.Bots[0], h.Bots[1], h.Bots[2]);
+        var generating = 0;
+        var allGenerating = new TaskCompletionSource();
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(async ci =>
+        {
+            if (Interlocked.Increment(ref generating) == 3) allGenerating.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(4));
+            return "never";
+        });
+        var trigger = await h.SayAsync("hello?");
+
+        var round = h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+        await allGenerating.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        h.Orchestrator.CancelPendingResponses(h.Chat.Id);
+        await round.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await h.Notifications.Received(1).NotifyBotResponseCancelled(h.Chat.Id);
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifyMessageNew(default, default!);
+        await Assert.That(await h.Db.Messages.CountAsync(m => m.SenderBotId != null)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task OneBotFailing_DoesNotStopTheOthers()
+    {
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
+        var (gpt, claude) = (h.Bots[0], h.Bots[1]);
+        h.Respond(gpt, claude);
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(ci =>
+            ci.ArgAt<string>(0) == gpt.ModelId ? throw new HttpRequestException("boom") : Task.FromResult("still here"));
+        var trigger = await h.SayAsync("hello?");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+
+        await h.Notifications.Received(1).NotifySystemMessage(h.Chat.Id, "GPT failed to respond.");
+        await Assert.That((await h.MessagesFromAsync(claude)).Select(m => m.Content)).IsEquivalentTo(["still here"]);
     }
 }
 
 public class BotReplyFormatterTests
 {
+    [Test]
+    [Arguments("(ignores bob completely)", true)]
+    [Arguments("  (sighs) (leaves)  ", true)]
+    [Arguments("...", true)]
+    [Arguments("?!", true)]
+    [Arguments("…", true)]
+    [Arguments("(sighs) fine, whatever", false)]
+    [Arguments("😂", false)]
+    [Arguments("ok", false)]
+    public async Task IsFiller(string part, bool expected)
+    {
+        await Assert.That(BotReplyFormatter.IsFiller(part)).IsEqualTo(expected);
+    }
+
     [Test]
     public async Task Split_SingleParagraph_IsOneMessage()
     {

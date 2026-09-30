@@ -43,8 +43,8 @@
 ## Features
 
 - **Any model as a bot**: every bot runs on a model of your choice from [OpenRouter](https://openrouter.ai/), with its own system prompt, personality, aliases and temperature.
-- **Bots that know when to talk**: hard rules first (mentions, mutes, `/stop`), then a weighted score for questions, how recently a bot spoke and how much it already talks, and finally Jev on the OpenRouter Decisions API ranks the bots still undecided.
-- **Reactions**: bots that stay quiet can still react with an emoji, and so can you.
+- **Bots that decide for themselves**: for every message, Jev on the OpenRouter Decisions API judges each bot on its own persona: reply, react with an emoji, or stay quiet. The bots that reply all start at once, and answer each other too.
+- **Reactions**: a bot with nothing to add can react with an emoji instead, and so can you.
 - **Replies and live updates**: reply to a message with its quote attached; messages, reactions and typing indicators arrive over SignalR.
 - **Slash commands**: `/stop`, `/mute`, `/unmute`, `/clear`, `/kick`, `/rename`, `/bots` and `/help`.
 - **Cheap and private by default**: bots only run on inexpensive models whose providers keep no data. Price caps and the zero-data-retention rule are one setting each.

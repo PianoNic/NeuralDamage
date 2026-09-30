@@ -93,18 +93,20 @@ A `PermitLimit` of `0` turns that limit off.
 
 ### Who replies (bot ranking)
 
-Every message goes through three tiers. Hard rules decide the clear cases (a bot is @mentioned, muted, or the chat is stopped), a weighted score settles the obvious rest, and the bots still undecided are ranked by Jev on the OpenRouter Decisions API. All of these are optional.
+Every message, from a person or a bot, gets one call to Jev on the OpenRouter Decisions API. It asks, for each bot in the chat, what that bot would do going only by its persona: reply, react with 😂, ❤️, 😮 or 👍, or stay quiet. Muted bots and bots under `/stop` are left out. A bot replies when Jev chose `reply` with at least the reply threshold, and reacts when it chose a reaction with at least the react threshold. Every bot that replies starts at the same time, and each reply is itself a message the bots can answer, up to three hops.
 
 | Variable | Default | Description |
 |---|---|---|
 | `BotRanking__ApiKey` | `OpenRouter__ApiKey` | Key for the Decisions API. It lives on the same OpenRouter account, so it normally falls back to the main key. |
-| `BotRanking__Model` | `~typesafe/jev-latest` | Ranking model. |
+| `BotRanking__Model` | `~typesafe/jev-latest` | Decision model. |
 | `BotRanking__Endpoint` | `https://openrouter.ai/api/alpha/decisions` | Decisions API endpoint. |
-| `BotRanking__Threshold` | `0.6` | Lowest probability for a bot to reply. |
-| `BotRanking__MaxResponders` | `2` | Most bots the ranking lets reply to one message. |
-| `BotRanking__TimeoutSeconds` | `5` | How long to wait for a ranking. |
+| `BotRanking__ReplyThreshold` | `0.6` | Lowest probability of `reply` for a bot to write. |
+| `BotRanking__ReactThreshold` | `0.5` | Lowest probability of the chosen reaction for a bot to react. |
+| `BotRanking__MaxReplies` | `5` | Safety cap on bots replying to one message, the likeliest first. Guards cost in chats with many bots. |
+| `BotRanking__Emojis__react_laugh` / `__react_love` / `__react_wow` / `__react_thumbs` | `😂` / `❤️` / `😮` / `👍` | The emoji each reaction puts on the message. |
+| `BotRanking__TimeoutSeconds` | `5` | How long to wait for Jev. |
 
-Without a key, or when a ranking fails or times out, the weighted scores decide on their own.
+Without a key, or when a call fails or times out, only the bots that are @mentioned or replied to answer, and nobody reacts.
 
 ### Database
 

@@ -3,40 +3,64 @@ using Microsoft.Extensions.Configuration;
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
 /// <summary>
-/// Settings for the Tier 3 judge, read from the <c>BotRanking</c> section.
-/// Everything but the key has a default, and the key falls back to the
-/// OpenRouter key because the Decisions API sits on the same account.
+/// Settings for Jev, which decides what every bot does with a message, read
+/// from the <c>BotRanking</c> section. Everything but the key has a default,
+/// and the key falls back to the OpenRouter key because the Decisions API sits
+/// on the same account.
 /// </summary>
 public record BotRankingOptions
 {
     public const string DefaultEndpoint = "https://openrouter.ai/api/alpha/decisions";
     public const string DefaultModel = "~typesafe/jev-latest";
 
+    /// <summary>The emoji each react option puts on the message.</summary>
+    public static readonly IReadOnlyDictionary<string, string> DefaultEmojis = new Dictionary<string, string>
+    {
+        [BotDecisionEngine.ReactLaugh] = "😂",
+        [BotDecisionEngine.ReactLove] = "❤️",
+        [BotDecisionEngine.ReactWow] = "😮",
+        [BotDecisionEngine.ReactThumbs] = "👍",
+    };
+
     public string Endpoint { get; init; } = DefaultEndpoint;
     public string Model { get; init; } = DefaultModel;
     public string? ApiKey { get; init; }
 
-    /// <summary>Minimum probability for a bot to reply.</summary>
-    public double Threshold { get; init; } = 0.6;
+    /// <summary>Lowest probability of <c>reply</c>, when Jev chose it, for the bot to write.</summary>
+    public double ReplyThreshold { get; init; } = 0.6;
 
-    /// <summary>Most bots Tier 3 lets reply to a single message.</summary>
-    public int MaxResponders { get; init; } = 2;
+    /// <summary>Lowest probability of the chosen react option for the bot to react.</summary>
+    public double ReactThreshold { get; init; } = 0.5;
+
+    /// <summary>
+    /// Safety cap on how many bots reply to one message, the likeliest first.
+    /// It guards cost in chats with many bots; normal use never reaches it.
+    /// </summary>
+    public int MaxReplies { get; init; } = 5;
+
+    public IReadOnlyDictionary<string, string> Emojis { get; init; } = DefaultEmojis;
 
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(5);
 
     public static BotRankingOptions FromConfiguration(IConfiguration configuration)
     {
         var section = configuration.GetSection("BotRanking");
-        var apiKey = section["ApiKey"];
+        var defaults = new BotRankingOptions();
+
+        // Only the four react options exist in the question, so only their
+        // emoji can be changed.
+        var emojis = DefaultEmojis.ToDictionary(e => e.Key, e => NullIfBlank(section[$"Emojis:{e.Key}"]) ?? e.Value);
 
         return new BotRankingOptions
         {
             Endpoint = NullIfBlank(section["Endpoint"]) ?? DefaultEndpoint,
             Model = NullIfBlank(section["Model"]) ?? DefaultModel,
-            ApiKey = NullIfBlank(apiKey) ?? NullIfBlank(configuration["OpenRouter:ApiKey"]),
-            Threshold = section.GetValue<double?>("Threshold") ?? 0.6,
-            MaxResponders = section.GetValue<int?>("MaxResponders") ?? 2,
-            Timeout = TimeSpan.FromSeconds(section.GetValue<double?>("TimeoutSeconds") ?? 5),
+            ApiKey = NullIfBlank(section["ApiKey"]) ?? NullIfBlank(configuration["OpenRouter:ApiKey"]),
+            ReplyThreshold = section.GetValue<double?>("ReplyThreshold") ?? defaults.ReplyThreshold,
+            ReactThreshold = section.GetValue<double?>("ReactThreshold") ?? defaults.ReactThreshold,
+            MaxReplies = section.GetValue<int?>("MaxReplies") ?? defaults.MaxReplies,
+            Emojis = emojis,
+            Timeout = section.GetValue<double?>("TimeoutSeconds") is { } seconds ? TimeSpan.FromSeconds(seconds) : defaults.Timeout,
         };
     }
 
