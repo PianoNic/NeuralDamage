@@ -95,7 +95,14 @@ public class RunSlashCommandHandler(
             case "/clear":
             {
                 var result = await sender.Send(new ClearChatCommand(chatId, userId), ct);
-                return result.IsSuccess ? $"{userName} cleared the chat." : result.Error!;
+                if (!result.IsSuccess)
+                    return result.Error!;
+
+                // A reply still being written answers a message that no longer
+                // exists, and saving it would fail on the reply link.
+                botOrchestrator.CancelPendingResponses(chatId);
+                await notifications.NotifyBotResponseCancelled(chatId);
+                return $"{userName} cleared the chat.";
             }
 
             case "/kick":

@@ -141,6 +141,20 @@ public class RunSlashCommandHandlerTests
     }
 
     [Test]
+    public async Task Clear_CancelsRepliesStillBeingWritten()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+        h.Sender.Send(Arg.Any<ClearChatCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+
+        await RunAsync(h, "/clear");
+
+        h.Orchestrator.Received(1).CancelPendingResponses(h.ChatId);
+        await h.Notifications.Received(1).NotifyBotResponseCancelled(h.ChatId);
+        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Alice cleared the chat.");
+    }
+
+    [Test]
     public async Task Rename_DispatchesUpdateChatCommand()
     {
         var h = await BuildAsync();
