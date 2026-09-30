@@ -9,6 +9,7 @@ api/chatMembers.service.ts
 api/chats.service.ts
 api/internalDevOnly.service.ts
 api/messages.service.ts
+api/neuralDamageAPI.service.ts
 api/reactions.service.ts
 api/user.service.ts
 configuration.ts
