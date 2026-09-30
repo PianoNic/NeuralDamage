@@ -61,4 +61,11 @@ export interface ChatMember {
   displayName: string;
   avatarUrl: string | null;
   memberType: 'user' | 'bot';
+  /** A bot's model, for the vendor icon; null for people. */
+  modelId: string | null;
+  /** Whether the bot is muted in this chat; always false for people. */
+  isMuted: boolean;
+  /** `available`, `missing` or `notAllowed` for bots; null for people. */
+  modelStatus: string | null;
+  modelStatusReason: string | null;
 }

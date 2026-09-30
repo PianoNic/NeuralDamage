@@ -401,6 +401,15 @@ export class Composer {
     this.focusInput();
   }
 
+  /** Appends `@name ` to the draft (the People panel's Mention) and puts the cursor after it. */
+  insertMention(name: string): void {
+    const text = this.content();
+    const mention = `@${name} `;
+    this.content.set(text && !/\s$/.test(text) ? `${text} ${mention}` : `${text}${mention}`);
+    this.dismissedAt.set(this.content());
+    this.focusInput();
+  }
+
   protected insertTrigger(trigger: '/' | '@'): void {
     const text = this.content();
     if (trigger === '/') this.content.set(text.startsWith('/') ? text : '/');

@@ -13,6 +13,10 @@ function member(id: string, displayName: string, memberType: 'user' | 'bot'): Ch
     displayName,
     avatarUrl: null,
     memberType,
+    modelId: null,
+    isMuted: false,
+    modelStatus: null,
+    modelStatusReason: null,
   };
 }
 
