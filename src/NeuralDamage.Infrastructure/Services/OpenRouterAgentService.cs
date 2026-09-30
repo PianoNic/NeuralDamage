@@ -1,6 +1,7 @@
 ﻿using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -68,7 +69,12 @@ public class OpenRouterAgentService : IOpenRouterService
             .AsIChatClient()
             .AsAIAgent(instructions: systemPrompt);
 
-        var cacheUpTo = MarksCache(modelId) ? history.FindLastIndex(m => m.Role != ChatMessage.Note) : -1;
+        // Two breakpoints: on the message being answered, which a regenerate in
+        // the same round reads back, and on the turn before it, which the next
+        // round reads back - by then the answered message has lost its
+        // "(you're answering this)" mark, so a cache ending on it never hits again.
+        var last = MarksCache(modelId) ? history.FindLastIndex(m => m.Role != ChatMessage.Note) : -1;
+        int[] breakpoints = last < 0 ? [] : last == 0 ? [0] : [last - 1, last];
         var messages = history
             .Select(m => new AgentChatMessage(
                 m.Role == "assistant" ? ChatRole.Assistant : ChatRole.User,
@@ -91,8 +97,9 @@ public class OpenRouterAgentService : IOpenRouterService
                 var raw = new ChatCompletionOptions();
                 if (effort is not null)
                     raw.Patch.Set("$.reasoning.effort"u8, effort);
-                if (cacheUpTo >= 0)
-                    raw.Patch.Set("$.messages"u8, MessagesWithCacheBreakpoint(systemPrompt, history, cacheUpTo));
+                raw.Patch.Set("$.session_id"u8, SessionId(modelId, systemPrompt));
+                if (breakpoints.Length > 0)
+                    raw.Patch.Set("$.messages"u8, MessagesWithCacheBreakpoint(systemPrompt, history, breakpoints));
                 // The model was checked against the policy when the bot was
                 // saved, but a model routes to several providers at different
                 // prices and retention terms, so both also have to hold per
@@ -137,6 +144,16 @@ public class OpenRouterAgentService : IOpenRouterService
     }
 
     /// <summary>
+    /// OpenRouter spreads requests for a model over its providers, and a
+    /// provider's prompt cache only helps the requests it gets: measured, a
+    /// bot's three replies in a row went to three providers. A session id
+    /// keeps a conversation on one provider. The system prompt is the same on
+    /// every call for a bot in a chat, so with the model it names the session.
+    /// </summary>
+    public static string SessionId(string modelId, string systemPrompt) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes($"{modelId}\n{systemPrompt}")))[..32].ToLowerInvariant();
+
+    /// <summary>
     /// DeepSeek, OpenAI, Grok and others cache a repeated prompt start on their
     /// own; Anthropic and Gemini only cache up to a <c>cache_control</c> marker.
     /// </summary>
@@ -144,22 +161,29 @@ public class OpenRouterAgentService : IOpenRouterService
         modelId.StartsWith("anthropic/", StringComparison.Ordinal) || modelId.StartsWith("google/", StringComparison.Ordinal);
 
     /// <summary>
-    /// The request's messages with a <c>cache_control</c> breakpoint on turn
-    /// <paramref name="breakpoint"/>, the last one before the note, so the
-    /// system prompt and the history are cached and only the note is not.
+    /// The request's messages with a <c>cache_control</c> breakpoint on each of
+    /// the turns <paramref name="breakpoints"/>, so the system prompt and the
+    /// history are cached and only the note is not.
     /// </summary>
     /// <remarks>
     /// Microsoft.Extensions.AI has no way to put the marker on a message part,
     /// and the OpenAI SDK's own message passed through as the raw
     /// representation did not reach the wire, so the whole list is written
     /// here and patched over the one the client serialises.
+    /// <para>
+    /// Every turn goes as content parts, not only the marked ones. Anthropic
+    /// takes no two user turns in a row, so OpenRouter merges them, and a turn
+    /// sent as a string one call and as parts the next came out different:
+    /// measured on Claude Sonnet, the second reply read 0 cached tokens that
+    /// way and 1876 of 1944 with parts throughout.
+    /// </para>
     /// </remarks>
-    public static BinaryData MessagesWithCacheBreakpoint(string systemPrompt, List<ChatMessage> history, int breakpoint) =>
+    public static BinaryData MessagesWithCacheBreakpoint(string systemPrompt, List<ChatMessage> history, params int[] breakpoints) =>
         BinaryData.FromObjectAsJson(history
             .Select((m, i) => new
             {
                 role = m.Role == "assistant" ? "assistant" : "user",
-                content = i == breakpoint || m.Images.Count > 0 ? (object)Parts(m, i == breakpoint) : m.Content,
+                content = (object)Parts(m, breakpoints.Contains(i)),
             })
             .Prepend(new { role = "system", content = (object)systemPrompt }));
 
