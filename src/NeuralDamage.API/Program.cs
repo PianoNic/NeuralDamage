@@ -9,6 +9,7 @@ using NeuralDamage.Application.Behaviors;
 using NeuralDamage.Application.Validators;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.BackgroundServices;
+using NeuralDamage.Infrastructure.Extensions;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
@@ -48,6 +49,9 @@ builder.Services.AddSingleton(attachmentOptions);
 builder.Services.AddSingleton<IAttachmentStorage>(new FileSystemAttachmentStorage(
     Path.GetFullPath(attachmentOptions.Path, builder.Environment.ContentRootPath)));
 builder.Services.AddSingleton<IImageDescriber, ImageDescriber>();
+
+// Rate limits
+builder.Services.AddChatRateLimits(builder.Configuration);
 
 // Mediator & Validation
 builder.Services.AddMediator(options =>
@@ -151,6 +155,7 @@ if (app.Environment.IsDevelopment())
     app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapToamaisutaaConfiguration();

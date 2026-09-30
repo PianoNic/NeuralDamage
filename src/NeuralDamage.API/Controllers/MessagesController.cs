@@ -1,5 +1,7 @@
 ﻿using Mediator;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using NeuralDamage.Infrastructure.Extensions;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Dtos.Requests;
@@ -17,7 +19,9 @@ namespace NeuralDamage.API.Controllers;
 public class MessagesController(ISender sender, IUserService userService) : ControllerBase
 {
     [HttpPost]
+    [EnableRateLimiting(RateLimitExtensions.Messages)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Send(Guid chatId, SendMessageRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);

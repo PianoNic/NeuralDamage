@@ -79,6 +79,18 @@ People can attach PNG, JPEG, WebP and GIF images to a message. Bots on a model t
 
 Images are only served to members of their chat.
 
+### Rate limits
+
+Each signed-in user gets a fixed window per endpoint; past it the API answers `429` and the app shows why.
+
+| Variable | Default | Description |
+|---|---|---|
+| `RateLimits__Messages__PermitLimit` / `__WindowSeconds` | `20` / `60` | Messages sent. Each one can wake paid bots. |
+| `RateLimits__Uploads__PermitLimit` / `__WindowSeconds` | `20` / `60` | Images uploaded. Each one is described by a paid model. |
+| `RateLimits__BotCreation__PermitLimit` / `__WindowSeconds` | `10` / `600` | Bots created. |
+
+A `PermitLimit` of `0` turns that limit off.
+
 ### Who replies (bot ranking)
 
 Every message goes through three tiers. Hard rules decide the clear cases (a bot is @mentioned, muted, or the chat is stopped), a weighted score settles the obvious rest, and the bots still undecided are ranked by Jev on the OpenRouter Decisions API. All of these are optional.

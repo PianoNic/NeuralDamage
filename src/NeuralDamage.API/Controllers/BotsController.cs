@@ -1,5 +1,7 @@
 using Mediator;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using NeuralDamage.Infrastructure.Extensions;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Dtos.Requests;
@@ -17,7 +19,9 @@ namespace NeuralDamage.API.Controllers;
 public class BotsController(ISender sender, IUserService userService) : ControllerBase
 {
     [HttpPost]
+    [EnableRateLimiting(RateLimitExtensions.BotCreation)]
     [ProducesResponseType<BotDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<BotDto>> Create(CreateBotRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);

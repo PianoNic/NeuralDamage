@@ -1,8 +1,10 @@
 using Mediator;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Application.Queries;
 using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Extensions;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.Attachments;
 
@@ -17,11 +19,13 @@ public class AttachmentsController(ISender sender, IUserService userService, Att
     private const long MaxRequestBytes = 64L * 1024 * 1024;
 
     [HttpPost]
+    [EnableRateLimiting(RateLimitExtensions.Uploads)]
     [RequestSizeLimit(MaxRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<AttachmentDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<AttachmentDto>> Upload(Guid chatId, IFormFile file, CancellationToken ct)
     {
         // Refused before it is read into memory.
