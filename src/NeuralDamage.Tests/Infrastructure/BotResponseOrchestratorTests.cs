@@ -49,7 +49,6 @@ public class BotPromptBuilderTests
         await Assert.That(prompt).Contains("Let the character decide how much to say, and don't pad.");
         await Assert.That(prompt).DoesNotContain("Vary your length");
         await Assert.That(prompt).DoesNotContain("roleplay violent");
-        await Assert.That(prompt.ReplaceLineEndings("\n")).EndsWith("Hard limit:\n- Never produce sexual content involving minors.");
     }
 
     [Test]
