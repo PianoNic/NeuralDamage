@@ -1,0 +1,209 @@
+name: CI
+
+# The gate for PRs, pushes to main and releases: server, frontend, the image, and the generated API client.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Only superseded PR runs are cancelled; a push to main or a release gate always finishes.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  server:
+    name: Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore NeuralDamage.slnx
+
+      - name: Build
+        run: dotnet build NeuralDamage.slnx -c Release --no-restore
+
+      # dotnet test's VSTest mode is unsupported on the .NET 10 SDK; TUnit runs as an executable.
+      - name: Tests (TUnit)
+        run: dotnet run --project src/NeuralDamage.Tests -c Release --no-build
+
+      # A model change without its migration builds fine and only fails at boot, when the API migrates.
+      - name: No pending model changes
+        run: |
+          dotnet tool install --global dotnet-ef --version "10.*"
+          dotnet ef migrations has-pending-model-changes \
+            --project src/NeuralDamage.Infrastructure \
+            --startup-project src/NeuralDamage.API \
+            --configuration Release --no-build
+
+  # NeuralDamage.Frontend is the SPA the API serves.
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/NeuralDamage.Frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      # One Bun version everywhere: package.json's packageManager is the source, and the API Dockerfile's
+      # frontend stage, which builds the SPA into wwwroot, must match it.
+      - name: Read the Bun version
+        id: bun
+        run: |
+          version=$(jq -r '.packageManager' package.json | sed -E 's/^bun@//')
+          docker=$(grep -oP '(?<=oven/bun:)[0-9.]+' ../NeuralDamage.API/Dockerfile || true)
+          echo "package.json: $version, API Dockerfile: ${docker:-<unpinned>}"
+          if [ "$version" != "$docker" ]; then
+            echo "::error::The API Dockerfile builds the SPA with Bun ${docker:-<unpinned>} but package.json says $version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The Angular CLI runs under node, and Angular 22 needs a newer one than Bun's built-in reports.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Tests (Vitest)
+        run: bun run test --watch=false
+
+      - name: Production build
+        run: bun run build
+
+  image:
+    name: Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: src/NeuralDamage.API/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: neuraldamage:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max,ignore-error=true
+
+      # What the release ships must actually be in the image.
+      - name: Smoke-test the image
+        run: |
+          for file in /app/NeuralDamage.API.dll /app/wwwroot/index.html; do
+            if docker run --rm --entrypoint sh neuraldamage:ci -c "test -s $file"; then
+              echo "ok   $file"
+            else
+              echo "::error::$file is missing from the image"
+              exit 1
+            fi
+          done
+
+  # The frontend's wire types are generated from the API's OpenAPI document (bun run apigen). A contract
+  # change without a regenerated client compiles on both sides and breaks at runtime, so regenerate and diff.
+  openapi:
+    name: OpenAPI client in sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neuraldamage
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Read the Bun version
+        id: bun
+        run: echo "version=$(jq -r '.packageManager' src/NeuralDamage.Frontend/package.json | sed -E 's/^bun@//')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      # openapi-generator-cli is a wrapper around a Java jar.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build the API
+        run: dotnet build src/NeuralDamage.API/NeuralDamage.API.csproj -c Release
+
+      # Swagger is only served in Development. The OIDC values only have to be well-formed: the document
+      # is built without contacting the provider. Port 5012 is what openapitools.json reads from.
+      - name: Start the API
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:5012
+          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=neuraldamage;Username=postgres;Password=postgres
+          Oidc__Authority: https://auth.invalid
+          Oidc__ClientId: ci
+        run: |
+          nohup dotnet run --project src/NeuralDamage.API -c Release --no-build --no-launch-profile > api.log 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://localhost:5012/swagger/v1/swagger.json; then
+              echo "The API is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::The API did not serve its OpenAPI document within two minutes."
+          cat api.log
+          exit 1
+
+      - name: Regenerate the client
+        working-directory: src/NeuralDamage.Frontend
+        run: |
+          bun install --frozen-lockfile
+          bun run apigen
+
+      - name: Fail on drift
+        run: |
+          if [ -n "$(git status --porcelain -- src/NeuralDamage.Frontend/src/app/api)" ]; then
+            git status --short -- src/NeuralDamage.Frontend/src/app/api
+            git --no-pager diff -- src/NeuralDamage.Frontend/src/app/api
+            echo "::error::src/NeuralDamage.Frontend/src/app/api is out of date. Run the API and 'bun run apigen', then commit the result."
+            exit 1
+          fi
+          echo "The generated client matches the API."

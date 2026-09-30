@@ -7,4 +7,25 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 	</PropertyGroup>
 
+	<!-- /application.properties at the repo root is the single source of the app version. The release
+	     workflow bumps it to the release tag; this stamps it into every assembly at build time. When the
+	     file is absent (e.g. a Docker build context that does not copy it) the assemblies fall back to 1.0.0. -->
+	<PropertyGroup>
+		<_VersionFile>$(MSBuildThisFileDirectory)..\application.properties</_VersionFile>
+	</PropertyGroup>
+
+	<Target Name="_ReadVersionFromProperties"
+	        BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo;_GenerateRestoreProjectSpec;Build"
+	        Condition="Exists('$(_VersionFile)')">
+		<XmlPeek XmlInputPath="$(_VersionFile)" Query="/properties/version/text()">
+			<Output TaskParameter="Result" ItemName="_VersionFromFile" />
+		</XmlPeek>
+		<PropertyGroup>
+			<!-- Release tags ship inconsistently cased (e.g. "V2.6.2"); a stray leading v/V makes an
+			     invalid assembly version (NETSDK1018). -->
+			<_RawVersion>@(_VersionFromFile)</_RawVersion>
+			<Version>$(_RawVersion.TrimStart('v').TrimStart('V'))</Version>
+		</PropertyGroup>
+	</Target>
+
 </Project>

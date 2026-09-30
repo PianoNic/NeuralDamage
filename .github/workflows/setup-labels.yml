@@ -1,18 +1,34 @@
 name: Setup Labels
 
+# Creates or updates the labels in .github/labels.yml, which release-drafter.yml categorises releases by.
+# Runs on demand and whenever labels.yml changes on main. Labels not in the file are left alone.
+
 on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
   workflow_dispatch:
+
+permissions:
+  issues: write
 
 jobs:
   create-labels:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Create labels
+      - uses: actions/checkout@v4
+
+      - name: Create or update labels
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          REPO="${{ github.repository }}"
-          gh label create "bug" --color "d73a4a" --description "Something isn't working" --repo "$REPO" --force
-          gh label create "enhancement" --color "a2eeef" --description "New feature or request" --repo "$REPO" --force
-          gh label create "feature" --color "0052cc" --description "" --repo "$REPO" --force
-          gh label create "refactor" --color "fbca04" --description "" --repo "$REPO" --force
+          set -euo pipefail
+          yq -o=json -I=0 '.[]' .github/labels.yml | while read -r label; do
+            name=$(jq -r '.name' <<< "$label")
+            color=$(jq -r '.color' <<< "$label")
+            description=$(jq -r '.description // ""' <<< "$label")
+            gh label create "$name" --color "$color" --description "$description" --repo "$GITHUB_REPOSITORY" --force
+            echo "ok   $name"
+          done
