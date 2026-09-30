@@ -37,6 +37,23 @@ export function roleLabel(role: string): string {
 }
 
 /**
+ * What to ask before removing a member, or null when removing needs no confirmation. Only a private bot
+ * asks: it belongs to this chat alone, so the server deletes it once it is removed.
+ */
+export function removalConfirmation(
+  member: { displayName: string },
+  bot: { isPublic: boolean } | null | undefined,
+): { title: string; description: string; action: string } | null {
+  if (!bot || bot.isPublic) return null;
+  const name = member.displayName;
+  return {
+    title: `Remove ${name}?`,
+    description: `${name} is private to this chat, so it will be deleted.`,
+    action: 'Remove and delete',
+  };
+}
+
+/**
  * Whether the viewer may remove this member, as the API allows it: the chat owner removes anyone but
  * themselves, everyone else only themselves. The owner can never be removed.
  */

@@ -31,6 +31,8 @@ public class RemoveMemberHandler(NeuralDamageDbContext db, IChatNotificationServ
 
         var removedUserId = member.UserId;
         db.ChatMembers.Remove(member);
+        if (member.BotId is { } botId)
+            await PrivateBots.RetireIfBoundToAsync(db, botId, request.ChatId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         await notifications.NotifyMemberRemoved(request.ChatId, request.MemberId);

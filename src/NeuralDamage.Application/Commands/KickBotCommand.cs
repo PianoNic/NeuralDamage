@@ -23,6 +23,7 @@ public class KickBotHandler(NeuralDamageDbContext db, IChatNotificationService n
             return Result.Failure("Bot is not in this chat.");
 
         db.ChatMembers.Remove(member);
+        await PrivateBots.RetireIfBoundToAsync(db, request.BotId, request.ChatId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         await notifications.NotifyMemberRemoved(request.ChatId, member.Id);

@@ -1,4 +1,11 @@
-import { canRemoveMember, joinedDate, joinedLabel, roleLabel, visibilityLabel } from './people-meta';
+import {
+  canRemoveMember,
+  joinedDate,
+  joinedLabel,
+  removalConfirmation,
+  roleLabel,
+  visibilityLabel,
+} from './people-meta';
 
 describe('people labels', () => {
   const now = new Date(2026, 8, 30, 12); // a Wednesday
@@ -38,5 +45,15 @@ describe('people labels', () => {
     expect(canRemoveMember(bot, members, 'u2')).toBe(false);
     expect(canRemoveMember(alice, members, 'u2')).toBe(true);
     expect(canRemoveMember(alice, members, null)).toBe(false);
+  });
+
+  it('warns that removing a private bot deletes it', () => {
+    expect(removalConfirmation({ displayName: 'Byte' }, { isPublic: false })).toEqual({
+      title: 'Remove Byte?',
+      description: 'Byte is private to this chat, so it will be deleted.',
+      action: 'Remove and delete',
+    });
+    expect(removalConfirmation({ displayName: 'Rex' }, { isPublic: true })).toBeNull();
+    expect(removalConfirmation({ displayName: 'Alice' }, null)).toBeNull();
   });
 });
