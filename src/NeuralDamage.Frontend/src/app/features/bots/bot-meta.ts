@@ -76,6 +76,8 @@ export interface BotFormValue {
   visibility: Visibility;
   modelId: string;
   temperature: number;
+  /** Optional instructions that replace the default "You are <name>."; blank keeps the default. */
+  systemPrompt?: string;
 }
 
 /**
@@ -87,8 +89,8 @@ export function toCreateRequest(value: BotFormValue, chatId: string | null | und
   return {
     name: value.name.trim(),
     modelId: value.modelId,
-    // The persona lives in the personality; the server falls back to "You are <name>."
-    systemPrompt: '',
+    // Usually blank: the persona lives in the personality and the server falls back to "You are <name>."
+    systemPrompt: value.systemPrompt?.trim() ?? '',
     personality: value.personality.trim() || null,
     aliases: normalizeAliases(value.aliases) || null,
     temperature: value.temperature,

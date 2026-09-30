@@ -62,10 +62,11 @@ const ALL = '';
               (click)="selectedId.set(m.id)"
             >
               <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span class="flex min-w-0 items-center gap-1.5">
-                  <span class="truncate text-sm font-medium">{{ nameOf(m) }}</span>
+                <!-- The name wins the room: it wraps to a second line, the capability icons following it. -->
+                <span class="line-clamp-2 text-sm leading-snug font-medium break-words" [attr.title]="nameOf(m)">
+                  {{ nameOf(m) }}
                   @for (cap of capabilitiesOf(m); track cap.capability) {
-                    <ng-icon [name]="cap.icon" size="14" class="text-muted-foreground shrink-0" [attr.title]="cap.label" [attr.aria-label]="cap.label" role="img" />
+                    <ng-icon [name]="cap.icon" size="14" class="text-muted-foreground ms-1 inline-flex align-[-2px]" [attr.title]="cap.label" [attr.aria-label]="cap.label" role="img" />
                   }
                 </span>
                 @if (m.description) {

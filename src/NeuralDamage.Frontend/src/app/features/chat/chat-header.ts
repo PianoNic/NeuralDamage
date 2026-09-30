@@ -1,12 +1,11 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronLeft, lucideEllipsis, lucidePencil, lucideTrash2, lucideUsers } from '@ng-icons/lucide';
-import { HlmAvatarImports } from '@spartan-ng/helm/avatar';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
 import { ChatMember } from '../../core/models';
-import { initials } from '../../shared/initials';
+import { MemberAvatar } from '../../shared/member-avatar';
 import { ChatRef, DeleteChatDialog, RenameChatDialog } from './chat-dialogs';
 
 const MAX_AVATARS = 4;
@@ -16,10 +15,10 @@ const MAX_AVATARS = 4;
   selector: 'app-chat-header',
   imports: [
     NgIcon,
-    HlmAvatarImports,
     HlmButton,
     HlmDropdownMenuImports,
     HlmSidebarImports,
+    MemberAvatar,
     RenameChatDialog,
     DeleteChatDialog,
   ],
@@ -41,12 +40,9 @@ const MAX_AVATARS = 4;
 
     <div class="hidden -space-x-1.5 md:flex" aria-hidden="true">
       @for (member of shownMembers(); track member.id) {
-        <hlm-avatar size="sm" class="ring-background ring-2" [title]="member.displayName">
-          @if (member.avatarUrl) {
-            <img hlmAvatarImage [src]="member.avatarUrl" alt="" />
-          }
-          <span hlmAvatarFallback class="text-[10px] font-medium">{{ initialsOf(member.displayName) }}</span>
-        </hlm-avatar>
+        <span class="ring-background flex rounded-full ring-2" [title]="member.displayName">
+          <app-member-avatar [name]="member.displayName" [avatarUrl]="member.avatarUrl" [modelId]="member.modelId" [px]="24" />
+        </span>
       }
     </div>
 
@@ -102,8 +98,4 @@ export class ChatHeader {
       .sort((a, b) => (a.memberType === b.memberType ? 0 : a.memberType === 'bot' ? -1 : 1))
       .slice(0, MAX_AVATARS),
   );
-
-  protected initialsOf(name: string): string {
-    return initials(name);
-  }
 }
