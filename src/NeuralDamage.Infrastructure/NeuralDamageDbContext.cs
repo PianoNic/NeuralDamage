@@ -13,6 +13,7 @@ public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> optio
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<Reaction> Reactions => Set<Reaction>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<BotSilence> BotSilences => Set<BotSilence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(NeuralDamageDbContext).Assembly);
 
