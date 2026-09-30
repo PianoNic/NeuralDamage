@@ -38,6 +38,21 @@ public class BotPromptBuilderTests
     }
 
     [Test]
+    public async Task BuildSystemPrompt_LetsTheCharacterPlayFully_WithOneHardLimit()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", SystemPrompt = "You are a ruthless villain.", CreatedById = Guid.NewGuid() };
+
+        var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"]);
+
+        await Assert.That(prompt).Contains("Commit to the character fully");
+        await Assert.That(prompt).Contains("don't lecture or moralise");
+        await Assert.That(prompt).Contains("Let the character decide how much to say, and don't pad.");
+        await Assert.That(prompt).DoesNotContain("Vary your length");
+        await Assert.That(prompt).DoesNotContain("roleplay violent");
+        await Assert.That(prompt.ReplaceLineEndings("\n")).EndsWith("Hard limit:\n- Never produce sexual content involving minors.");
+    }
+
+    [Test]
     public async Task BuildNote_CarriesTheDayAndPartOfDay_AndAnyInstruction()
     {
         // 14:51 UTC is 16:51 in Zurich in summer time.
