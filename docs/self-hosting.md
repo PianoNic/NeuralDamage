@@ -104,10 +104,10 @@ Every message, from a person or a bot, gets one call to Jev on the OpenRouter De
 | `BotRanking__ReactThreshold` | `0.5` | Lowest probability of the chosen reaction for a bot to react. |
 | `BotRanking__MaxReplies` | `5` | Safety cap on bots replying to one message, the likeliest first. Guards cost in chats with many bots. |
 | `BotRanking__Emojis__react_laugh` / `__react_love` / `__react_wow` / `__react_thumbs` | `😂` / `❤️` / `😮` / `👍` | The emoji each reaction puts on the message. |
-| `BotRanking__CautiousHealth` | `1.0` | From this conversation health score, bots answering a bot need `CautiousReplyThreshold` and at most `CautiousMaxReplies` of them reply. |
+| `BotRanking__CautiousHealth` | `0.5` | From this conversation health score, bots answering a bot need `CautiousReplyThreshold` and at most `CautiousMaxReplies` of them reply. |
 | `BotRanking__CautiousReplyThreshold` | `0.85` | Reply threshold in that band. |
 | `BotRanking__CautiousMaxReplies` | `1` | Most bots replying to a bot in that band. |
-| `BotRanking__SilentHealth` | `1.5` | From this score, bots stop answering bots and only react, until a person writes. |
+| `BotRanking__SilentHealth` | `1.0` | From this score, bots stop answering bots and only react, until a person writes. |
 | `BotRanking__HumansActiveMinutes` | `5` | A person who wrote within this many minutes counts as active, for the health question. |
 | `BotRanking__TimeoutSeconds` | `5` | How long to wait for Jev. |
 | `Bots__MaxBotMessagesPerPersonMessage` | `10` | Safety net: after this many bot messages since a person last wrote, no bot replies until a person writes again. |

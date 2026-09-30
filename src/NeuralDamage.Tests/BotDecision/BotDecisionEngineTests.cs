@@ -182,11 +182,11 @@ public class BotDecisionEngineTests
     /// <summary>GPT and Claude want to answer a bot's message with <paramref name="p"/>; Gemini laughs.</summary>
     [Test]
     [Arguments(0.0, 0.8, 2)]
-    [Arguments(0.99, 0.6, 2)]
-    [Arguments(1.0, 0.9, 1)]
-    [Arguments(1.2, 0.84, 0)]
-    [Arguments(1.49, 0.85, 1)]
-    [Arguments(1.5, 0.99, 0)]
+    [Arguments(0.49, 0.6, 2)]
+    [Arguments(0.5, 0.9, 1)]
+    [Arguments(0.7, 0.84, 0)]
+    [Arguments(0.99, 0.85, 1)]
+    [Arguments(1.0, 0.99, 0)]
     [Arguments(2.0, 0.99, 0)]
     public async Task Health_OnABotMessage_HoldsRepliesBack_ReactionsStay(double health, double p, int repliers)
     {
@@ -232,7 +232,7 @@ public class BotDecisionEngineTests
     public async Task Health_IsLoggedForEveryDecision()
     {
         var logger = new ListLogger<BotDecisionEngine>();
-        var jev = new FakeJev(_ => FakeJev.Chose(Quiet, 0.9)) { Health = _ => 1.234 };
+        var jev = new FakeJev(_ => FakeJev.Chose(Quiet, 0.9)) { Health = _ => 0.734 };
         using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
         await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
         var message = await h.SayAsync("pineapple", asBot: h.Bots[0]);
@@ -240,7 +240,7 @@ public class BotDecisionEngineTests
         await new BotDecisionEngine(h.Db, jev, new BotRankingOptions(), logger).DecideAsync(h.Chat.Id, message, h.Bots);
 
         await Assert.That(logger.Entries.Any(e => e.Level == LogLevel.Information
-            && e.Message.Contains("health 1.23") && e.Message.Contains("Cautious") && e.Message.Contains("1 bot messages since a person"))).IsTrue();
+            && e.Message.Contains("health 0.73") && e.Message.Contains("Cautious") && e.Message.Contains("1 bot messages since a person"))).IsTrue();
     }
 
     [Test]
@@ -382,8 +382,8 @@ public class BotDecisionEngineTests
     public async Task HealthDefaults_MatchTheIssue()
     {
         var options = BotRankingOptions.FromConfiguration(new ConfigurationBuilder().Build());
-        await Assert.That(options.CautiousHealth).IsEqualTo(1.0);
-        await Assert.That(options.SilentHealth).IsEqualTo(1.5);
+        await Assert.That(options.CautiousHealth).IsEqualTo(0.5);
+        await Assert.That(options.SilentHealth).IsEqualTo(1.0);
         await Assert.That(options.CautiousReplyThreshold).IsEqualTo(0.85);
         await Assert.That(options.CautiousMaxReplies).IsEqualTo(1);
         await Assert.That(new NeuralDamage.Infrastructure.Services.BotBehaviorOptions().MaxBotMessagesPerPersonMessage).IsEqualTo(10);

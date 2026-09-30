@@ -43,10 +43,10 @@ public record BotRankingOptions
     /// hold back when answering each other: only <see cref="CautiousMaxReplies"/>
     /// of them, and only at <see cref="CautiousReplyThreshold"/> or above.
     /// </summary>
-    public double CautiousHealth { get; init; } = 1.0;
+    public double CautiousHealth { get; init; } = 0.5;
 
     /// <summary>From this conversation health score bots stop answering each other and only react.</summary>
-    public double SilentHealth { get; init; } = 1.5;
+    public double SilentHealth { get; init; } = 1.0;
 
     public double CautiousReplyThreshold { get; init; } = 0.85;
     public int CautiousMaxReplies { get; init; } = 1;
