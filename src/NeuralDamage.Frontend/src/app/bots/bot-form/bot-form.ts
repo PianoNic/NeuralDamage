@@ -50,7 +50,7 @@ export class BotFormComponent implements OnInit {
       if (b) {
         this.isEditing.set(true);
         this.name.set(b.name);
-        this.selectedModel.set({ id: b.modelId, name: b.modelId });
+        this.selectedModel.set({ id: b.modelId, name: b.modelId, provider: "", capabilities: [], priceTier: 1 });
         this.systemPrompt.set(b.systemPrompt);
         this.personality.set(b.personality ?? '');
         this.temperature.set(b.temperature);
@@ -88,6 +88,7 @@ export class BotFormComponent implements OnInit {
         }));
       } else {
         await firstValueFrom(this.botsApi.apiBotsPost({
+          isPublic: true,
           name: this.name(),
           modelId,
           systemPrompt: this.systemPrompt(),
