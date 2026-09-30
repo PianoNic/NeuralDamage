@@ -18,6 +18,9 @@ using System.Text.Json.Serialization;
 // Validation messages and formatting stay English whatever the host's locale.
 ValidationCulture.Pin();
 
+// Chat text is full of emoji, which a console left on its default code page logs as "??".
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 

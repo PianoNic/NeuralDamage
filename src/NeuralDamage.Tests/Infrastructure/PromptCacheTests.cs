@@ -115,15 +115,26 @@ public class PromptCacheTests
     }
 
     [Test]
-    public async Task CacheBreakpoint_GoesOnTheLastTurnBeforeTheNote()
+    public async Task CacheBreakpoints_GoOnTheTurnsBeforeTheNote_AndEveryTurnIsSentAsParts()
     {
-        List<ChatMessage> history = [new("user", "[Alice]: hi"), new("assistant", "yo"), BotPromptBuilder.BuildNote()];
+        List<ChatMessage> history = [new("user", "[Alice]: hi"), new("assistant", "yo"), new("user", "[Bob]: sup"), BotPromptBuilder.BuildNote()];
 
-        var json = OpenRouterAgentService.MessagesWithCacheBreakpoint("system", history, 1).ToString();
+        var json = OpenRouterAgentService.MessagesWithCacheBreakpoint("system", history, 1, 2).ToString();
 
-        await Assert.That(json).StartsWith("""[{"role":"system","content":"system"},{"role":"user","content":"[Alice]: hi"},""");
+        await Assert.That(json).StartsWith("""[{"role":"system","content":"system"},{"role":"user","content":[{"type":"text","text":"[Alice]: hi"}]},""");
         await Assert.That(json).Contains("""{"role":"assistant","content":[{"type":"text","text":"yo","cache_control":{"type":"ephemeral"}}]}""");
-        await Assert.That(json).EndsWith("""{"role":"user","content":"(It is """ + history[2].Content[7..] + "\"}]");
+        await Assert.That(json).Contains("""{"type":"text","text":"[Bob]: sup","cache_control":{"type":"ephemeral"}}""");
+        await Assert.That(json).EndsWith("""{"role":"user","content":[{"type":"text","text":"(It is """ + history[3].Content[7..] + "\"}]}]");
+    }
+
+    [Test]
+    public async Task SessionId_IsTheSameForABotInAChat_AndDiffersBetweenThem()
+    {
+        var id = OpenRouterAgentService.SessionId("google/gemma-3-27b-it", "You are Gem.");
+
+        await Assert.That(OpenRouterAgentService.SessionId("google/gemma-3-27b-it", "You are Gem.")).IsEqualTo(id);
+        await Assert.That(OpenRouterAgentService.SessionId("google/gemma-3-27b-it", "You are Rex.")).IsNotEqualTo(id);
+        await Assert.That(id.Length).IsEqualTo(32);
     }
 
     [Test]
