@@ -54,8 +54,11 @@ public class BotDecisionEngine(
             if (tier1 == Tier1Result.MustSkip) continue;
 
             // Anti-spam applies however the bot was addressed: it is what keeps
-            // a live back-and-forth from turning into a flood.
-            var repliesLastMinute = recentMessages.Count(m => m.SenderBotId == bot.Id && m.CreatedAt >= oneMinuteAgo);
+            // a live back-and-forth from turning into a flood. It counts replies,
+            // not messages - a reply split in three is one turn, and only its
+            // first part carries the reply link.
+            var repliesLastMinute = recentMessages.Count(m =>
+                m.SenderBotId == bot.Id && m.ReplyToId is not null && m.CreatedAt >= oneMinuteAgo);
             if (repliesLastMinute >= _options.MaxRepliesPerMinute)
             {
                 logger.LogInformation("Bot {Bot}: rate capped ({Count} replies in the last minute)", bot.Name, repliesLastMinute);

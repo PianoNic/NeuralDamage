@@ -112,8 +112,10 @@ public class BotDecisionEngineTests
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
         var engine = EngineWithSilentJudge(db);
+        var earlier = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "go", CreatedAt = DateTime.UtcNow.AddSeconds(-55) };
+        db.Messages.Add(earlier);
         for (var i = 0; i < 4; i++)
-            db.Messages.Add(new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = $"reply {i}", CreatedAt = DateTime.UtcNow.AddSeconds(-50 + i) });
+            db.Messages.Add(new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = $"reply {i}", ReplyToId = earlier.Id, CreatedAt = DateTime.UtcNow.AddSeconds(-50 + i) });
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "GPT, one more thing?" };
         db.Messages.Add(msg);

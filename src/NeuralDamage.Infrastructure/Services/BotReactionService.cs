@@ -27,8 +27,7 @@ public static class BotReactionService
                 return emoji;
         }
 
-        // Fallback: random common emoji
-        var fallbacks = new[] { "👍", "❤️", "😂", "🔥" };
-        return fallbacks[Random.Shared.Next(fallbacks.Length)];
+        // No match, no reaction: a random pick put 😂 on sad messages.
+        return null;
     }
 }

@@ -20,7 +20,19 @@ public class BotPromptBuilderTests
         await Assert.That(prompt).Contains("Claude");
         await Assert.That(prompt).Contains("Be helpful");
         await Assert.That(prompt).Contains("Friendly");
-        await Assert.That(prompt).Contains("1-3 sentences");
+    }
+
+    [Test]
+    public async Task BuildSystemPrompt_PersonaComesFirst_WithChatNameAndTime()
+    {
+        var bot = new Bot { Name = "GPT", ModelId = "test", SystemPrompt = "You are a grumpy pirate.", CreatedById = Guid.NewGuid() };
+
+        var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"], "Movie Night", new DateTimeOffset(2026, 9, 30, 21, 15, 0, TimeSpan.Zero));
+
+        await Assert.That(prompt.StartsWith("You are a grumpy pirate.")).IsTrue();
+        await Assert.That(prompt).Contains("\"Movie Night\"");
+        await Assert.That(prompt).Contains("Wednesday, 21:15");
+        await Assert.That(prompt).DoesNotContain("1-3 sentences");
     }
 
     [Test]
@@ -30,7 +42,8 @@ public class BotPromptBuilderTests
 
         var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"]);
 
-        await Assert.That(prompt).DoesNotContain("Additional personality");
+        // No empty personality line left behind the persona.
+        await Assert.That(prompt.ReplaceLineEndings("\n")).StartsWith("Be helpful\n\nYou are");
     }
 
     [Test]
@@ -120,6 +133,42 @@ public class BotPromptBuilderTests
         var history = BotPromptBuilder.BuildHistory(messages, botId, trigger.Id);
 
         await Assert.That(history[0].Content).Contains("the question");
+    }
+
+    private static readonly User Alice = new() { ExternalId = "e", Email = "a@b.com", DisplayName = "Alice" };
+
+    [Test]
+    public async Task BuildHistory_OwnTurnsHaveNoNamePrefix()
+    {
+        var bot = new Bot { Name = "GPT", ModelId = "m", SystemPrompt = "x", CreatedById = Guid.NewGuid() };
+        var messages = new List<Message>
+        {
+            new() { ChatId = Guid.NewGuid(), SenderUserId = Alice.Id, SenderUser = Alice, Content = "hi" },
+            new() { ChatId = Guid.NewGuid(), SenderBotId = bot.Id, SenderBot = bot, Content = "yo" },
+        };
+
+        var history = BotPromptBuilder.BuildHistory(messages, bot.Id, messages[0].Id);
+
+        await Assert.That(history[1].Content).IsEqualTo("yo");
+        await Assert.That(history[0].Content).StartsWith("[Alice]");
+    }
+
+    [Test]
+    public async Task BuildHistory_MarksGapsReplyTargetsAndTheTrigger()
+    {
+        var claude = new Bot { Name = "Claude", ModelId = "m", SystemPrompt = "x", CreatedById = Guid.NewGuid() };
+        var start = DateTime.UtcNow.AddHours(-3);
+        var botMessage = new Message { ChatId = Guid.NewGuid(), SenderBotId = claude.Id, SenderBot = claude, Content = "pizza?", CreatedAt = start };
+        var reply = new Message
+        {
+            ChatId = Guid.NewGuid(), SenderUserId = Alice.Id, SenderUser = Alice, Content = "sure",
+            ReplyToId = botMessage.Id, ReplyTo = botMessage, CreatedAt = start.AddHours(2),
+        };
+
+        var history = BotPromptBuilder.BuildHistory([botMessage, reply], Guid.NewGuid(), reply.Id);
+
+        await Assert.That(history[1].Content).IsEqualTo("[Alice, 2h later] (→ Claude) (you're answering this): sure");
+        await Assert.That(history[0].Content).DoesNotContain("answering");
     }
 }
 

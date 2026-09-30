@@ -58,7 +58,8 @@ public class BotReplyTriggerTests
 
         var orchestrator = new BotResponseOrchestrator(
             provider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<BotResponseOrchestrator>.Instance);
+            NullLogger<BotResponseOrchestrator>.Instance,
+            InstantBotOptions.Create());
 
         await orchestrator.ProcessMessageAsync(chat.Id, reply.Id);
 

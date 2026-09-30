@@ -64,7 +64,8 @@ public class BotReactionOrchestrationTests
         var orchestrator = new BotResponseOrchestrator(
             provider.GetRequiredService<IServiceScopeFactory>(),
             botState,
-            NullLogger<BotResponseOrchestrator>.Instance);
+            NullLogger<BotResponseOrchestrator>.Instance,
+            InstantBotOptions.Create());
 
         return new Harness(orchestrator, db, notifications, decisions, openRouter, botState, chat.Id, bot);
     }
