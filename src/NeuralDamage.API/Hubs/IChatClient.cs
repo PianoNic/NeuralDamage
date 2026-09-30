@@ -13,4 +13,5 @@ public interface IChatClient
     Task ReactionUpdated(Guid messageId, List<ReactionGroupDto> reactions);
     Task BotTyping(Guid chatId, Guid botId, string botName);
     Task BotResponseCancelled(Guid chatId);
+    Task SystemMessage(SystemMessageDto message);
 }
