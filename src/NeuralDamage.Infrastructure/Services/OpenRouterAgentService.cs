@@ -31,17 +31,17 @@ public class OpenRouterAgentService : IOpenRouterService
 
     private readonly OpenAIClient _client;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ModelPriceCap _priceCap;
+    private readonly ModelPolicy _policy;
     private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly int _maxOutputTokens;
 
-    public OpenRouterAgentService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ModelPriceCap priceCap)
+    public OpenRouterAgentService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ModelPolicy policy)
     {
         _apiKey = configuration["OpenRouter:ApiKey"]
             ?? throw new InvalidOperationException("OpenRouter:ApiKey is not configured.");
         _httpClientFactory = httpClientFactory;
-        _priceCap = priceCap;
+        _policy = policy;
         _maxOutputTokens = configuration.GetValue("OpenRouter:MaxOutputTokens", DefaultMaxOutputTokens);
         // Overridable so the outgoing request can be captured against a
         // local listener, and so a gateway can be put in front.
@@ -85,20 +85,65 @@ public class OpenRouterAgentService : IOpenRouterService
 #pragma warning disable SCME0001
                 var raw = new ChatCompletionOptions();
                 raw.Patch.Set("$.reasoning.effort"u8, "low");
-                // The model was checked against the cap when the bot was saved,
-                // but a model routes to several providers at different prices,
-                // so the cap also has to hold per request.
-                if (_priceCap.MaxPromptPrice > 0)
-                    raw.Patch.Set("$.provider.max_price.prompt"u8, _priceCap.MaxPromptPrice);
-                if (_priceCap.MaxCompletionPrice > 0)
-                    raw.Patch.Set("$.provider.max_price.completion"u8, _priceCap.MaxCompletionPrice);
+                // The model was checked against the policy when the bot was
+                // saved, but a model routes to several providers at different
+                // prices and retention terms, so both also have to hold per
+                // request: OpenRouter then only routes to endpoints that match.
+                if (_policy.MaxPromptPrice > 0)
+                    raw.Patch.Set("$.provider.max_price.prompt"u8, _policy.MaxPromptPrice);
+                if (_policy.MaxCompletionPrice > 0)
+                    raw.Patch.Set("$.provider.max_price.completion"u8, _policy.MaxCompletionPrice);
+                if (_policy.ZdrOnly)
+                    raw.Patch.Set("$.provider.zdr"u8, true);
 #pragma warning restore SCME0001
                 return raw;
             },
         });
 
-        var response = await agent.RunAsync(messages, options: options, cancellationToken: ct);
-        return response.Text ?? string.Empty;
+        try
+        {
+            var response = await agent.RunAsync(messages, options: options, cancellationToken: ct);
+            return response.Text ?? string.Empty;
+        }
+        catch (ClientResultException ex) when (ex.Status == 404)
+        {
+            // A bot saved before the policy was tightened keeps its model, but
+            // OpenRouter refuses it once no endpoint satisfies zdr / max_price.
+            throw new InvalidOperationException(
+                $"OpenRouter found no endpoint for '{modelId}' that satisfies the model policy " +
+                "(OpenRouter:ZdrOnly, OpenRouter:MaxPromptPrice, OpenRouter:MaxCompletionPrice). " +
+                "Switch the bot to an allowed model or relax the policy.", ex);
+        }
+    }
+
+    /// <summary>
+    /// The ZDR endpoint list is the same for every request and changes rarely,
+    /// so it is fetched once per <see cref="ZdrCacheDuration"/> and shared.
+    /// </summary>
+    private static readonly TimeSpan ZdrCacheDuration = TimeSpan.FromHours(6);
+    private static (DateTimeOffset FetchedAt, IReadOnlySet<string> Ids)? _zdrCache;
+
+    public async Task<IReadOnlySet<string>> ListZdrModelIdsAsync(CancellationToken ct = default)
+    {
+        if (_zdrCache is { } cached && DateTimeOffset.UtcNow - cached.FetchedAt < ZdrCacheDuration)
+            return cached.Ids;
+
+        using var client = _httpClientFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/endpoints/zdr");
+        request.Headers.Add("Authorization", $"Bearer {_apiKey}");
+
+        using var response = await client.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        if (doc.RootElement.TryGetProperty("data", out var data))
+            foreach (var endpoint in data.EnumerateArray())
+                if (endpoint.TryGetProperty("model_id", out var id) && id.GetString() is { } modelId)
+                    ids.Add(modelId);
+
+        _zdrCache = (DateTimeOffset.UtcNow, ids);
+        return ids;
     }
 
     /// <summary>

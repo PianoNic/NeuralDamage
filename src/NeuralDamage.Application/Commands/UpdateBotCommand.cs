@@ -9,7 +9,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? AvatarUrl, string? Aliases, bool? IsActive) : ICommand<Result>;
 
-public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPriceCap priceCap) : ICommandHandler<UpdateBotCommand, Result>
+public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy) : ICommandHandler<UpdateBotCommand, Result>
 {
     public async ValueTask<Result> Handle(UpdateBotCommand request, CancellationToken cancellationToken)
     {
@@ -20,11 +20,11 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
         if (bot.CreatedById != request.RequestingUserId)
             return Result.Failure("Only the bot creator can update this bot.");
 
-        // Only a change of model is checked, so lowering the cap does not lock
-        // existing bots out of edits.
+        // Only a change of model is checked, so tightening the policy does not
+        // lock existing bots out of edits.
         if (request.ModelId is not null && request.ModelId != bot.ModelId
-            && !await priceCap.AllowsModelAsync(openRouter, request.ModelId, cancellationToken))
-            return Result.Failure($"Model '{request.ModelId}' exceeds the configured price cap.");
+            && await modelPolicy.CheckModelAsync(openRouter, request.ModelId, cancellationToken) is { } refusal)
+            return Result.Failure(refusal);
 
         if (request.Name is not null) bot.Name = request.Name;
         if (request.ModelId is not null) bot.ModelId = request.ModelId;
