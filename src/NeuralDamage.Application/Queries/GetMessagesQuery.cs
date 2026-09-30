@@ -36,6 +36,8 @@ public class GetMessagesHandler(NeuralDamageDbContext db) : IQueryHandler<GetMes
             .Include(m => m.Reactions).ThenInclude(r => r.User)
             .Include(m => m.Reactions).ThenInclude(r => r.Bot)
             .Include(m => m.Attachments)
+            // Reactions and attachments are both collections; one joined query multiplies them.
+            .AsSplitQuery()
             .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
             .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
             .ToListAsync(cancellationToken);

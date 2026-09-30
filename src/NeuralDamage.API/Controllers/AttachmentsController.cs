@@ -50,8 +50,11 @@ public class AttachmentsController(ISender sender, IUserService userService, Att
         if (result.IsFailure)
             return NotFound(result.Error);
 
-        // An image never changes under its id, but it is private to the chat.
+        // An image never changes under its id, but it is private to the chat: the
+        // browser cache is keyed on the token too, or someone else signing in on
+        // the same browser would be served it from the cache.
         Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+        Response.Headers.Vary = "Authorization";
         Response.Headers.XContentTypeOptions = "nosniff";
         return File(result.Value!.Content, result.Value.ContentType);
     }
