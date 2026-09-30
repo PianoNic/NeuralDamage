@@ -1,4 +1,4 @@
-import { ChatDetailDto, ChatDto, ChatMemberDto, MessageDto, ReactionGroupDto } from '@app/models';
+import { ChatDetailDto, ChatDto, ChatMemberDto, MessageDto, ReactionGroupDto } from '../models';
 
 /**
  * The hub payloads, which OpenAPI does not describe — it only covers HTTP, so

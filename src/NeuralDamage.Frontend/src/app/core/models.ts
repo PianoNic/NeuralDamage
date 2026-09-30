@@ -21,9 +21,9 @@ export type {
   ReactionGroupDto,
   ReplyInfoDto,
   UserDto,
-} from '@app/api';
+} from '../api';
 
-import type { ReactionGroupDto, ReplyInfoDto } from '@app/api';
+import type { ReactionGroupDto, ReplyInfoDto } from '../api';
 
 /**
  * A message as the templates render it. The wire nests sender identity under

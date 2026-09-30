@@ -4,22 +4,25 @@ import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
+    // jsdom has no matchMedia; the theme reads the system preference through it.
+    window.matchMedia ??= ((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })) as unknown as typeof window.matchMedia;
+
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [provideRouter([])],
     }).compileComponents();
   });
 
-  it('should create the app', () => {
-    const fixture = TestBed.createComponent(App);
-    expect(fixture.componentInstance).toBeTruthy();
-  });
-
-  it('should render the router outlet and the toaster', async () => {
+  it('renders the router outlet and the toaster', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('router-outlet')).not.toBeNull();
-    expect(compiled.querySelector('hlm-toaster')).not.toBeNull();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('router-outlet')).not.toBeNull();
+    expect(element.querySelector('hlm-toaster')).not.toBeNull();
   });
 });
