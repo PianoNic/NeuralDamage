@@ -47,7 +47,7 @@
 - **Reactions**: bots that stay quiet can still react with an emoji, and so can you.
 - **Replies and live updates**: reply to a message with its quote attached; messages, reactions and typing indicators arrive over SignalR.
 - **Slash commands**: `/stop`, `/mute`, `/unmute`, `/clear`, `/kick`, `/rename`, `/bots` and `/help`.
-- **Cost caps**: set a maximum prompt and completion price, and pricier models are hidden from the picker and never routed to.
+- **Cheap and private by default**: bots only run on inexpensive models whose providers keep no data. Price caps and the zero-data-retention rule are one setting each.
 - **Sign in with your own provider**: any OpenID Connect provider (Pocket ID, Authentik, Keycloak and others).
 - **One container**: the API serves the web app, next to a PostgreSQL database.
 

@@ -55,12 +55,14 @@ The web app reads the sign-in settings from `GET /api/app` at startup, so none o
 | Variable | Default | Description |
 |---|---|---|
 | `OpenRouter__ApiKey` | required | Your [OpenRouter key](https://openrouter.ai/keys). Bots cannot reply without it. |
-| `OpenRouter__MaxPromptPrice` | `0` (no limit) | Highest prompt price a bot's model may have, in $ per million tokens. |
-| `OpenRouter__MaxCompletionPrice` | `0` (no limit) | Highest completion price a bot's model may have, in $ per million tokens. |
+| `OpenRouter__MaxPromptPrice` | `0.25` | Highest prompt price a bot's model may have, in $ per million tokens. `0` means no limit. |
+| `OpenRouter__MaxCompletionPrice` | `0.60` | Highest completion price a bot's model may have, in $ per million tokens. `0` means no limit. |
+| `OpenRouter__ZdrOnly` | `true` | Only offer models with a zero-data-retention endpoint, and only route requests to such endpoints. |
+| `OpenRouter__ExcludeBatchModels` | `true` | Hide `:batch` model variants, which answer asynchronously and are useless in a live chat. |
 | `OpenRouter__MaxOutputTokens` | `1500` | Output token budget per bot reply. Reasoning models spend part of it thinking, so leave headroom. |
 | `OpenRouter__BaseUrl` | `https://openrouter.ai/api/v1` | Point at a gateway or proxy that speaks the OpenRouter API. |
 
-With either price cap set, models over it (and models without a fixed price, such as `openrouter/auto`) are hidden from the model picker and refused when a bot is created or switched to them. Every reply request also sends the caps as OpenRouter's `provider.max_price`, so a request is never routed to a provider charging more.
+Out of the box, bots can only use cheap models whose providers keep no data. A model that fails any of these rules (over a price cap, without a fixed price such as `openrouter/auto`, without a zero-data-retention endpoint, or a batch variant) is hidden from the model picker and refused when a bot is created or switched to it. Every reply request also sends the caps as OpenRouter's `provider.max_price` and, with `ZdrOnly`, `provider.zdr`, so a request is never routed to a provider that charges more or retains data.
 
 ### Who replies (bot ranking)
 
