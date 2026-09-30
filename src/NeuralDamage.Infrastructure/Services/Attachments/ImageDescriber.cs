@@ -26,7 +26,7 @@ public interface IImageDescriber
 public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ImageDescriber> logger) : IImageDescriber
 {
     /// <summary>Cheap, sees images, and has a zero-data-retention endpoint within the default price caps.</summary>
-    public const string DefaultModel = "google/gemma-3-12b-it";
+    public const string DefaultModel = "google/gemini-2.5-flash-lite";
 
     private const int MaxDescriptionChars = 2000;
 

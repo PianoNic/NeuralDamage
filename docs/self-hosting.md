@@ -71,7 +71,7 @@ People can attach PNG, JPEG, WebP and GIF images to a message. Bots on a model t
 
 | Variable | Default | Description |
 |---|---|---|
-| `OpenRouter__VisionModel` | `google/gemma-3-12b-it` | The describer. It is held to the same policy as the bots (price caps, zero data retention, reasoning off), and `:free` variants are never used. |
+| `OpenRouter__VisionModel` | `google/gemini-2.5-flash-lite` | The describer. It is held to the same policy as the bots (price caps, zero data retention, reasoning off), and `:free` variants are never used. |
 | `Attachments__Path` | `data/attachments` | Where uploads are stored, relative to the app. `compose.yml` mounts the `attachments` volume there. Deleting or clearing a chat deletes its files. |
 | `Attachments__MaxBytes` | `10485760` | Largest image, in bytes (10 MB). |
 | `Attachments__MaxPerMessage` | `4` | Most images on one message. |
