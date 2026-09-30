@@ -4,6 +4,7 @@ using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace NeuralDamage.Tests.BotDecision;
@@ -145,23 +146,22 @@ public class BotDecisionEngineTests
     }
 
     /// <summary>A Tier 3 that never picks anyone, so only Tiers 1 and 2 decide.</summary>
-    private static BotDecisionEngine EngineWithSilentJudge(NeuralDamage.Infrastructure.NeuralDamageDbContext db)
+    private static BotDecisionEngine EngineWithSilentJudge(NeuralDamage.Infrastructure.NeuralDamageDbContext db, double botChainChance = 0)
     {
         // Jev answers with no probabilities at all: every undecided bot counts as 0.
         var decisions = Substitute.For<IDecisionsClient>();
         decisions.DecideAsync(Arg.Any<object>(), Arg.Any<IReadOnlyDictionary<string, DecisionQuestion>>(), Arg.Any<CancellationToken>())
             .Returns(new DecisionsResponse(null, null, [], null));
         var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
-        return new BotDecisionEngine(db, judge, new ChatBotState(), NullLogger<BotDecisionEngine>.Instance);
+        return new BotDecisionEngine(db, judge, new ChatBotState(), NullLogger<BotDecisionEngine>.Instance,
+            Options.Create(new BotBehaviorOptions { BotChainChance = botChainChance }));
     }
 
     [Test]
     public async Task BotToBotMessage_NoMention_NeitherResponds()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        var decisions = Substitute.For<IDecisionsClient>();
-        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
-        var engine = new BotDecisionEngine(db, judge, new ChatBotState(), NullLogger<BotDecisionEngine>.Instance);
+        var engine = EngineWithSilentJudge(db, botChainChance: 0);
 
         var msg = new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = "I agree with that" };
         db.Messages.Add(msg);
@@ -171,6 +171,21 @@ public class BotDecisionEngineTests
 
         await Assert.That(responders).DoesNotContain(bot1.Id); // sender bot skipped
         await Assert.That(responders).DoesNotContain(bot2.Id); // not mentioned
+    }
+
+    [Test]
+    public async Task BotToBotMessage_NoMention_ChimesInOnTheChance()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var engine = EngineWithSilentJudge(db, botChainChance: 1);
+
+        var msg = new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = "I agree with that" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
+        var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
+
+        await Assert.That(responders).IsEquivalentTo([bot2.Id]);
     }
 
     [Test]

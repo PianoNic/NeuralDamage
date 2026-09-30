@@ -19,6 +19,18 @@ public class BotBehaviorOptions
     /// </summary>
     public int MaxRespondersPerMessage { get; set; } = 2;
 
+    /// <summary>
+    /// How many bot-to-bot hops can follow a person's message before the bots
+    /// wait for a person again.
+    /// </summary>
+    public int MaxBotChainDepth { get; set; } = 3;
+
+    /// <summary>
+    /// A bot answers another bot when named in its message; otherwise only
+    /// with this probability.
+    /// </summary>
+    public double BotChainChance { get; set; } = 0.1;
+
     /// <summary>A pause before typing starts, as if reading the message first.</summary>
     public TimeSpan ReadDelayMin { get; set; } = TimeSpan.FromMilliseconds(500);
     public TimeSpan ReadDelayMax { get; set; } = TimeSpan.FromMilliseconds(2500);

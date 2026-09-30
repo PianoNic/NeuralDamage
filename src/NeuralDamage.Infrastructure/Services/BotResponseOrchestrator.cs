@@ -21,7 +21,7 @@ public class BotResponseOrchestrator(
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeTasks = new();
     private readonly BotBehaviorOptions _options = options?.Value ?? new();
 
-    public async Task ProcessMessageAsync(Guid chatId, Guid messageId, CancellationToken ct = default)
+    public async Task ProcessMessageAsync(Guid chatId, Guid messageId, int depth = 0, CancellationToken ct = default)
     {
         CancelPendingResponses(chatId);
 
@@ -47,6 +47,11 @@ public class BotResponseOrchestrator(
                 .FirstOrDefaultAsync(m => m.Id == messageId, cts.Token);
 
             if (message is null) return;
+
+            // A person spoke since this bot message was queued: the bots answer
+            // them instead of carrying on among themselves.
+            if (depth > 0 && await db.Messages.AnyAsync(m => m.ChatId == chatId && m.SenderUserId != null && m.CreatedAt > message.CreatedAt, cts.Token))
+                return;
 
             // Get active bots in this chat
             var botMembers = await db.ChatMembers
@@ -92,7 +97,8 @@ public class BotResponseOrchestrator(
                 await Task.Delay(BotBehaviorOptions.Between(_options.ReadDelayMin, _options.ReadDelayMax), cts.Token);
 
                 typingShown = true;
-                await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, cts.Token);
+                var sent = await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, cts.Token);
+                await ChainAsync(scope.ServiceProvider, chatId, bot, bots, sent, depth + 1, cts.Token);
             }
         }
         catch (OperationCanceledException)
@@ -117,11 +123,33 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>
+    /// Offers a bot's reply to the other bots, so they can answer it - until
+    /// the chain is <see cref="BotBehaviorOptions.MaxBotChainDepth"/> hops long.
+    /// </summary>
+    private async Task ChainAsync(IServiceProvider services, Guid chatId, Bot bot, List<Bot> bots, List<Message> sent, int depth, CancellationToken ct)
+    {
+        if (sent.Count == 0 || depth > _options.MaxBotChainDepth)
+            return;
+
+        var queue = services.GetService<IBotResponseQueue>();
+        if (queue is null)
+            return;
+
+        // A split reply is decided on once: by the part that names another bot
+        // if there is one, since naming is what makes a bot answer.
+        var chainFrom = sent.FirstOrDefault(m => bots.Any(b =>
+                b.Id != bot.Id && FuzzyNameMatcher.IsNameMentioned(m.Content, b.Name, b.Aliases)))
+            ?? sent[^1];
+
+        await queue.EnqueueAsync(chatId, chainFrom.Id, depth, ct);
+    }
+
+    /// <summary>
     /// One bot's turn: generate while showing it typing, then post the reply -
     /// split into a few messages if it has separate thoughts - paced like
-    /// someone typing it.
+    /// someone typing it. Returns the messages it posted.
     /// </summary>
-    private async Task RespondAsync(
+    private async Task<List<Message>> RespondAsync(
         NeuralDamageDbContext db,
         IOpenRouterService openRouter,
         IChatNotificationService notifications,
@@ -177,8 +205,7 @@ public class BotResponseOrchestrator(
 
             // Strip any name prefix the model might add
             var parts = BotReplyFormatter.Split(StripNamePrefix(responseText, bot.Name), _options.MaxReplyParts);
-            if (parts.Count == 0)
-                return;
+            var sent = new List<Message>();
 
             for (var i = 0; i < parts.Count; i++)
             {
@@ -208,6 +235,7 @@ public class BotResponseOrchestrator(
                 };
                 db.Messages.Add(botMessage);
                 await db.SaveChangesAsync(ct);
+                sent.Add(botMessage);
 
                 // Broadcast
                 var loaded = await db.Messages
@@ -220,6 +248,8 @@ public class BotResponseOrchestrator(
                     .FirstAsync(m => m.Id == botMessage.Id, ct);
                 await notifications.NotifyMessageNew(chatId, loaded.ToDto());
             }
+
+            return sent;
         }
         finally
         {

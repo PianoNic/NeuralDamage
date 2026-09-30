@@ -44,10 +44,18 @@ public class Tier1HardRulesTests
     }
 
     [Test]
-    public async Task BotToBot_NoMention_MustSkip()
+    public async Task BotToBot_NoMention_LeftToTheEngine()
     {
         var bot = MakeBot("GPT");
         var msg = MakeMessage("I think so too", senderBotId: Guid.NewGuid());
+        await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.Undecided);
+    }
+
+    [Test]
+    public async Task OwnMessage_NamingItself_MustSkip()
+    {
+        var bot = MakeBot("GPT");
+        var msg = MakeMessage("as GPT I have to say yes", senderBotId: bot.Id);
         await Assert.That(Tier1HardRules.Evaluate(msg, bot, false, false)).IsEqualTo(Tier1Result.MustSkip);
     }
 

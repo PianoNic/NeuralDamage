@@ -68,6 +68,15 @@ public class BotDecisionEngine(
             if (tier1 == Tier1Result.MustRespond) { mustRespond.Add((bot.Id, AddressedPriority)); continue; }
             if (tier1 == Tier1Result.GroupAddressed) { groupAddressed.Add(bot); continue; }
 
+            // Another bot's message that does not name this one: now and then
+            // it chimes in anyway, but Tiers 2 and 3 are for people's messages.
+            if (message.SenderBotId is not null)
+            {
+                if (Random.Shared.NextDouble() < _options.BotChainChance)
+                    mustRespond.Add((bot.Id, 0));
+                continue;
+            }
+
             // Tier 2: Weighted score
             var botMessagesInLast20 = recentMessages.Count(m => m.SenderBotId == bot.Id);
 

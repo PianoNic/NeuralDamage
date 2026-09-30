@@ -31,11 +31,17 @@ public static class Tier1HardRules
         if (message.Content.StartsWith('/'))
             return Tier1Result.MustSkip;
 
-        // Bot-to-bot: only respond if explicitly mentioned
+        // A bot never answers itself
+        if (message.SenderBotId == bot.Id)
+            return Tier1Result.MustSkip;
+
+        // Bot-to-bot: named, it answers; otherwise the decision engine rolls
+        // for it. Reply links do not count here - every bot reply carries one
+        // to what it answered, so they would make any two bots ping-pong.
         if (message.SenderBotId is not null)
         {
             var mentioned = FuzzyNameMatcher.IsNameMentioned(message.Content, bot.Name, bot.Aliases);
-            return mentioned ? Tier1Result.MustRespond : Tier1Result.MustSkip;
+            return mentioned ? Tier1Result.MustRespond : Tier1Result.Undecided;
         }
 
         // Name mentioned in message
