@@ -71,7 +71,7 @@ export function attachmentSrc(attachment: Pick<AttachmentDto, 'url'>): string {
     <hlm-dialog [state]="open() ? 'open' : 'closed'" (closed)="open.set(null)">
       <hlm-dialog-content
         *hlmDialogPortal="let ctx"
-        class="w-auto max-w-[calc(100vw-2rem)] p-2 sm:max-w-[min(90vw,72rem)]"
+        class="w-fit max-w-[calc(100vw-2rem)] p-2 sm:max-w-[min(90vw,72rem)]"
       >
         <h2 hlmDialogTitle class="sr-only">Image from {{ senderName() }}</h2>
         @if (open(); as image) {
@@ -82,7 +82,11 @@ export function attachmentSrc(attachment: Pick<AttachmentDto, 'url'>): string {
             imgClass="max-h-[85vh] max-w-full object-contain"
           />
           @if (image.description) {
-            <p hlmDialogDescription class="text-muted-foreground line-clamp-3 px-1 pb-1 text-xs">
+            <!-- w-0 min-w-full: the text wraps to the image's width instead of widening the box. -->
+            <p
+              hlmDialogDescription
+              class="text-muted-foreground line-clamp-3 w-0 min-w-full px-1 pb-1 text-xs"
+            >
               {{ image.description }}
             </p>
           }
