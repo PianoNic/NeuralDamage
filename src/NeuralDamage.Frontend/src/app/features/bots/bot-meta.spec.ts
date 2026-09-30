@@ -111,6 +111,13 @@ describe('visibility rules', () => {
     expect(request.chatId).toBeNull();
   });
 
+  it('sends a trimmed system prompt, or blank for the server default', () => {
+    expect(toCreateRequest({ ...value, systemPrompt: '  Only speak in haiku. ' }, null).systemPrompt).toBe(
+      'Only speak in haiku.',
+    );
+    expect(toCreateRequest({ ...value, systemPrompt: '   ' }, null).systemPrompt).toBe('');
+  });
+
   it('tidies nicknames', () => {
     expect(normalizeAliases(' a , ,b ')).toBe('a, b');
     expect(normalizeAliases('')).toBe('');

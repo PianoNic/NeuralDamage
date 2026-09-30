@@ -2,8 +2,10 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideAtSign,
+  lucideLogOut,
   lucidePencil,
   lucideTriangleAlert,
+  lucideUserMinus,
   lucideVolume2,
   lucideVolumeX,
   lucideX,
@@ -15,23 +17,35 @@ import { BotDto, ChatMember } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { hasModelProblem } from '../bots/bot-meta';
 import { ModelCatalog } from '../bots/model-catalog';
-import { joinedLabel, visibilityLabel } from './people-meta';
+import { joinedDate, joinedLabel, roleLabel, visibilityLabel } from './people-meta';
 
 /** About what fits on the subtitle line of the card. */
 const SUBTITLE_CHARS = 40;
 
-/** The card beside the People sheet: who a bot (or person) is, and what you can do with it. */
+/**
+ * Who a bot or person is, and what you can do with them: a card beside the People sheet on wider
+ * screens, or the body of a full-width sheet over it on phones (`inSheet`).
+ */
 @Component({
   selector: 'app-member-profile',
   imports: [NgIcon, HlmBadge, HlmButton, HlmSpinner, MemberAvatar],
   providers: [
-    provideIcons({ lucideAtSign, lucidePencil, lucideTriangleAlert, lucideVolume2, lucideVolumeX, lucideX }),
+    provideIcons({
+      lucideAtSign,
+      lucideLogOut,
+      lucidePencil,
+      lucideTriangleAlert,
+      lucideUserMinus,
+      lucideVolume2,
+      lucideVolumeX,
+      lucideX,
+    }),
   ],
   host: {
-    role: 'dialog',
-    '[attr.aria-label]': 'member().displayName',
-    class:
-      'bg-popover text-popover-foreground ring-foreground/10 flex flex-col gap-3.5 rounded-xl p-4 text-sm shadow-xl ring-1',
+    '[attr.role]': 'inSheet() ? null : "dialog"',
+    '[attr.aria-label]': 'inSheet() ? null : member().displayName',
+    class: 'text-popover-foreground flex flex-col gap-3.5 p-4 text-sm',
+    '[class]': 'inSheet() ? "" : "bg-popover ring-foreground/10 rounded-xl shadow-xl ring-1"',
     '(keydown.escape)': 'close.emit()',
   },
   template: `
@@ -42,8 +56,8 @@ const SUBTITLE_CHARS = 40;
           <span class="truncate text-base font-semibold">{{ member().displayName }}</span>
           @if (isBot()) {
             <span hlmBadge variant="secondary">Bot</span>
-          } @else if (member().role === 'Owner') {
-            <span hlmBadge variant="secondary">Owner</span>
+          } @else {
+            <span hlmBadge variant="secondary">{{ role() }}</span>
           }
         </div>
         <span class="text-muted-foreground truncate text-[13px]">{{ subtitle() }}</span>
@@ -87,33 +101,54 @@ const SUBTITLE_CHARS = 40;
           </div>
         </dl>
       }
+    } @else {
+      <dl class="grid grid-cols-2 gap-2.5 text-[13px]">
+        <div class="flex flex-col gap-0.5">
+          <dt class="text-muted-foreground text-xs">Role</dt>
+          <dd>{{ role() }}</dd>
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <dt class="text-muted-foreground text-xs">Joined</dt>
+          <dd class="tabular-nums">{{ joined() }}</dd>
+        </div>
+      </dl>
     }
 
-    <div class="flex gap-2">
-      <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="mention.emit()">
-        <ng-icon name="lucideAtSign" />
-        Mention
-      </button>
-      @if (isBot()) {
-        <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="toggleMute.emit()">
-          <ng-icon [name]="member().isMuted ? 'lucideVolume2' : 'lucideVolumeX'" />
-          {{ member().isMuted ? 'Unmute' : 'Mute' }}
+    <!-- Nothing to do with your own card but leave. -->
+    @if (!isSelf()) {
+      <div class="flex flex-wrap gap-2">
+        <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="mention.emit()">
+          <ng-icon name="lucideAtSign" />
+          Mention
         </button>
-        @if (canEdit()) {
-          @if (broken()) {
-            <button hlmBtn size="sm" class="flex-1" (click)="updateModel.emit()">
-              <ng-icon name="lucidePencil" />
-              Update model
-            </button>
-          } @else {
-            <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="edit.emit()">
-              <ng-icon name="lucidePencil" />
-              Edit
-            </button>
+        @if (isBot()) {
+          <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="toggleMute.emit()">
+            <ng-icon [name]="member().isMuted ? 'lucideVolume2' : 'lucideVolumeX'" />
+            {{ member().isMuted ? 'Unmute' : 'Mute' }}
+          </button>
+          @if (canEdit()) {
+            @if (broken()) {
+              <button hlmBtn size="sm" class="flex-1" (click)="updateModel.emit()">
+                <ng-icon name="lucidePencil" />
+                Update model
+              </button>
+            } @else {
+              <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="edit.emit()">
+                <ng-icon name="lucidePencil" />
+                Edit
+              </button>
+            }
           }
         }
-      }
-    </div>
+      </div>
+    }
+
+    @if (canRemove()) {
+      <button hlmBtn variant="ghost" size="sm" class="text-destructive hover:text-destructive -mt-1 w-full" (click)="remove.emit()">
+        <ng-icon [name]="isSelf() ? 'lucideLogOut' : 'lucideUserMinus'" />
+        {{ isSelf() ? 'Leave chat' : 'Remove from chat' }}
+      </button>
+    }
   `,
 })
 export class MemberProfile {
@@ -123,14 +158,22 @@ export class MemberProfile {
   /** The bot's details, once loaded; null for people. */
   readonly bot = input<BotDto | null>(null);
   readonly currentUserId = input<string | null>(null);
+  /** Whether the viewer may remove this member (or leave, for themselves). */
+  readonly canRemove = input(false);
+  /** Shown as the body of a sheet: no card chrome, and the sheet is the dialog. */
+  readonly inSheet = input(false);
 
   readonly close = output();
   readonly mention = output();
   readonly toggleMute = output();
   readonly edit = output();
   readonly updateModel = output();
+  readonly remove = output();
 
   protected readonly isBot = computed(() => this.member().memberType === 'bot');
+  protected readonly isSelf = computed(() => !!this.member().userId && this.member().userId === this.currentUserId());
+  protected readonly role = computed(() => roleLabel(this.member().role));
+  protected readonly joined = computed(() => joinedDate(this.member().joinedAt));
   protected readonly broken = computed(() => hasModelProblem(this.member().modelStatus));
   protected readonly canEdit = computed(() => {
     const bot = this.bot();
@@ -140,7 +183,7 @@ export class MemberProfile {
   protected readonly subtitle = computed(() => {
     const member = this.member();
     if (member.memberType === 'bot') return this.bot()?.personality?.split('\n')[0] || 'Bot';
-    if (member.userId === this.currentUserId()) return 'You';
+    if (this.isSelf()) return 'You';
     return joinedLabel(member.joinedAt);
   });
 

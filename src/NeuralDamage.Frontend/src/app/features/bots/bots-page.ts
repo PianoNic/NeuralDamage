@@ -107,8 +107,8 @@ type Filter = 'all' | 'mine';
             <table hlmTable class="table-fixed">
               <thead hlmTHead>
                 <tr hlmTr>
-                  <th hlmTh class="w-[34%] ps-4">Bot</th>
-                  <th hlmTh class="w-[24%]">Model</th>
+                  <th hlmTh class="ps-4 sm:w-[34%]">Bot</th>
+                  <th hlmTh class="hidden w-[24%] sm:table-cell">Model</th>
                   <th hlmTh class="hidden w-[16%] md:table-cell">By</th>
                   <th hlmTh class="hidden w-[10%] text-right md:table-cell">In chats</th>
                   <th hlmTh class="hidden w-[11%] text-right sm:table-cell">Replies (7d)</th>
@@ -122,14 +122,26 @@ type Filter = 'all' | 'mine';
                       <div class="flex min-w-0 items-center gap-2.5">
                         <app-member-avatar [name]="bot.name" [avatarUrl]="bot.avatarUrl" [modelId]="bot.modelId" [px]="32" />
                         <div class="flex min-w-0 flex-col leading-snug">
-                          <span class="truncate text-sm font-medium">{{ bot.name }}</span>
+                          <span class="flex min-w-0 items-center gap-1.5">
+                            <span class="truncate text-sm font-medium">{{ bot.name }}</span>
+                            @if (broken(bot)) {
+                              <!-- Phones have no Model column; the warning moves up here. -->
+                              <span hlmBadge variant="destructive" class="sm:hidden">
+                                <ng-icon name="lucideTriangleAlert" />
+                                {{ problemLabel(bot) }}
+                              </span>
+                            }
+                          </span>
                           @if (bot.personality) {
                             <span class="text-muted-foreground truncate text-[13px]">{{ bot.personality }}</span>
                           }
+                          <span class="text-muted-foreground truncate text-xs sm:hidden">
+                            {{ catalog.nameOf(bot.modelId) }} · {{ bot.repliesLast7Days }} {{ bot.repliesLast7Days === 1 ? 'reply' : 'replies' }} this week
+                          </span>
                         </div>
                       </div>
                     </td>
-                    <td hlmTd>
+                    <td hlmTd class="hidden sm:table-cell">
                       <div class="flex min-w-0 flex-col leading-snug">
                         <span class="flex min-w-0 items-center gap-1.5">
                           <span class="truncate text-sm">{{ catalog.nameOf(bot.modelId) }}</span>

@@ -23,3 +23,29 @@ export function visibilityLabel(
   const by = bot.createdById === currentUserId ? 'you' : bot.createdBy.displayName || 'someone';
   return `Public, made by ${by}`;
 }
+
+/** "30 Sep 2026", for the profile card; empty for an unreadable date. */
+export function joinedDate(joinedAt: string): string {
+  const date = new Date(joinedAt);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** A chat role as the People panel shows it. */
+export function roleLabel(role: string): string {
+  return role === 'Owner' ? 'Owner' : 'Member';
+}
+
+/**
+ * Whether the viewer may remove this member, as the API allows it: the chat owner removes anyone but
+ * themselves, everyone else only themselves. The owner can never be removed.
+ */
+export function canRemoveMember(
+  member: { role: string; userId: string | null },
+  members: readonly { role: string; userId: string | null }[],
+  currentUserId: string | null,
+): boolean {
+  if (!currentUserId || member.role === 'Owner') return false;
+  if (member.userId === currentUserId) return true;
+  return members.some((m) => m.userId === currentUserId && m.role === 'Owner');
+}

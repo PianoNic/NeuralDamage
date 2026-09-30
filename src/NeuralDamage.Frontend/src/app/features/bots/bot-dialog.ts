@@ -1,8 +1,9 @@
 import { Component, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
+import { lucideChevronRight, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
+import { HlmCollapsibleImports } from '@spartan-ng/helm/collapsible';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInput } from '@spartan-ng/helm/input';
@@ -40,6 +41,7 @@ const DEFAULT_TEMPERATURE = 0.8;
     NgIcon,
     HlmAlertImports,
     HlmButton,
+    HlmCollapsibleImports,
     HlmDialogImports,
     HlmFieldImports,
     HlmInput,
@@ -49,7 +51,7 @@ const DEFAULT_TEMPERATURE = 0.8;
     HlmTextarea,
     ModelBrowser,
   ],
-  providers: [provideIcons({ lucideTriangleAlert, lucideX })],
+  providers: [provideIcons({ lucideChevronRight, lucideTriangleAlert, lucideX })],
   template: `
     <hlm-dialog [state]="open() ? 'open' : 'closed'" (closed)="closed.emit()">
       <hlm-dialog-content
@@ -64,7 +66,7 @@ const DEFAULT_TEMPERATURE = 0.8;
         />
 
         <form
-          class="flex min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto p-5 md:w-[480px]"
+          class="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto p-5 md:w-[480px] md:flex-none md:shrink-0"
           aria-label="Bot"
           (submit)="$event.preventDefault(); save()"
         >
@@ -201,6 +203,36 @@ const DEFAULT_TEMPERATURE = 0.8;
             </div>
           </div>
 
+          <hlm-collapsible [expanded]="advancedOpen()" (expandedChange)="advancedOpen.set($event)" class="flex flex-col gap-2">
+            <button
+              hlmCollapsibleTrigger
+              type="button"
+              class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mx-1 flex w-fit items-center gap-1 rounded-md px-1 text-sm font-medium outline-none focus-visible:ring-2"
+            >
+              <ng-icon name="lucideChevronRight" size="16" class="transition-transform" [class.rotate-90]="advancedOpen()" />
+              Advanced
+            </button>
+            <hlm-collapsible-content>
+              <div hlmField>
+                <label hlmFieldLabel for="bot-system-prompt">System prompt</label>
+                <textarea
+                  hlmTextarea
+                  id="bot-system-prompt"
+                  name="systemPrompt"
+                  rows="4"
+                  class="min-h-24 resize-y"
+                  [placeholder]="'You are ' + (name().trim() || '<name>') + '.'"
+                  [value]="systemPrompt()"
+                  (input)="systemPrompt.set($any($event.target).value)"
+                ></textarea>
+                <p hlmFieldDescription>
+                  Replaces the opening line of the bot's instructions. Leave it empty to use the default; the
+                  personality above is always included.
+                </p>
+              </div>
+            </hlm-collapsible-content>
+          </hlm-collapsible>
+
           @if (error(); as message) {
             <div hlmAlert variant="destructive" role="alert">
               <ng-icon name="lucideTriangleAlert" />
@@ -247,6 +279,8 @@ export class BotDialog {
   protected readonly visibility = signal<Visibility>('public');
   protected readonly modelId = signal<string | null>(null);
   protected readonly temperature = signal(DEFAULT_TEMPERATURE);
+  protected readonly systemPrompt = signal('');
+  protected readonly advancedOpen = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -276,6 +310,9 @@ export class BotDialog {
         this.visibility.set(bot && !bot.isPublic ? 'private' : 'public');
         this.modelId.set(bot?.modelId ?? null);
         this.temperature.set(bot?.temperature ?? DEFAULT_TEMPERATURE);
+        this.systemPrompt.set(bot?.systemPrompt ?? '');
+        // A bot that already has its own prompt shows it; otherwise the section stays tucked away.
+        this.advancedOpen.set(!!bot?.systemPrompt?.trim());
         this.nameTouched.set(false);
         this.error.set(null);
         this.saving.set(false);
@@ -316,6 +353,8 @@ export class BotDialog {
             personality: this.personality().trim(),
             aliases: normalizeAliases(this.aliases()),
             temperature: this.temperature(),
+            // Always sent, so clearing the field goes back to the server default.
+            systemPrompt: this.systemPrompt().trim(),
           }),
         );
         this.saved.emit({ bot: null, id: bot.id });
@@ -330,6 +369,7 @@ export class BotDialog {
                 visibility: this.visibility(),
                 modelId,
                 temperature: this.temperature(),
+                systemPrompt: this.systemPrompt(),
               },
               this.chatId(),
             ),

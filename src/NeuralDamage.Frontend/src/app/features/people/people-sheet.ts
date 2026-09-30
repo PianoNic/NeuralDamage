@@ -15,6 +15,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideAtSign,
   lucideEllipsis,
+  lucideLogOut,
   lucidePencil,
   lucidePlus,
   lucideSearch,
@@ -45,7 +46,7 @@ import { BotDialog } from '../bots/bot-dialog';
 import { BotDirectory } from '../bots/bot-directory';
 import { hasModelProblem, modelProblemLabel } from '../bots/bot-meta';
 import { MemberProfile } from './member-profile';
-import { joinedLabel } from './people-meta';
+import { canRemoveMember, joinedLabel } from './people-meta';
 
 /** Vertical room the profile card needs before it is pushed up from the row it belongs to. */
 const PROFILE_HEIGHT = 340;
@@ -74,6 +75,7 @@ const PROFILE_HEIGHT = 340;
     provideIcons({
       lucideAtSign,
       lucideEllipsis,
+      lucideLogOut,
       lucidePencil,
       lucidePlus,
       lucideSearch,
@@ -233,18 +235,46 @@ const PROFILE_HEIGHT = 340;
           </div>
         </div>
 
-        @if (profileMember(); as member) {
+        @if (desktop() && profileMember(); as member) {
           <app-member-profile
-            class="absolute z-10 w-[calc(100%-1.5rem)] max-sm:inset-x-3 sm:right-[calc(100%+0.75rem)] sm:w-88"
-            [style.top.px]="desktop() ? profileTop() : 64"
+            class="absolute right-[calc(100%+0.75rem)] z-10 w-88"
+            [style.top.px]="profileTop()"
             [member]="member"
             [bot]="member.botId ? (details().get(member.botId) ?? null) : null"
             [currentUserId]="currentUserId()"
+            [canRemove]="canRemove(member)"
             (close)="profileId.set(null)"
             (mention)="mentionMember(member)"
             (toggleMute)="toggleMute(member)"
             (edit)="editBot(member, false)"
             (updateModel)="editBot(member, true)"
+            (remove)="removeMember(member)"
+          />
+        }
+      </hlm-sheet-content>
+    </hlm-sheet>
+
+    <!-- On phones the sheet is too narrow for a card beside it: the profile slides up full-width over it. -->
+    <hlm-sheet side="bottom" [state]="!desktop() && profileMember() ? 'open' : 'closed'" (closed)="profileId.set(null)">
+      <hlm-sheet-content
+        *hlmSheetPortal="let ctx"
+        [showCloseButton]="false"
+        class="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-xl p-0 pb-[env(safe-area-inset-bottom)]"
+      >
+        @if (profileMember(); as member) {
+          <h2 hlmSheetTitle class="sr-only">{{ member.displayName }}</h2>
+          <app-member-profile
+            [inSheet]="true"
+            [member]="member"
+            [bot]="member.botId ? (details().get(member.botId) ?? null) : null"
+            [currentUserId]="currentUserId()"
+            [canRemove]="canRemove(member)"
+            (close)="ctx.close()"
+            (mention)="mentionMember(member)"
+            (toggleMute)="toggleMute(member)"
+            (edit)="editBot(member, false)"
+            (updateModel)="editBot(member, true)"
+            (remove)="removeMember(member)"
           />
         }
       </hlm-sheet-content>
@@ -268,11 +298,11 @@ const PROFILE_HEIGHT = 340;
             </button>
           }
         }
-        @if (member.role !== 'Owner') {
+        @if (canRemove(member)) {
           <hlm-dropdown-menu-separator />
           <button hlmDropdownMenuItem variant="destructive" (triggered)="removeMember(member)">
-            <ng-icon name="lucideUserMinus" />
-            Remove from chat
+            <ng-icon [name]="member.userId === currentUserId() ? 'lucideLogOut' : 'lucideUserMinus'" />
+            {{ member.userId === currentUserId() ? 'Leave chat' : 'Remove from chat' }}
           </button>
         }
       </hlm-dropdown-menu>
@@ -408,6 +438,10 @@ export class PeopleSheet implements OnDestroy {
 
   protected problemLabel(member: ChatMember): string {
     return modelProblemLabel(member.modelStatus);
+  }
+
+  protected canRemove(member: ChatMember): boolean {
+    return canRemoveMember(member, this.members(), this.currentUserId());
   }
 
   protected canEdit(member: ChatMember): boolean {
