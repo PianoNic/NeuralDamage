@@ -161,6 +161,20 @@ public class BotReplyFormatterTests
     }
 
     [Test]
+    [Arguments("Gloomy Gus:\nMushrooms decompose", "Mushrooms decompose")]
+    [Arguments("Gloomy Gus: rain again", "rain again")]
+    [Arguments("[gloomy gus]: rain again", "rain again")]
+    [Arguments("**Gloomy Gus:** rain again", "rain again")]
+    [Arguments("**Gloomy Gus**: rain again", "rain again")]
+    [Arguments("Gloomy Gustav: rain again", "Gloomy Gustav: rain again")]
+    [Arguments("rain again, Gloomy Gus: sad", "rain again, Gloomy Gus: sad")]
+    [Arguments("Gloomy Gus:\nRust or Go\n\nGloomy Gus:\nRain again", "Rust or Go\n\nRain again")]
+    public async Task StripOwnName_DropsTheBotsNameOpeningTheReply(string reply, string expected)
+    {
+        await Assert.That(BotReplyFormatter.StripOwnName(reply, "Gloomy Gus")).IsEqualTo(expected);
+    }
+
+    [Test]
     [Arguments("I think pineapple on pizza is great", true)]
     [Arguments("pineapple on pizza is great, I think!", true)]
     [Arguments("I think anchovies on pizza are terrible", false)]

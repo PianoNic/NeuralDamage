@@ -47,6 +47,19 @@ public static partial class BotReplyFormatter
         return other.Success ? reply[..other.Index].TrimEnd() : reply;
     }
 
+    /// <summary>
+    /// Drops the bot's own name when the model opens its reply with it:
+    /// "Gus: hi", "[Gus]: hi", "**Gus:** hi", or the name on a line of its own -
+    /// which some models also repeat before each paragraph.
+    /// </summary>
+    public static string StripOwnName(string reply, string botName)
+    {
+        var name = Regex.Escape(botName);
+        var prefix = new Regex($@"^\s*(?:\*\*|__)?\[?{name}\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?\s*", RegexOptions.IgnoreCase);
+        var headerLine = new Regex($@"^[ \t]*(?:\*\*|__)?\[?{name}\]?(?:\*\*|__)?[ \t]*:(?:\*\*|__)?[ \t]*(?:\r?\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        return headerLine.Replace(prefix.Replace(reply, "", 1), "");
+    }
+
     /// <summary>Removes headings, bold/italic markers and list bullets.</summary>
     public static string StripMarkdown(string text)
     {
