@@ -61,7 +61,7 @@ public class BotPromptBuilderTests
 
         await Assert.That(note.Role).IsEqualTo(ChatMessage.Note);
         await Assert.That(note.Content).IsEqualTo(
-            "(It is Wednesday afternoon. Don't bring up the time or day unless it matters. Say something different.)");
+            "(It is Wednesday afternoon. Don't bring up the time or day unless it matters. Answer in the language of the message you're answering. Say something different.)");
         await Assert.That(note.Content).DoesNotContain(":");
         await Assert.That(note.Content).DoesNotContain("51");
     }

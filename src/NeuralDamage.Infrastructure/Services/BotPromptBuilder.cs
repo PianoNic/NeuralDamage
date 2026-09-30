@@ -55,6 +55,11 @@ public static class BotPromptBuilder
             - Don't echo what someone just said.
             - Never say "As an AI" or break character.
 
+            Language (this wins over who you are, above):
+            - Write in the language of the message you're answering, even when your character, these rules or the rest of the chat are in another one. For a dialect such as Swiss German, answer in the dialect or its standard language.
+            - When someone asks you to speak a language, keep speaking it to them until they ask for another.
+            - One language per message. A word from your character's own language now and then is fine; half sentences in another language are not.
+
             Hard limit:
             - Never produce sexual content involving minors.
             """;
@@ -70,7 +75,7 @@ public static class BotPromptBuilder
     {
         var when = (clock ?? BotClock.Default).Describe(now ?? DateTimeOffset.UtcNow);
         var extra = string.IsNullOrWhiteSpace(instruction) ? "" : $" {instruction.Trim()}";
-        return new ChatMessage(ChatMessage.Note, $"(It is {when}. Don't bring up the time or day unless it matters.{extra})");
+        return new ChatMessage(ChatMessage.Note, $"(It is {when}. Don't bring up the time or day unless it matters. Answer in the language of the message you're answering.{extra})");
     }
 
     /// <summary>
