@@ -23,7 +23,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddSingleton<IChatBotState, ChatBotState>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
-builder.Services.AddSingleton(ModelPriceCap.FromConfiguration(builder.Configuration));
+builder.Services.AddSingleton(ModelPolicy.FromConfiguration(builder.Configuration));
 builder.Services.AddScoped<IOpenRouterService, OpenRouterAgentService>();
 builder.Services.AddSingleton(BotRankingOptions.FromConfiguration(builder.Configuration));
 builder.Services.AddHttpClient<IDecisionsClient, DecisionsClient>((sp, client) =>

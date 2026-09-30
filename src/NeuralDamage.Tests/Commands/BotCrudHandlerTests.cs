@@ -9,8 +9,9 @@ namespace NeuralDamage.Tests.Commands;
 
 public class BotCrudHandlerTests
 {
-    private static readonly ModelPriceCap NoCap = new(0, 0);
-    private static readonly ModelPriceCap Cap = new(0.25m, 0.60m);
+    private static readonly ModelPolicy NoCap = new(0, 0);
+    private static readonly ModelPolicy Cap = new(0.25m, 0.60m);
+    private static readonly ModelPolicy Safe = new(0.25m, 0.60m, ZdrOnly: true, ExcludeBatchModels: true);
 
     private static IOpenRouterService Catalogue()
     {
@@ -19,7 +20,11 @@ public class BotCrudHandlerTests
         [
             new OpenRouterModel("cheap/model", "Cheap", 8000, new ModelPricing(0.10m, 0.40m)),
             new OpenRouterModel("pricey/model", "Pricey", 8000, new ModelPricing(2.50m, 10m)),
+            new OpenRouterModel("retaining/model", "Retaining", 8000, new ModelPricing(0.10m, 0.40m)),
+            new OpenRouterModel("cheap/model:batch", "Cheap (batch)", 8000, new ModelPricing(0.05m, 0.20m)),
         ]);
+        openRouter.ListZdrModelIdsAsync(Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string> { "cheap/model", "pricey/model", "cheap/model:batch" });
         return openRouter;
     }
 
@@ -153,6 +158,62 @@ public class BotCrudHandlerTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(bot.Name).IsEqualTo("Renamed");
+    }
+
+    [Test]
+    public async Task CreateBot_ModelWithoutZdrEndpoint_FailsWithReason()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+
+        var handler = new CreateBotHandler(db, Catalogue(), Safe);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "retaining/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("zero-data-retention");
+        await Assert.That(await db.Bots.CountAsync()).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CreateBot_BatchModel_FailsWithReason()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+
+        var handler = new CreateBotHandler(db, Catalogue(), Safe);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model:batch", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("batch");
+    }
+
+    [Test]
+    public async Task CreateBot_SafeModel_Succeeds()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+
+        var handler = new CreateBotHandler(db, Catalogue(), Safe);
+        var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task UpdateBot_ChangeToModelWithoutZdrEndpoint_Fails()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+        var bot = new Bot { Name = "GPT", ModelId = "cheap/model", SystemPrompt = "X", CreatedById = user.Id };
+        db.Bots.Add(bot);
+        await db.SaveChangesAsync();
+
+        var handler = new UpdateBotHandler(db, Catalogue(), Safe);
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, "retaining/model", null, null, null, null, null, null), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!).Contains("zero-data-retention");
+        await Assert.That(bot.ModelId).IsEqualTo("cheap/model");
     }
 
     [Test]

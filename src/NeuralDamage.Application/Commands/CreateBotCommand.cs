@@ -11,12 +11,12 @@ namespace NeuralDamage.Application.Commands;
 
 public record CreateBotCommand(string Name, string ModelId, string SystemPrompt, string? Personality, double Temperature, string? AvatarUrl, string? Aliases, Guid CreatedById) : ICommand<Result<BotDto>>;
 
-public class CreateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPriceCap priceCap) : ICommandHandler<CreateBotCommand, Result<BotDto>>
+public class CreateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy) : ICommandHandler<CreateBotCommand, Result<BotDto>>
 {
     public async ValueTask<Result<BotDto>> Handle(CreateBotCommand request, CancellationToken cancellationToken)
     {
-        if (!await priceCap.AllowsModelAsync(openRouter, request.ModelId, cancellationToken))
-            return Result<BotDto>.Failure($"Model '{request.ModelId}' exceeds the configured price cap.");
+        if (await modelPolicy.CheckModelAsync(openRouter, request.ModelId, cancellationToken) is { } refusal)
+            return Result<BotDto>.Failure(refusal);
 
         var bot = new Bot
         {

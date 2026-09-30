@@ -99,9 +99,12 @@ Oidc__RequireHttpsMetadata=false
 # OpenRouter
 OpenRouter__ApiKey=sk-or-v1-your-key-here
 
-# Model price caps ($/million tokens, 0 or unset = no limit)
+# Model policy - these are the defaults, so the lines are only needed to change them.
+# Price caps are $/million tokens; unset = 0.25 / 0.60, an explicit 0 = no limit.
 OpenRouter__MaxPromptPrice=0.25
 OpenRouter__MaxCompletionPrice=0.60
+OpenRouter__ZdrOnly=true
+OpenRouter__ExcludeBatchModels=true
 
 # Bot response ranking (Tier 3, Jev on the OpenRouter Decisions API).
 # All optional: the key falls back to OpenRouter__ApiKey, and without one
@@ -118,11 +121,19 @@ BotRanking__TimeoutSeconds=5
 |-----|---------|---------|
 | `OpenRouter:ApiKey` | - | Required. OpenRouter API key. |
 | `OpenRouter:BaseUrl` | `https://openrouter.ai/api/v1` | Point at a gateway or a local listener. |
-| `OpenRouter:MaxPromptPrice` | `0` (no limit) | Max prompt price, $/million tokens. |
-| `OpenRouter:MaxCompletionPrice` | `0` (no limit) | Max completion price, $/million tokens. |
+| `OpenRouter:MaxPromptPrice` | `0.25` | Max prompt price, $/million tokens. `0` = no limit. |
+| `OpenRouter:MaxCompletionPrice` | `0.60` | Max completion price, $/million tokens. `0` = no limit. |
+| `OpenRouter:ZdrOnly` | `true` | Only offer models with a zero-data-retention endpoint, and route only to ZDR endpoints. |
+| `OpenRouter:ExcludeBatchModels` | `true` | Hide and refuse `:batch` model variants (async batch jobs, useless in a live chat). |
 | `OpenRouter:MaxOutputTokens` | `1500` | Output token budget per bot reply. Reasoning models spend part of it thinking, so keep headroom. |
 
-With either price cap set, models over it (or without fixed pricing, such as `openrouter/auto`) are left out of `GET /api/bots/models` and refused when a bot is created or switched to them, and every generation call sends the caps as OpenRouter's `provider.max_price`, so a request is never routed to a provider charging more.
+The model policy is enforced in three places. `GET /api/bots/models` leaves out models it does not allow; creating a bot, or switching one to another model, is refused with a 400 that names the reason; and every generation call sends `provider.zdr: true` and the caps as `provider.max_price`, so OpenRouter never routes a request to a provider that retains prompts or charges more.
+
+- **ZDR**: a model qualifies when it appears in OpenRouter's `GET /api/v1/endpoints/zdr` list (matched by `model_id`). The list is cached for 6 hours.
+- **Price**: a model over either cap, or without fixed pricing (such as `openrouter/auto`), is refused while a cap is set.
+- **Existing bots** whose model no longer qualifies keep working until edited, but OpenRouter refuses their generation calls; the API log then says which setting to change.
+
+With the defaults, roughly 75 of OpenRouter's ~460 models remain, including `deepseek/deepseek-v4.1-flash`. Tier 3 ranking (Jev on the Decisions API) is not a chat model and is not subject to this policy.
 
 To view all configured secrets:
 

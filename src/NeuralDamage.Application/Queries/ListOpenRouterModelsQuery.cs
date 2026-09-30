@@ -8,15 +8,13 @@ namespace NeuralDamage.Application.Queries;
 
 public record ListOpenRouterModelsQuery : IQuery<Result<List<OpenRouterModel>>>;
 
-public class ListOpenRouterModelsHandler(IOpenRouterService openRouter, ModelPriceCap priceCap) : IQueryHandler<ListOpenRouterModelsQuery, Result<List<OpenRouterModel>>>
+public class ListOpenRouterModelsHandler(IOpenRouterService openRouter, ModelPolicy modelPolicy) : IQueryHandler<ListOpenRouterModelsQuery, Result<List<OpenRouterModel>>>
 {
     public async ValueTask<Result<List<OpenRouterModel>>> Handle(ListOpenRouterModelsQuery request, CancellationToken cancellationToken)
     {
         try
         {
-            var models = (await openRouter.ListModelsAsync(cancellationToken))
-                .Where(m => priceCap.Allows(m.Pricing))
-                .ToList();
+            var models = await modelPolicy.FilterAsync(openRouter, await openRouter.ListModelsAsync(cancellationToken), cancellationToken);
             return Result<List<OpenRouterModel>>.Success(models);
         }
         catch (Exception ex)
