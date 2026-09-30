@@ -59,6 +59,11 @@ export class SignalRService {
     await this.chatHub?.invoke('LeaveChat', chatId);
   }
 
+  /** Fire-and-forget; callers throttle, and a dropped ping only hides the indicator early. */
+  startTyping(chatId: string) {
+    void this.chatHub?.send('StartTyping', chatId).catch(() => undefined);
+  }
+
   // Chat hub event listeners. The event name picks the argument types out of
   // ChatHubEvents, so a handler that reads a payload the server does not send
   // fails to compile. signalR.on is untyped, hence the cast at the boundary.

@@ -30,14 +30,22 @@ import { modelIconUrl } from '@prompt-kit/model-icon';
 })
 export class MessageBubbleComponent {
   readonly message = input.required<Message>();
+  readonly currentUserId = input<string | null>(null);
+  /** Briefly set after someone clicks a quote that points at this message. */
+  readonly highlighted = input(false);
   readonly reply = output<Message>();
   readonly react = output<{ messageId: string; emoji: string }>();
+  readonly jumpTo = output<string>();
 
   /** Quick picks, same set the legacy UI offered. */
   readonly quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as const;
 
   readonly senderInitial = computed(() => this.message().senderName.charAt(0).toUpperCase());
   readonly isBot = computed(() => this.message().senderType === 'bot');
+  /** Your own messages sit on the right; everyone else's, people or bots, on the left. */
+  readonly isOwn = computed(
+    () => !!this.currentUserId() && this.message().senderUserId === this.currentUserId(),
+  );
   readonly hasReactions = computed(() => this.message().reactions.length > 0);
   readonly hasReply = computed(() => this.message().replyTo !== null);
 
@@ -68,6 +76,11 @@ export class MessageBubbleComponent {
 
   onReply(): void {
     this.reply.emit(this.message());
+  }
+
+  onQuoteClick(): void {
+    const replyTo = this.message().replyTo;
+    if (replyTo) this.jumpTo.emit(replyTo.id);
   }
 
   toggleReaction(emoji: string): void {

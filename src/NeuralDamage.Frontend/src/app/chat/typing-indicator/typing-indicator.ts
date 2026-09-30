@@ -8,12 +8,12 @@ import { PkLoader } from '@prompt-kit/loader';
   templateUrl: './typing-indicator.html',
 })
 export class TypingIndicatorComponent {
-  readonly typingUsers = input.required<Set<string>>();
+  readonly typingUsers = input.required<Map<string, string>>();
   readonly typingBots = input.required<Map<string, string>>();
 
   readonly typingText = computed(() => {
     const names: string[] = [
-      ...this.typingUsers(),
+      ...this.typingUsers().values(),
       ...this.typingBots().values(),
     ];
     if (names.length === 0) return '';

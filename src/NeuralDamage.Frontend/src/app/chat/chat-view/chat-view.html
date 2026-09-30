@@ -1,4 +1,4 @@
-﻿<div class="flex min-h-0 flex-1">
+<div class="relative flex min-h-0 flex-1">
   <section class="flex min-h-0 min-w-0 flex-1 flex-col">
     <!-- Header -->
     <header class="border-border flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2">
@@ -20,7 +20,7 @@
 
       <div class="flex shrink-0 items-center gap-3">
         @if (botMembers().length > 0) {
-          <div class="flex -space-x-2">
+          <div class="hidden -space-x-2 sm:flex">
             @for (bot of botMembers().slice(0, 5); track bot.id) {
               <hlm-avatar class="ring-background size-7 ring-2">
                 @if (bot.avatarUrl) {
@@ -49,6 +49,11 @@
     } @else {
       <app-message-list
         [messages]="messages()"
+        [systemMessages]="systemMessages()"
+        [currentUserId]="currentUserId()"
+        [hasMore]="hasMore()"
+        [loadingOlder]="loadingOlder()"
+        (loadOlder)="loadOlder()"
         (replyTo)="setReplyTo($event)"
         (react)="toggleReaction($event.messageId, $event.emoji)"
       />
@@ -67,16 +72,22 @@
           [members]="members()"
           [replyingTo]="replyingTo()"
           (send)="sendMessage($event)"
+          (typing)="onTyping()"
           (cancelReply)="setReplyTo(null)"
         />
       </div>
     </div>
   </section>
 
-  <!-- Bot manager side panel -->
+  <!-- Bot manager: a side panel from md up, an overlay below that -->
   @if (botManagerOpen()) {
+    <div
+      class="fixed inset-0 z-40 bg-black/50 md:hidden"
+      aria-hidden="true"
+      (click)="toggleBotManager()"
+    ></div>
     <app-bot-manager
-      class="w-80 shrink-0"
+      class="fixed inset-y-0 right-0 block z-50 w-full max-w-sm shadow-xl md:static md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none"
       [chatId]="currentChatId ?? ''"
       [members]="members()"
       (close)="toggleBotManager()"

@@ -37,6 +37,41 @@
           }
         </div>
       }
+
+      <!-- Invite users -->
+      <h4 class="mt-4 mb-2 text-[11px] text-muted-foreground">Invite users</h4>
+      <input
+        hlmInput
+        class="mb-2 w-full"
+        type="search"
+        placeholder="Search by name or email..."
+        aria-label="Search users to invite"
+        [value]="inviteQuery()"
+        (input)="inviteQuery.set($any($event.target).value)"
+      />
+      @for (user of invitableUsers(); track user.id) {
+        <div class="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-accent/50">
+          <hlm-avatar class="h-8 w-8">
+            @if (user.avatarUrl) {
+              <img hlmAvatarImage [src]="user.avatarUrl" [alt]="user.displayName || user.email" />
+            }
+            <span hlmAvatarFallback class="text-xs font-semibold">{{ (user.displayName || user.email).charAt(0).toUpperCase() }}</span>
+          </hlm-avatar>
+          <div class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium text-foreground">{{ user.displayName || user.email }}</span>
+            @if (user.displayName) {
+              <span class="block truncate text-xs text-muted-foreground">{{ user.email }}</span>
+            }
+          </div>
+          <button hlmBtn variant="default" size="icon-xs" (click)="inviteUser(user.id)" [attr.aria-label]="'Invite ' + (user.displayName || user.email)" title="Invite to chat">
+            <ng-icon name="lucideUserPlus" class="size-3.5" />
+          </button>
+        </div>
+      } @empty {
+        <p class="px-2 text-xs text-muted-foreground">
+          {{ inviteQuery().trim() ? 'No users match your search' : 'Everyone is already here' }}
+        </p>
+      }
     </section>
 
     <!-- Bots in chat -->

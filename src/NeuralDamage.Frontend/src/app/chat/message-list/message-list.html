@@ -1,4 +1,4 @@
-﻿@if (messages().length === 0) {
+@if (timeline().length === 0) {
   <div class="flex flex-1 items-center justify-center px-4">
     <pk-chat-empty
       title="No messages yet"
@@ -6,14 +6,31 @@
     />
   </div>
 } @else {
-  <pk-chat-container-root class="relative flex-1 px-4 py-4">
+  <pk-chat-container-root #root class="relative flex-1 px-4 py-4" (scroll)="onScroll()">
     <pk-chat-container-content class="mx-auto w-full max-w-3xl gap-1.5">
-      @for (message of messages(); track message.id) {
-        <app-message-bubble
-          [message]="message"
-          (reply)="onReply($event)"
-          (react)="onReact($event)"
-        />
+      @if (loadingOlder()) {
+        <div class="flex justify-center py-2">
+          <pk-loader variant="circular" size="sm" />
+        </div>
+      }
+      @for (item of timeline(); track item.key) {
+        @if (item.kind === 'message') {
+          <app-message-bubble
+            [message]="item.message"
+            [currentUserId]="currentUserId()"
+            [highlighted]="highlightedId() === item.message.id"
+            (reply)="onReply($event)"
+            (react)="onReact($event)"
+            (jumpTo)="jumpTo($event)"
+          />
+        } @else {
+          <div class="flex justify-center py-1">
+            <span
+              class="bg-muted/60 text-muted-foreground max-w-[85%] rounded-full px-3 py-1 text-center text-xs whitespace-pre-wrap"
+              role="status"
+            >{{ item.content }}</span>
+          </div>
+        }
       }
     </pk-chat-container-content>
     <pk-chat-container-scroll-anchor />
