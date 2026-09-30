@@ -47,7 +47,9 @@ public class BotDeliveryTests
         await h.OpenRouter.ReceivedWithAnyArgs(2).GenerateResponseAsync(default!, default, default!, default!, default);
     }
 
-    [Test]
+    // Counts heartbeats against the wall clock, so it must not share the CPU with the
+    // rest of the suite: on a 2-core CI runner the parallel image tests starved its timer.
+    [Test, NotInParallel]
     public async Task SlowGeneration_KeepsResendingTyping()
     {
         var options = InstantBotOptions.Create();
@@ -57,7 +59,7 @@ public class BotDeliveryTests
         h.Respond(gpt);
         h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(async _ =>
         {
-            await Task.Delay(300);
+            await Task.Delay(600);
             return "done";
         });
         var trigger = await h.SayAsync("take your time");
