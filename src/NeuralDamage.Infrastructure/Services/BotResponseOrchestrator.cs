@@ -203,8 +203,10 @@ public class BotResponseOrchestrator(
                     responseText = retry;
             }
 
-            // Strip any name prefix the model might add
-            var parts = BotReplyFormatter.Split(StripNamePrefix(responseText, bot.Name), _options.MaxReplyParts);
+            // Strip any name prefix the model might add, and any lines it wrote
+            // for other people.
+            var ownTurn = BotReplyFormatter.DropOtherSpeakers(StripNamePrefix(responseText, bot.Name));
+            var parts = BotReplyFormatter.Split(ownTurn, _options.MaxReplyParts);
             var sent = new List<Message>();
 
             for (var i = 0; i < parts.Count; i++)
