@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NeuralDamage.Infrastructure.Dtos;
@@ -7,9 +8,9 @@ using Toamaisutaa.AspNetCore;
 namespace NeuralDamage.API.Controllers;
 
 /// <summary>
-/// What the SPA reads at startup: where to sign in, and the limits it checks
+/// What the SPA reads at startup: where to sign in, the limits it checks
 /// before bothering the server, so changing <c>Attachments:*</c> reaches the
-/// client too.
+/// client too, and the release it shows under the name.
 /// </summary>
 [ApiController]
 [Route("api/app")]
@@ -28,6 +29,16 @@ public class AppController(IToamaisutaaClientConfigurationProvider oidc, Attachm
             config.RedirectUri,
             config.PostLogoutRedirectUri,
             config.Scope,
-            attachments.Limits()));
+            attachments.Limits(),
+            Version));
     }
+
+    /// <summary>
+    /// The version <c>Directory.Build.props</c> stamps in from <c>application.properties</c>,
+    /// without the "+commit" the SDK appends to the informational version.
+    /// </summary>
+    private static readonly string Version =
+        typeof(AppController).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
+        ?? typeof(AppController).Assembly.GetName().Version?.ToString(3)
+        ?? "0.0.0";
 }

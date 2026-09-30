@@ -17,5 +17,6 @@ export interface AppConfigurationDto {
     postLogoutRedirectUri: string;
     scope: string;
     attachments: AttachmentLimitsDto;
+    version: string;
 }
 
