@@ -44,11 +44,11 @@ public class PromptCacheTests
 
         await Assert.That(calls.Count).IsEqualTo(2);
         await Assert.That(calls[1].System).IsEqualTo(calls[0].System);
-        await Assert.That(calls[0].System).DoesNotContain("local time");
+        await Assert.That(calls[0].System).DoesNotContain("It is ");
 
         // The time goes in a note after the history, not in the cached part.
         await Assert.That(calls[0].History[^1].Role).IsEqualTo(ChatMessage.Note);
-        await Assert.That(calls[0].History[^1].Content).Contains("local time");
+        await Assert.That(calls[0].History[^1].Content).StartsWith("(It is ");
 
         // Everything before the first call's trigger (which loses its
         // "answering this" mark) is sent again unchanged, in the same order.
@@ -124,7 +124,7 @@ public class PromptCacheTests
         await Assert.That(json).StartsWith("""[{"role":"system","content":"system"},{"role":"user","content":[{"type":"text","text":"[Alice]: hi"}]},""");
         await Assert.That(json).Contains("""{"role":"assistant","content":[{"type":"text","text":"yo","cache_control":{"type":"ephemeral"}}]}""");
         await Assert.That(json).Contains("""{"type":"text","text":"[Bob]: sup","cache_control":{"type":"ephemeral"}}""");
-        await Assert.That(json).EndsWith("""{"role":"user","content":[{"type":"text","text":"(It is """ + history[3].Content[7..] + "\"}]}]");
+        await Assert.That(json).EndsWith("""{"role":"user","content":[{"type":"text","text":""" + System.Text.Json.JsonSerializer.Serialize(history[3].Content) + "}]}]");
     }
 
     [Test]

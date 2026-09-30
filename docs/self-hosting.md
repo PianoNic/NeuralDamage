@@ -62,6 +62,7 @@ The web app reads the sign-in settings from `GET /api/app` at startup, so none o
 | `OpenRouter__DisableReasoning` | `true` | Turn reasoning off: models that take OpenRouter's `reasoning` parameter are sent effort `none`, and models that always reason are refused. `false` restores low-effort reasoning and allows those models. |
 | `OpenRouter__MaxOutputTokens` | `1500` | Output token budget per bot reply. Reasoning models spend part of it thinking, so leave headroom. |
 | `OpenRouter__BaseUrl` | `https://openrouter.ai/api/v1` | Point at a gateway or proxy that speaks the OpenRouter API. |
+| `App__TimeZone` | `Europe/Zurich` | IANA time zone for the time the bots see. They get only the day and part of day ("Wednesday afternoon": night until 5, morning until 12, afternoon until 17, evening until 22) and are told not to bring it up unless it matters. An unknown zone falls back to UTC with a warning in the log. Stored timestamps stay UTC. |
 
 Out of the box, bots can only use cheap models whose providers keep no data. A model that fails any of these rules (over a price cap, without a fixed price such as `openrouter/auto`, without a zero-data-retention endpoint, a batch variant, or a model that always reasons while `DisableReasoning` is on) is hidden from the model picker and refused when a bot is created or switched to it. Every reply request also sends the caps as OpenRouter's `provider.max_price` and, with `ZdrOnly`, `provider.zdr`, so a request is never routed to a provider that charges more or retains data.
 
@@ -94,6 +95,8 @@ A `PermitLimit` of `0` turns that limit off.
 ### Who replies (bot ranking)
 
 Every message, from a person or a bot, gets one call to Jev on the OpenRouter Decisions API. It asks, for each bot in the chat, what that bot would do going only by its persona: reply, react with 😂, ❤️, 😮 or 👍, or stay quiet. Muted bots and bots under `/stop` are left out. A bot replies when Jev chose `reply` with at least the reply threshold, and reacts when it chose a reaction with at least the react threshold. Every bot that replies starts at the same time, and each reply is itself a message the bots can answer, up to three hops.
+
+A person who @mentions bots, or replies to a bot's message, is directing it: only those bots may reply, and Jev still decides whether each of them replies, reacts or stays quiet. The other bots are asked as usual but cannot reply; one that Jev would have had reply takes its likeliest reaction instead if that clears the react threshold, and stays quiet otherwise. A bot @mentioning another bot is left to Jev and the conversation health.
 
 | Variable | Default | Description |
 |---|---|---|

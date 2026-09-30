@@ -1,11 +1,12 @@
 import { Component, computed, input } from '@angular/core';
-import { HlmAvatarImports } from '@spartan-ng/helm/avatar';
-import { initials } from '../../shared/initials';
+import { MemberAvatar } from '../../shared/member-avatar';
 
 export interface Typer {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** A bot's model, for the vendor icon when it has no picture of its own. */
+  modelId?: string | null;
 }
 
 /** How many names are spelled out before the rest become "N others". */
@@ -47,19 +48,16 @@ export function typingParts(names: readonly string[]): Part[] {
 
 @Component({
   selector: 'app-typing-row',
-  imports: [HlmAvatarImports],
+  imports: [MemberAvatar],
   host: { class: 'block' },
   template: `
     @if (typers().length) {
       <div class="flex h-8 items-center gap-2 text-xs" role="status" aria-live="polite">
         <div class="flex -space-x-1.5">
           @for (typer of avatars(); track typer.id) {
-            <hlm-avatar size="sm" class="ring-background ring-2">
-              @if (typer.avatarUrl) {
-                <img hlmAvatarImage [src]="typer.avatarUrl" alt="" />
-              }
-              <span hlmAvatarFallback class="text-[10px] font-medium">{{ initialsOf(typer.name) }}</span>
-            </hlm-avatar>
+            <span class="ring-background flex rounded-full ring-2" [title]="typer.name">
+              <app-member-avatar [name]="typer.name" [avatarUrl]="typer.avatarUrl" [modelId]="typer.modelId" [px]="24" />
+            </span>
           }
         </div>
         <p class="text-muted-foreground">
@@ -85,8 +83,4 @@ export class TypingRow {
 
   protected readonly avatars = computed(() => this.typers().slice(0, MAX_AVATARS));
   protected readonly parts = computed(() => typingParts(this.typers().map((t) => t.name)));
-
-  protected initialsOf(name: string): string {
-    return initials(name);
-  }
 }

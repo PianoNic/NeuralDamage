@@ -157,6 +157,7 @@ export class Chat implements OnDestroy {
       id,
       name,
       avatarUrl: find(id)?.avatarUrl ?? null,
+      modelId: find(id)?.modelId ?? null,
     }));
   });
 

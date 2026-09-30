@@ -17,10 +17,12 @@ public class BotResponseOrchestrator(
     IServiceScopeFactory scopeFactory,
     IChatBotState botState,
     ILogger<BotResponseOrchestrator> logger,
-    IOptions<BotBehaviorOptions>? options = null) : IBotResponseOrchestrator
+    IOptions<BotBehaviorOptions>? options = null,
+    BotClock? clock = null) : IBotResponseOrchestrator
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeTasks = new();
     private readonly BotBehaviorOptions _options = options?.Value ?? new();
+    private readonly BotClock _clock = clock ?? BotClock.Default;
 
     public async Task ProcessMessageAsync(Guid chatId, Guid messageId, int depth = 0, CancellationToken ct = default)
     {
@@ -254,7 +256,7 @@ public class BotResponseOrchestrator(
             var pictures = images is null ? null : await LoadImagesAsync(images, window, message.Id, ct);
             var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures);
 
-            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote()], ct);
+            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote(clock: _clock)], ct);
             if (string.IsNullOrWhiteSpace(responseText))
             {
                 // Both attempts failed or came back empty: say so rather than
@@ -281,7 +283,7 @@ public class BotResponseOrchestrator(
             {
                 logger.LogInformation("Bot {BotName} repeated itself; regenerating once", bot.Name);
                 var retry = await GenerateAsync(openRouter, bot, systemPrompt,
-                    [.. history, BotPromptBuilder.BuildNote(instruction: $"You were about to say \"{responseText}\", which repeats something you already said. Say something different.")],
+                    [.. history, BotPromptBuilder.BuildNote(instruction: $"You were about to say \"{responseText}\", which repeats something you already said. Say something different.", clock: _clock)],
                     ct);
                 parts = string.IsNullOrWhiteSpace(retry) ? [] : ToParts(retry, bot.Name);
                 if (parts.Count == 0 || Repeats(parts, ownRecent))

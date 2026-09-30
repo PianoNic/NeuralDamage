@@ -12,7 +12,9 @@ namespace NeuralDamage.Infrastructure.Services.BotDecision;
 /// <c>choice</c> question per bot, each judged on that bot's persona and the
 /// message alone, plus one <c>score</c> question on how the conversation is
 /// going, which holds back bots answering bots once they start going in
-/// circles. The code only turns the probabilities into actions.
+/// circles. The code only turns the probabilities into actions, and keeps a
+/// person's @mention or reply for the bots it is directed at: only they may
+/// reply to it, the others can still react.
 /// </summary>
 public class BotDecisionEngine(
     NeuralDamageDbContext db,
@@ -75,8 +77,17 @@ public class BotDecisionEngine(
             : HealthBand.Normal;
         var replyThreshold = band == HealthBand.Cautious ? Math.Max(ranking.ReplyThreshold, ranking.CautiousReplyThreshold) : ranking.ReplyThreshold;
 
+        // A person who @mentions bots, or replies to one, is directing the
+        // message: only those bots may reply. Jev is still asked about every
+        // bot, so the others can react or stay quiet.
+        var addressed = Addressed(message, bots);
+        if (response?.Answers is not null && addressed.Count > 0)
+            logger.LogInformation("Message {MessageId} is addressed to {Bots}; only they may reply",
+                message.Id, string.Join(", ", addressed.Select(b => b.Name)));
+
         var decided = response?.Answers is { } answers
-            ? keyed.Select(k => Map(k.Bot, answers.GetValueOrDefault(k.Key), replyThreshold)).ToList()
+            ? keyed.Select(k => Map(k.Bot, answers.GetValueOrDefault(k.Key), replyThreshold,
+                mayReply: addressed.Count == 0 || addressed.Contains(k.Bot))).ToList()
             : Fallback(message, bots);
 
         if (response?.Answers is not null)
@@ -144,11 +155,26 @@ public class BotDecisionEngine(
         Silent,
     }
 
-    /// <summary>The chosen option, if its probability clears the threshold for its kind.</summary>
-    private BotVerdict Map(Bot bot, DecisionAnswer? answer, double replyThreshold)
+    /// <summary>
+    /// The chosen option, if its probability clears the threshold for its kind.
+    /// A bot that may not reply and chose to anyway takes its likeliest
+    /// reaction instead, if that clears the react threshold, and stays quiet otherwise.
+    /// </summary>
+    private BotVerdict Map(Bot bot, DecisionAnswer? answer, double replyThreshold, bool mayReply = true)
     {
         if (answer?.Choice is not { } choice)
             return new BotVerdict(bot, BotAction.Quiet);
+
+        if (choice == Reply && !mayReply)
+        {
+            var best = (answer.Probabilities ?? new Dictionary<string, double>())
+                .Where(kv => ranking.Emojis.ContainsKey(kv.Key))
+                .OrderByDescending(kv => kv.Value)
+                .FirstOrDefault();
+            return best.Key is not null && best.Value >= ranking.ReactThreshold
+                ? new BotVerdict(bot, BotAction.React, ranking.Emojis[best.Key], best.Value)
+                : new BotVerdict(bot, BotAction.Quiet);
+        }
 
         var p = answer.Probabilities?.GetValueOrDefault(choice) ?? answer.Confidence ?? 0;
         if (choice == Reply && p >= replyThreshold)
@@ -165,15 +191,23 @@ public class BotDecisionEngine(
     /// </summary>
     private List<BotVerdict> Fallback(Message message, List<Bot> bots)
     {
-        var fromPerson = message.SenderBotId is null;
+        var addressed = Addressed(message, bots);
         var decided = bots.Select(bot => new BotVerdict(bot,
-            fromPerson && (IsMentioned(message.Content, bot) || message.ReplyTo?.SenderBotId == bot.Id)
-                ? BotAction.Reply
-                : BotAction.Quiet)).ToList();
+            addressed.Contains(bot) ? BotAction.Reply : BotAction.Quiet)).ToList();
         logger.LogWarning("Jev unavailable for message {MessageId}; only mentioned or replied-to bots answer: {Bots}",
             message.Id, string.Join(", ", decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot.Name)));
         return decided;
     }
+
+    /// <summary>
+    /// The bots a person's message is directed at: those it @mentions and the
+    /// one it replies to. Empty for a bot's message, since every bot reply
+    /// links what it answered and bots follow up on each other through Jev.
+    /// </summary>
+    public static HashSet<Bot> Addressed(Message message, IEnumerable<Bot> bots) =>
+        message.SenderBotId is not null
+            ? []
+            : bots.Where(bot => IsMentioned(message.Content, bot) || message.ReplyTo?.SenderBotId == bot.Id).ToHashSet();
 
     /// <summary>"@Rex", or "@" and one of the bot's aliases, as a whole word.</summary>
     public static bool IsMentioned(string content, Bot bot)

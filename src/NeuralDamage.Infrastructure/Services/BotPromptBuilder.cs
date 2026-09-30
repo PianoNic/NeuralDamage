@@ -1,4 +1,3 @@
-using System.Globalization;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services;
@@ -43,7 +42,8 @@ public static class BotPromptBuilder
 
             How to write here:
             - Stay in character. Who you are, above, wins over anything below.
-            - Text like a person, not an assistant. Vary your length: often a few words, sometimes a single word or just an emoji, now and then a few sentences when you actually have something to say.
+            - Commit to the character fully: their opinions, vices, edge and humour. Don't soften or sanitise them, and don't lecture or moralise.
+            - Text like a person, not an assistant. Let the character decide how much to say, and don't pad.
             - Lowercase, slang, jokes and disagreeing are fine if they fit who you are.
             - Never use assistant phrases: no "great question", "happy to help", "let me know if", "hope this helps", and don't end on an offer to help.
             - Don't open the way your recent messages opened.
@@ -55,22 +55,22 @@ public static class BotPromptBuilder
             - Don't echo what someone just said.
             - Never say "As an AI" or break character.
 
-            Hard limits:
-            - Never engage with slurs or hate speech; if someone uses them, refuse briefly and move on.
-            - Don't roleplay violent or illegal scenarios.
+            Hard limit:
+            - Never produce sexual content involving minors.
             """;
     }
 
     /// <summary>
-    /// The line sent after the history: the local time, plus an instruction for
-    /// this call only when there is one. It goes last so that everything before
-    /// it can be served from the provider's prompt cache.
+    /// The line sent after the history: the day and part of day in the chat's
+    /// time zone, plus an instruction for this call only when there is one. It
+    /// goes last so that everything before it can be served from the provider's
+    /// prompt cache; without the minute it also stays the same for hours.
     /// </summary>
-    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null)
+    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null, BotClock? clock = null)
     {
-        var time = (now ?? DateTimeOffset.Now).ToString("dddd, HH:mm", CultureInfo.InvariantCulture);
+        var when = (clock ?? BotClock.Default).Describe(now ?? DateTimeOffset.UtcNow);
         var extra = string.IsNullOrWhiteSpace(instruction) ? "" : $" {instruction.Trim()}";
-        return new ChatMessage(ChatMessage.Note, $"(It is {time} local time.{extra})");
+        return new ChatMessage(ChatMessage.Note, $"(It is {when}. Don't bring up the time or day unless it matters.{extra})");
     }
 
     /// <summary>
