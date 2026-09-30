@@ -181,10 +181,12 @@ type Filter = 'all' | 'mine';
           </div>
         }
 
-        <p class="text-muted-foreground text-[13px]">
-          {{ bots().length }} public {{ bots().length === 1 ? 'bot' : 'bots' }}. Private bots live only in the chat
-          they were made for and are not listed here.
-        </p>
+        @if (!loading() || bots().length) {
+          <p class="text-muted-foreground text-[13px]">
+            {{ bots().length }} public {{ bots().length === 1 ? 'bot' : 'bots' }}. Private bots live only in the chat
+            they were made for and are not listed here.
+          </p>
+        }
       </div>
     </div>
 

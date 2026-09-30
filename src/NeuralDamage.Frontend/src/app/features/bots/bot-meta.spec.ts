@@ -43,12 +43,15 @@ describe('priceTierMarks', () => {
 });
 
 describe('formatPrice', () => {
-  it('shows cents when exact and two significant digits below a cent', () => {
+  it('shows cents when exact, otherwise three significant digits', () => {
     expect(formatPrice(0.07)).toBe('$0.07');
     expect(formatPrice(0.1)).toBe('$0.10');
     expect(formatPrice(0.035)).toBe('$0.035');
     expect(formatPrice(0)).toBe('$0.00');
     expect(formatPrice(2.5)).toBe('$2.50');
+    expect(formatPrice(4e-7 * 1_000_000)).toBe('$0.40');
+    expect(formatPrice(0.396)).toBe('$0.396');
+    expect(formatPrice(0.0198)).toBe('$0.0198');
   });
 
   it('reports variable pricing', () => {

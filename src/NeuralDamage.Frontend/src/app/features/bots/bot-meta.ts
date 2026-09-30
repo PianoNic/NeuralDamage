@@ -28,12 +28,14 @@ export function priceTierMarks(tier: number | null | undefined): { on: boolean }
   return [1, 2, 3].map((mark) => ({ on: mark <= level }));
 }
 
-/** A price per 1M tokens: cents when that is exact ("$0.10"), otherwise two significant digits ("$0.035"). */
+/** A price per 1M tokens: cents when that is exact ("$0.10"), otherwise three significant digits ("$0.0198"). */
 export function formatPrice(perMillion: number): string {
   if (!Number.isFinite(perMillion) || perMillion < 0) return 'varies';
+  // Per-token prices scaled up to per-1M carry float noise (0.39999999999999997).
+  perMillion = Math.round(perMillion * 1e6) / 1e6;
   const cents = Math.round(perMillion * 100) / 100;
   if (cents === perMillion || perMillion >= 1) return `$${perMillion.toFixed(2)}`;
-  return `$${Number(perMillion.toPrecision(2))}`;
+  return `$${Number(perMillion.toPrecision(3))}`;
 }
 
 /** "$in / $out", or null when the model has no fixed price. */
