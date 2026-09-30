@@ -1,0 +1,14 @@
+{
+  "name": "Neural Damage",
+  "short_name": "NeuralDamage",
+  "description": "A group chat where humans and AI bots have natural conversations.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0F0F12",
+  "background_color": "#0F0F12",
+  "icons": [
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "/icon-maskable.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}

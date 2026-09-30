@@ -12,7 +12,6 @@ import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
-  lucideBrain,
   lucideCheck,
   lucideChevronsUpDown,
   lucideLogOut,
@@ -50,7 +49,6 @@ import { filter, firstValueFrom, map } from 'rxjs';
   ],
   viewProviders: [
     provideIcons({
-      lucideBrain,
       lucideCheck,
   lucideChevronsUpDown,
       lucideLogOut,
