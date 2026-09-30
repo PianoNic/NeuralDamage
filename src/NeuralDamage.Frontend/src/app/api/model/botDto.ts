@@ -7,6 +7,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { BotCreatorDto } from './botCreatorDto';
 
 
 export interface BotDto { 
@@ -21,5 +22,13 @@ export interface BotDto {
     createdById: string;
     isActive: boolean;
     createdAt: string;
+    isPublic: boolean;
+    chatId?: string | null;
+    createdBy: BotCreatorDto;
+    chatCount: number;
+    repliesToday: number;
+    repliesLast7Days: number;
+    modelStatus: string;
+    modelStatusReason?: string | null;
 }
 

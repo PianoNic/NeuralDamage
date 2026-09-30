@@ -25,7 +25,7 @@ public class AddMemberHandlerTests
         db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = owner.Id, Role = ChatMemberRole.Owner });
         await db.SaveChangesAsync();
 
-        var handler = new AddMemberHandler(db, MockNotifications());
+        var handler = new AddMemberHandler(db, MockNotifications(), new ChatBotState(), Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new AddMemberCommand(chat.Id, newUser.Id, null, owner.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -45,7 +45,7 @@ public class AddMemberHandlerTests
         db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = owner.Id, Role = ChatMemberRole.Owner });
         await db.SaveChangesAsync();
 
-        var handler = new AddMemberHandler(db, MockNotifications());
+        var handler = new AddMemberHandler(db, MockNotifications(), new ChatBotState(), Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new AddMemberCommand(chat.Id, null, bot.Id, owner.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -67,7 +67,7 @@ public class AddMemberHandlerTests
         db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = member.Id, Role = ChatMemberRole.Member });
         await db.SaveChangesAsync();
 
-        var handler = new AddMemberHandler(db, MockNotifications());
+        var handler = new AddMemberHandler(db, MockNotifications(), new ChatBotState(), Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new AddMemberCommand(chat.Id, newUser.Id, null, member.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -84,7 +84,7 @@ public class AddMemberHandlerTests
         db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = owner.Id, Role = ChatMemberRole.Owner });
         await db.SaveChangesAsync();
 
-        var handler = new AddMemberHandler(db, MockNotifications());
+        var handler = new AddMemberHandler(db, MockNotifications(), new ChatBotState(), Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new AddMemberCommand(chat.Id, owner.Id, null, owner.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -96,7 +96,7 @@ public class AddMemberHandlerTests
     {
         using var db = TestDbContext.Create();
 
-        var handler = new AddMemberHandler(db, MockNotifications());
+        var handler = new AddMemberHandler(db, MockNotifications(), new ChatBotState(), Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new AddMemberCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -108,7 +108,7 @@ public class AddMemberHandlerTests
     {
         using var db = TestDbContext.Create();
 
-        var handler = new AddMemberHandler(db, MockNotifications());
+        var handler = new AddMemberHandler(db, MockNotifications(), new ChatBotState(), Substitute.For<IOpenRouterService>(), new ModelPolicy(0, 0));
         var result = await handler.Handle(new AddMemberCommand(Guid.NewGuid(), null, null, Guid.NewGuid()), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();

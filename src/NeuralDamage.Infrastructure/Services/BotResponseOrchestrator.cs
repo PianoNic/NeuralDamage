@@ -67,6 +67,8 @@ public class BotResponseOrchestrator(
             var responderIds = await decisionEngine.DecideRespondersAsync(chatId, message, bots, cts.Token);
 
             var responders = bots.Where(b => responderIds.Contains(b.Id)).ToList();
+            if (responders.Count > 0)
+                responders = await DropBrokenModelsAsync(scope.ServiceProvider, openRouter, notifications, chatId, responders, cts.Token);
             // A bot never reacts to its own message, and a muted or stopped bot
             // is told to keep quiet, which rules out reacting too.
             var silent = bots.Where(b => !responderIds.Contains(b.Id) && b.Id != message.SenderBotId
@@ -125,6 +127,32 @@ public class BotResponseOrchestrator(
             _activeTasks.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(chatId, cts));
             cts.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Leaves out responders whose model is gone from OpenRouter or refused by
+    /// the policy: asking would only fail. The chat is told once per bot, not
+    /// on every message, until the bot's model is changed.
+    /// </summary>
+    private async Task<List<Bot>> DropBrokenModelsAsync(IServiceProvider services, IOpenRouterService openRouter, IChatNotificationService notifications, Guid chatId, List<Bot> responders, CancellationToken ct)
+    {
+        var lookup = await services.GetRequiredService<ModelPolicy>().StatusLookupAsync(openRouter, ct);
+        var working = new List<Bot>();
+        foreach (var bot in responders)
+        {
+            var status = lookup(bot.ModelId);
+            if (status.IsAvailable)
+            {
+                working.Add(bot);
+                continue;
+            }
+
+            if (!botState.TryMarkModelNotice(chatId, bot.Id))
+                continue;
+            logger.LogInformation("Bot {BotName} skipped in chat {ChatId}: {Reason}", bot.Name, chatId, status.Reason);
+            await notifications.NotifySystemMessage(chatId, $"{bot.Name}'s model {bot.ModelId} is no longer available. Edit the bot to pick another.");
+        }
+        return working;
     }
 
     /// <summary>

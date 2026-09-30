@@ -5,6 +5,7 @@ api/api.ts
 api/applicationConfiguration.service.ts
 api/bots.service.ts
 api/chatActions.service.ts
+api/chatBots.service.ts
 api/chatMembers.service.ts
 api/chats.service.ts
 api/internalDevOnly.service.ts
@@ -17,6 +18,7 @@ encoder.ts
 git_push.sh
 index.ts
 model/addMemberRequest.ts
+model/botCreatorDto.ts
 model/botDto.ts
 model/botSummaryDto.ts
 model/chatDetailDto.ts

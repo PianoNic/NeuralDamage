@@ -19,7 +19,10 @@ public class BotConfiguration : IEntityTypeConfiguration<Bot>
         builder.Property(b => b.AvatarUrl).HasMaxLength(1024);
         builder.Property(b => b.Aliases).HasMaxLength(512);
         builder.Property(b => b.IsActive).HasDefaultValue(true);
+        // The sentinel keeps an explicit false from being swapped for the column default on insert.
+        builder.Property(b => b.IsPublic).HasDefaultValue(true).HasSentinel(true);
 
         builder.HasOne(b => b.CreatedBy).WithMany(u => u.CreatedBots).HasForeignKey(b => b.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(b => b.Chat).WithMany().HasForeignKey(b => b.ChatId).OnDelete(DeleteBehavior.SetNull);
     }
 }

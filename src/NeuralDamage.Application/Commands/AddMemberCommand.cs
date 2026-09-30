@@ -12,7 +12,7 @@ namespace NeuralDamage.Application.Commands;
 
 public record AddMemberCommand(Guid ChatId, Guid? UserId, Guid? BotId, Guid RequestingUserId) : ICommand<Result>;
 
-public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService notifications) : ICommandHandler<AddMemberCommand, Result>
+public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IChatBotState botState, IOpenRouterService openRouter, ModelPolicy modelPolicy) : ICommandHandler<AddMemberCommand, Result>
 {
     public async ValueTask<Result> Handle(AddMemberCommand request, CancellationToken cancellationToken)
     {
@@ -40,8 +40,10 @@ public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService
 
         if (request.BotId is not null)
         {
-            var botExists = await db.Bots.AnyAsync(b => b.Id == request.BotId && b.IsActive, cancellationToken);
-            if (!botExists) return Result.Failure("Bot not found or inactive.");
+            var bot = await db.Bots.AsNoTracking().FirstOrDefaultAsync(b => b.Id == request.BotId && b.IsActive, cancellationToken);
+            if (bot is null) return Result.Failure("Bot not found or inactive.");
+            if (!bot.IsPublic && bot.ChatId != request.ChatId)
+                return Result.Failure("This bot is private to another chat.");
 
             var alreadyMember = await db.ChatMembers.AnyAsync(cm => cm.ChatId == request.ChatId && cm.BotId == request.BotId, cancellationToken);
             if (alreadyMember) return Result.Failure("Bot is already a member.");
@@ -63,7 +65,8 @@ public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService
             .Include(cm => cm.Bot)
             .FirstAsync(cm => cm.Id == member.Id, cancellationToken);
 
-        await notifications.NotifyMemberAdded(request.ChatId, loaded.ToDto());
+        var modelLookup = await modelPolicy.StatusLookupAsync(openRouter, cancellationToken);
+        await notifications.NotifyMemberAdded(request.ChatId, loaded.ToDto(botState, modelLookup));
 
         // Notify the added user so they can join the chat in their UI
         if (request.UserId is not null)
@@ -73,7 +76,7 @@ public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService
                 .Where(cm => cm.ChatId == request.ChatId)
                 .Include(cm => cm.User).Include(cm => cm.Bot)
                 .AsNoTracking().ToListAsync(cancellationToken);
-            await notifications.NotifyUserChatJoined(request.UserId.Value, chat.ToDetailDto(allMembers.Select(m => m.ToDto()).ToList()));
+            await notifications.NotifyUserChatJoined(request.UserId.Value, chat.ToDetailDto(allMembers.Select(m => m.ToDto(botState, modelLookup)).ToList()));
         }
 
         return Result.Success();

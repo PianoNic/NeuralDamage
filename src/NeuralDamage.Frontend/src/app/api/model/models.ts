@@ -1,4 +1,5 @@
 export * from './addMemberRequest';
+export * from './botCreatorDto';
 export * from './botDto';
 export * from './botSummaryDto';
 export * from './chatDetailDto';

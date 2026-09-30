@@ -43,7 +43,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap);
+        var handler = new CreateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new CreateBotCommand("GPT", "openai/gpt-4o", "Be helpful", null, 0.7, null, "gpt,chatgpt", user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -62,7 +62,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap);
+        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "GPT v2", null, "New prompt", null, 0.9, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -83,7 +83,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap);
+        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, other.Id, "Hacked", null, null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -96,7 +96,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db, Catalogue(), Cap);
+        var handler = new CreateBotHandler(db, Catalogue(), Cap, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new CreateBotCommand("GPT", "pricey/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -109,7 +109,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db, Catalogue(), Cap);
+        var handler = new CreateBotHandler(db, Catalogue(), Cap, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new CreateBotCommand("GPT", "made/up", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -121,7 +121,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db, Catalogue(), Cap);
+        var handler = new CreateBotHandler(db, Catalogue(), Cap, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -136,7 +136,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new UpdateBotHandler(db, Catalogue(), Cap);
+        var handler = new UpdateBotHandler(db, Catalogue(), Cap, new ChatBotState());
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -153,7 +153,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new UpdateBotHandler(db, Catalogue(), Cap);
+        var handler = new UpdateBotHandler(db, Catalogue(), Cap, new ChatBotState());
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "Renamed", "pricey/model", null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -166,7 +166,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db, Catalogue(), Safe);
+        var handler = new CreateBotHandler(db, Catalogue(), Safe, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new CreateBotCommand("GPT", "retaining/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -180,7 +180,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db, Catalogue(), Safe);
+        var handler = new CreateBotHandler(db, Catalogue(), Safe, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model:batch", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -193,7 +193,7 @@ public class BotCrudHandlerTests
         var (db, user) = await Setup();
         using var _ = db;
 
-        var handler = new CreateBotHandler(db, Catalogue(), Safe);
+        var handler = new CreateBotHandler(db, Catalogue(), Safe, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new CreateBotCommand("GPT", "cheap/model", "Be helpful", null, 0.7, null, null, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -208,7 +208,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new UpdateBotHandler(db, Catalogue(), Safe);
+        var handler = new UpdateBotHandler(db, Catalogue(), Safe, new ChatBotState());
         var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, "retaining/model", null, null, null, null, null, null), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();

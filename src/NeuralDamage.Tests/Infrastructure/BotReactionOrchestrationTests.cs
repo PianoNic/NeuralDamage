@@ -58,6 +58,7 @@ public class BotReactionOrchestrationTests
         services.AddSingleton(notifications);
         services.AddSingleton(decisions);
         services.AddSingleton(openRouter);
+        services.AddSingleton(new ModelPolicy(0, 0));
         var provider = services.BuildServiceProvider();
 
         var botState = new ChatBotState();

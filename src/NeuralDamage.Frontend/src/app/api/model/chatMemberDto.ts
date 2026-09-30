@@ -20,5 +20,8 @@ export interface ChatMemberDto {
     joinedAt: string;
     user?: UserDto;
     bot?: BotSummaryDto;
+    isMuted: boolean;
+    modelStatus?: string | null;
+    modelStatusReason?: string | null;
 }
 

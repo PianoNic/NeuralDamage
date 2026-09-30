@@ -23,6 +23,7 @@ public sealed class OrchestratorHarness : IDisposable
     public required IChatNotificationService Notifications { get; init; }
     public required IBotDecisionEngine Decisions { get; init; }
     public required IOpenRouterService OpenRouter { get; init; }
+    public required ChatBotState BotState { get; init; }
     public required ServiceProvider Provider { get; init; }
     public required User User { get; init; }
     public required Chat Chat { get; init; }
@@ -60,13 +61,15 @@ public sealed class OrchestratorHarness : IDisposable
         services.AddSingleton(notifications);
         services.AddSingleton(decisions);
         services.AddSingleton(openRouter);
+        services.AddSingleton(new ModelPolicy(0, 0));
         services.AddSingleton(options);
         configure?.Invoke(services);
         var provider = services.BuildServiceProvider();
 
+        var botState = new ChatBotState();
         var orchestrator = new BotResponseOrchestrator(
             provider.GetRequiredService<IServiceScopeFactory>(),
-            new ChatBotState(),
+            botState,
             NullLogger<BotResponseOrchestrator>.Instance,
             options);
 
@@ -77,6 +80,7 @@ public sealed class OrchestratorHarness : IDisposable
             Notifications = notifications,
             Decisions = decisions,
             OpenRouter = openRouter,
+            BotState = botState,
             Provider = provider,
             User = user,
             Chat = chat,

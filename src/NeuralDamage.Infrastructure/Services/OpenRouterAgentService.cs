@@ -147,11 +147,21 @@ public class OpenRouterAgentService : IOpenRouterService
     }
 
     /// <summary>
+    /// The catalogue is read on every bot list and before every reply round,
+    /// so it is fetched once per <see cref="ModelsCacheDuration"/> and shared.
+    /// </summary>
+    private static readonly TimeSpan ModelsCacheDuration = TimeSpan.FromHours(1);
+    private static (DateTimeOffset FetchedAt, List<OpenRouterModel> Models)? _modelsCache;
+
+    /// <summary>
     /// Plain REST against OpenRouter's model catalogue. This is not an inference
     /// call, so it stays off the agent pipeline.
     /// </summary>
     public async Task<List<OpenRouterModel>> ListModelsAsync(CancellationToken ct = default)
     {
+        if (_modelsCache is { } cached && DateTimeOffset.UtcNow - cached.FetchedAt < ModelsCacheDuration)
+            return [.. cached.Models];
+
         using var client = _httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/models");
         request.Headers.Add("Authorization", $"Bearer {_apiKey}");
@@ -159,7 +169,13 @@ public class OpenRouterAgentService : IOpenRouterService
         using var response = await client.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
 
-        var json = await response.Content.ReadAsStringAsync(ct);
+        var models = ParseModels(await response.Content.ReadAsStringAsync(ct));
+        _modelsCache = (DateTimeOffset.UtcNow, models);
+        return [.. models];
+    }
+
+    public static List<OpenRouterModel> ParseModels(string json)
+    {
         using var doc = JsonDocument.Parse(json);
         var models = new List<OpenRouterModel>();
 
@@ -171,12 +187,26 @@ public class OpenRouterAgentService : IOpenRouterService
                 var name = item.TryGetProperty("name", out var n) ? n.GetString() ?? id : id;
                 int? contextLength = item.TryGetProperty("context_length", out var cl)
                     && cl.ValueKind == JsonValueKind.Number ? cl.GetInt32() : null;
-                models.Add(new OpenRouterModel(id, name, contextLength, ParsePricing(item)));
+                var description = item.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
+                var inputs = item.TryGetProperty("architecture", out var architecture) && architecture.ValueKind == JsonValueKind.Object
+                    ? Strings(architecture, "input_modalities")
+                    : [];
+
+                models.Add(new OpenRouterModel(id, name, contextLength, ParsePricing(item))
+                {
+                    Description = ModelMetadata.Summary(description),
+                    Capabilities = ModelMetadata.Capabilities(id, name, Strings(item, "supported_parameters"), inputs),
+                });
             }
         }
 
         return models;
     }
+
+    private static List<string> Strings(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var array) && array.ValueKind == JsonValueKind.Array
+            ? array.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!).ToList()
+            : [];
 
     /// <summary>
     /// OpenRouter prices per token, as strings; the caps are per million tokens.
