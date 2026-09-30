@@ -17,12 +17,12 @@ namespace NeuralDamage.API.Controllers;
 public class ChatsController(ISender sender, IUserService userService) : ControllerBase
 {
     [HttpPost]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
-    public async Task<IActionResult> Create(CreateChatRequest request, CancellationToken ct)
+    [ProducesResponseType<ChatDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ChatDto>> Create(CreateChatRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
         var result = await sender.Send(new CreateChatCommand(request.Name, userId), ct);
-        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
     [HttpGet]

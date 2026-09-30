@@ -27,6 +27,10 @@ public class UpdateChatHandler(NeuralDamageDbContext db, IChatNotificationServic
         await db.SaveChangesAsync(cancellationToken);
 
         await notifications.NotifyChatUpdated(chat.Id, chat.ToDto());
+
+        // Whether renamed from the menu or with /rename, the chat is told.
+        var userName = await db.Users.Where(u => u.Id == request.RequestingUserId).Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken) ?? "Someone";
+        await notifications.NotifySystemMessage(chat.Id, $"{userName} renamed the chat to \"{chat.Name}\".");
         return Result.Success();
     }
 }

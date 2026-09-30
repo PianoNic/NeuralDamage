@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentValidation;
 using NeuralDamage.Application.Behaviors;
 using NeuralDamage.Application.Commands;
@@ -30,6 +31,25 @@ public class ValidationBehaviorTests
 
         await Assert.That(async () => await Behavior.Handle(command, (_, _) => ValueTask.FromResult(Result.Success()), CancellationToken.None))
             .Throws<ValidationException>();
+    }
+
+    [Test]
+    public async Task PinnedCulture_KeepsMessagesEnglish_OnAGermanHost()
+    {
+        var (culture, uiCulture) = (CultureInfo.CurrentCulture, CultureInfo.CurrentUICulture);
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("de-DE");
+            ValidationCulture.Pin();
+
+            var result = await new CreateChatValidator().ValidateAsync(new CreateChatCommand("", Guid.NewGuid()));
+
+            await Assert.That(result.Errors.Single().ErrorMessage).IsEqualTo("'Name' must not be empty.");
+        }
+        finally
+        {
+            (CultureInfo.CurrentCulture, CultureInfo.CurrentUICulture) = (culture, uiCulture);
+        }
     }
 
     [Test]

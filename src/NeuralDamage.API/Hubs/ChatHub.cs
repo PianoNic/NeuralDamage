@@ -25,11 +25,19 @@ public class ChatHub(NeuralDamageDbContext db, IUserService userService, ILogger
 
         foreach (var chatId in chatIds)
             await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
+        await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(userId.Value));
 
         logger.LogInformation("Connection {Conn} joined {Count} chat group(s) on connect", Context.ConnectionId, chatIds.Count);
 
         await base.OnConnectedAsync();
     }
+
+    /// <summary>
+    /// Every connection of one user, for what only they should see. SignalR's
+    /// own Clients.User keys on the token's subject, not on Users.Id, so the
+    /// hub keeps a group per user instead.
+    /// </summary>
+    public static string UserGroup(Guid userId) => $"user:{userId}";
 
     public async Task JoinChat(Guid chatId)
     {

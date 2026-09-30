@@ -45,7 +45,8 @@ public record RunSlashCommand(Guid ChatId, Guid UserId, string Content) : IComma
 /// <summary>
 /// Runs a slash command and tells the chat what happened with a system message.
 /// Errors are reported the same way rather than failing the request, so the
-/// person who typed the command sees why it did nothing.
+/// person who typed the command sees why it did nothing. Answers that only
+/// concern that person - /help, /bots, an unknown command - go to them alone.
 /// </summary>
 public class RunSlashCommandHandler(
     NeuralDamageDbContext db,
@@ -58,11 +59,24 @@ public class RunSlashCommandHandler(
     {
         var command = SlashCommand.Parse(request.Content)!;
         var feedback = await RunAsync(request.ChatId, request.UserId, command, cancellationToken);
-        await notifications.NotifySystemMessage(request.ChatId, feedback);
+        if (feedback is null)
+            return Result.Success();
+
+        if (feedback.CallerOnly)
+            await notifications.NotifyUserSystemMessage(request.ChatId, request.UserId, feedback.Text);
+        else
+            await notifications.NotifySystemMessage(request.ChatId, feedback.Text);
         return Result.Success();
     }
 
-    private async Task<string> RunAsync(Guid chatId, Guid userId, SlashCommand command, CancellationToken ct)
+    /// <summary>What a command answers: to the whole chat, or only to whoever typed it.</summary>
+    private sealed record Feedback(string Text, bool CallerOnly = false)
+    {
+        public static implicit operator Feedback(string text) => new(text);
+    }
+
+    /// <summary>What to tell the chat, or null when the command already did.</summary>
+    private async Task<Feedback?> RunAsync(Guid chatId, Guid userId, SlashCommand command, CancellationToken ct)
     {
         var userName = await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct) ?? "Someone";
 
@@ -124,24 +138,25 @@ public class RunSlashCommandHandler(
                 if (command.Argument.Length > 256)
                     return "Chat names can be at most 256 characters.";
 
+                // Renaming tells the chat itself, however it is done.
                 var result = await sender.Send(new UpdateChatCommand(chatId, command.Argument, userId), ct);
-                return result.IsSuccess ? $"{userName} renamed the chat to \"{command.Argument}\"." : result.Error!;
+                return result.IsSuccess ? null : new Feedback(result.Error!);
             }
 
             case "/bots":
             {
                 var bots = await LoadBotsAsync(chatId, ct);
                 if (bots.Count == 0)
-                    return "No bots in this chat.";
+                    return new Feedback("No bots in this chat.", CallerOnly: true);
                 var lines = bots.Select(b => $"• {b.Name} ({b.ModelId})" + (botState.IsMuted(chatId, b.Id) ? " - muted" : ""));
-                return "Bots in this chat:\n" + string.Join('\n', lines);
+                return new Feedback("Bots in this chat:\n" + string.Join('\n', lines), CallerOnly: true);
             }
 
             case "/help":
-                return "Available commands:\n" + string.Join('\n', SlashCommand.Help.Select(h => $"{h.Usage} - {h.Description}"));
+                return new Feedback("Available commands:\n" + string.Join('\n', SlashCommand.Help.Select(h => $"{h.Usage} - {h.Description}")), CallerOnly: true);
 
             default:
-                return $"Unknown command {command.Name}. Type /help to see available commands.";
+                return new Feedback($"Unknown command {command.Name}. Type /help to see available commands.", CallerOnly: true);
         }
     }
 

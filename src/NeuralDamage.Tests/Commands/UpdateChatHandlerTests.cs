@@ -15,7 +15,7 @@ public class UpdateChatHandlerTests
     {
         using var db = TestDbContext.Create();
         var notifications = Substitute.For<IChatNotificationService>();
-        var user = new User { ExternalId = "ext-1", Email = "test@test.com" };
+        var user = new User { ExternalId = "ext-1", Email = "test@test.com", DisplayName = "Alice" };
         db.Users.Add(user);
         var chat = new Chat { Name = "Old Name", CreatedById = user.Id };
         db.Chats.Add(chat);
@@ -28,6 +28,8 @@ public class UpdateChatHandlerTests
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(chat.Name).IsEqualTo("New Name");
         await notifications.Received(1).NotifyChatUpdated(chat.Id, Arg.Any<NeuralDamage.Infrastructure.Dtos.ChatDto>());
+        // Renaming from the menu tells the chat, as /rename does.
+        await notifications.Received(1).NotifySystemMessage(chat.Id, "Alice renamed the chat to \"New Name\".");
     }
 
     [Test]
@@ -49,6 +51,7 @@ public class UpdateChatHandlerTests
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(chat.Name).IsEqualTo("Chat");
+        await notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
     [Test]

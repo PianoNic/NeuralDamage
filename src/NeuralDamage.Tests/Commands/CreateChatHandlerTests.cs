@@ -28,6 +28,9 @@ public class CreateChatHandlerTests
         var chat = await db.Chats.FirstOrDefaultAsync();
         await Assert.That(chat).IsNotNull();
         await Assert.That(chat!.Name).IsEqualTo("General");
+        // The caller gets the chat back, so it can open it straight away.
+        await Assert.That(result.Value!.Id).IsEqualTo(chat.Id);
+        await Assert.That(result.Value.Name).IsEqualTo("General");
 
         var member = await db.ChatMembers.FirstOrDefaultAsync(cm => cm.ChatId == chat.Id);
         await Assert.That(member).IsNotNull();
