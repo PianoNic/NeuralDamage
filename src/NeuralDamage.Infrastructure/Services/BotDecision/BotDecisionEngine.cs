@@ -1,170 +1,215 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using NeuralDamage.Infrastructure.Services;
-using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
+/// <summary>
+/// Jev decides what every bot does with a message, in one call: one
+/// <c>choice</c> question per bot, each judged on that bot's persona and the
+/// message alone. The code only turns the probabilities into actions.
+/// </summary>
 public class BotDecisionEngine(
     NeuralDamageDbContext db,
-    Tier3LlmJudge tier3Judge,
-    IChatBotState botState,
+    IDecisionsClient decisions,
+    BotRankingOptions ranking,
     ILogger<BotDecisionEngine> logger,
     IOptions<BotBehaviorOptions>? options = null) : IBotDecisionEngine
 {
-    // Priorities for the responder cap. Being named or replied to beats being
-    // one of "everyone", which beats any Tier 2/3 score (those stay in 0..1).
-    private const double AddressedPriority = 3.0;
-    private const double GroupPriority = 2.0;
+    public const string Reply = "reply";
+    public const string ReactLaugh = "react_laugh";
+    public const string ReactLove = "react_love";
+    public const string ReactWow = "react_wow";
+    public const string ReactThumbs = "react_thumbs";
+    public const string Quiet = "quiet";
+
+    /// <summary>The six options every bot is asked about, and what each means.</summary>
+    public static readonly IReadOnlyDictionary<string, string> Criteria = new Dictionary<string, string>
+    {
+        [Reply] = "They have something to say about it, or it is addressed to them.",
+        [ReactLaugh] = "They find it funny but have nothing to add.",
+        [ReactLove] = "They like it or agree, without writing anything.",
+        [ReactWow] = "It surprises or impresses them.",
+        [ReactThumbs] = "A quick acknowledgement is enough.",
+        [Quiet] = "It doesn't concern them; they scroll past.",
+    };
+
+    private const int HistoryMessages = 10;
+    private const int MaxMessageChars = 400;
+    private const int MaxSystemPromptChars = 500;
 
     private readonly BotBehaviorOptions _options = options?.Value ?? new();
 
-    public async Task<List<Guid>> DecideRespondersAsync(Guid chatId, Message message, List<Bot> candidateBots, CancellationToken ct = default)
+    public async Task<List<BotVerdict>> DecideAsync(Guid chatId, Message message, List<Bot> bots, CancellationToken ct = default)
     {
-        var mustRespond = new List<(Guid BotId, double Priority)>();
-        var groupAddressed = new List<Bot>();
-        var undecided = new List<(Bot Bot, double Score)>();
+        if (bots.Count == 0)
+            return [];
 
-        // Load context for Tier 2
-        var recentMessages = await db.Messages
-            .Where(m => m.ChatId == chatId)
+        var keyed = bots.Select((bot, i) => (Key: $"bot_{i}", Bot: bot)).ToList();
+        var state = await BuildStateAsync(chatId, message, keyed, ct);
+        var questions = keyed.ToDictionary(k => k.Key, k => Question(k.Key));
+
+        DecisionsResponse? response;
+        try
+        {
+            response = await decisions.DecideAsync(state, questions, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Decisions call failed for message {MessageId}", message.Id);
+            response = null;
+        }
+        var decided = response?.Answers is { } answers
+            ? keyed.Select(k => Map(k.Bot, answers.GetValueOrDefault(k.Key))).ToList()
+            : Fallback(message, bots);
+
+        if (response?.Answers is not null)
+            logger.LogInformation("Jev for message {MessageId}: {Answers} (cost {Cost})", message.Id,
+                string.Join(", ", keyed.Select(k => Describe(k.Bot, response.Answers.GetValueOrDefault(k.Key)))),
+                response.Usage?.Cost);
+
+        decided = await RateCapAsync(chatId, decided, ct);
+
+        // The safety cap: the likeliest repliers keep their turn.
+        var capped = decided.Where(d => d.Action == BotAction.Reply)
+            .OrderByDescending(d => d.Probability)
+            .Skip(ranking.MaxReplies)
+            .Select(d => d.Bot.Id)
+            .ToHashSet();
+        if (capped.Count > 0)
+            logger.LogInformation("Reply cap of {Max} reached; {Count} bot(s) stay quiet", ranking.MaxReplies, capped.Count);
+
+        return decided
+            .Select(d => capped.Contains(d.Bot.Id) ? d with { Action = BotAction.Quiet, Emoji = null } : d)
+            .ToList();
+    }
+
+    public static DecisionQuestion Question(string key) => new(
+        "choice",
+        $"What would the person in `bots.{key}`, going only by their persona, naturally do with `new_message` in this group chat?",
+        Criteria);
+
+    /// <summary>The chosen option, if its probability clears the threshold for its kind.</summary>
+    private BotVerdict Map(Bot bot, DecisionAnswer? answer)
+    {
+        if (answer?.Choice is not { } choice)
+            return new BotVerdict(bot, BotAction.Quiet);
+
+        var p = answer.Probabilities?.GetValueOrDefault(choice) ?? answer.Confidence ?? 0;
+        if (choice == Reply && p >= ranking.ReplyThreshold)
+            return new BotVerdict(bot, BotAction.Reply, Probability: p);
+        if (ranking.Emojis.TryGetValue(choice, out var emoji) && p >= ranking.ReactThreshold)
+            return new BotVerdict(bot, BotAction.React, emoji, p);
+        return new BotVerdict(bot, BotAction.Quiet, Probability: p);
+    }
+
+    /// <summary>
+    /// Without Jev, something simple and predictable: the bots a person
+    /// @mentioned or replied to answer, and nobody reacts.
+    /// </summary>
+    private List<BotVerdict> Fallback(Message message, List<Bot> bots)
+    {
+        var decided = bots.Select(bot => new BotVerdict(bot,
+            IsMentioned(message.Content, bot)
+            // Every bot reply links what it answered, so from a bot a reply
+            // link means nothing; only a person replying picks a bot.
+            || (message.SenderUserId is not null && message.ReplyTo?.SenderBotId == bot.Id)
+                ? BotAction.Reply
+                : BotAction.Quiet)).ToList();
+        logger.LogWarning("Jev unavailable for message {MessageId}; only mentioned or replied-to bots answer: {Bots}",
+            message.Id, string.Join(", ", decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot.Name)));
+        return decided;
+    }
+
+    /// <summary>"@Rex", or "@" and one of the bot's aliases, as a whole word.</summary>
+    public static bool IsMentioned(string content, Bot bot)
+    {
+        var names = new[] { bot.Name }.Concat((bot.Aliases ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return names.Any(name => name.Length > 0
+            && Regex.IsMatch(content, $@"(?<!\w)@{Regex.Escape(name)}(?!\w)", RegexOptions.IgnoreCase));
+    }
+
+    /// <summary>
+    /// Anti-spam: a bot that already sent <see cref="BotBehaviorOptions.MaxRepliesPerMinute"/>
+    /// replies in the last minute sits this one out. It counts replies, not
+    /// messages: only the first part of a split reply carries the reply link.
+    /// </summary>
+    private async Task<List<BotVerdict>> RateCapAsync(Guid chatId, List<BotVerdict> decided, CancellationToken ct)
+    {
+        var repliers = decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot.Id).ToList();
+        if (repliers.Count == 0)
+            return decided;
+
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+        var counts = await db.Messages
+            .Where(m => m.ChatId == chatId && m.SenderBotId != null && repliers.Contains(m.SenderBotId.Value)
+                && m.ReplyToId != null && m.CreatedAt >= oneMinuteAgo)
+            .GroupBy(m => m.SenderBotId!.Value)
+            .Select(g => new { BotId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.BotId, g => g.Count, ct);
+
+        return decided.Select(d =>
+        {
+            if (d.Action != BotAction.Reply || counts.GetValueOrDefault(d.Bot.Id) < _options.MaxRepliesPerMinute)
+                return d;
+            logger.LogInformation("Bot {Bot}: rate capped ({Count} replies in the last minute)", d.Bot.Name, counts[d.Bot.Id]);
+            return d with { Action = BotAction.Quiet };
+        }).ToList();
+    }
+
+    private async Task<DecisionState> BuildStateAsync(Guid chatId, Message message, List<(string Key, Bot Bot)> keyed, CancellationToken ct)
+    {
+        var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(ct);
+
+        // What came before this message, not what the other bots are saying
+        // about it right now.
+        var recent = await db.Messages
+            .Where(m => m.ChatId == chatId && m.Id != message.Id && m.CreatedAt <= message.CreatedAt)
             .OrderByDescending(m => m.CreatedAt)
-            .Take(20)
+            .Take(HistoryMessages)
             .Include(m => m.SenderUser)
             .Include(m => m.SenderBot)
             .Include(m => m.Attachments)
             .AsNoTracking()
             .ToListAsync(ct);
+        recent.Reverse();
 
-        var totalBotsInChat = candidateBots.Count;
-        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-        // The two messages just before this one, for the continuation bonus.
-        var justBefore = recentMessages
-            .Where(m => m.Id != message.Id && m.CreatedAt <= message.CreatedAt)
-            .Take(2)
-            .ToList();
-
-        // A person who names someone - another person ("hey alice, ...") or
-        // particular bots ("Byte, tabs or spaces?") - is talking to them. The
-        // bots left unnamed stay out, however recently one of them spoke.
-        var otherPeople = message.SenderUserId is null
-            ? []
-            : await db.ChatMembers
-                .Where(cm => cm.ChatId == chatId && cm.UserId != null && cm.UserId != message.SenderUserId)
-                .Select(cm => cm.User!.DisplayName)
-                .ToListAsync(ct);
-        var addressedToOthers = message.SenderUserId is not null
-            && (otherPeople.Any(name => FuzzyNameMatcher.IsNameMentioned(message.Content, name, null))
-                || candidateBots.Any(b => FuzzyNameMatcher.IsNameMentioned(message.Content, b.Name, b.Aliases)));
-
-        foreach (var bot in candidateBots)
-        {
-            // Tier 1: Hard rules
-            var tier1 = Tier1HardRules.Evaluate(message, bot, isMuted: botState.IsMuted(chatId, bot.Id), isStopped: botState.IsStopped(chatId));
-            if (tier1 != Tier1Result.Undecided)
-                logger.LogInformation("Bot {Bot}: tier 1 says {Tier1}", bot.Name, tier1);
-            if (tier1 == Tier1Result.MustSkip) continue;
-
-            // Anti-spam applies however the bot was addressed: it is what keeps
-            // a live back-and-forth from turning into a flood. It counts replies,
-            // not messages - a reply split in three is one turn, and only its
-            // first part carries the reply link.
-            var repliesLastMinute = recentMessages.Count(m =>
-                m.SenderBotId == bot.Id && m.ReplyToId is not null && m.CreatedAt >= oneMinuteAgo);
-            if (repliesLastMinute >= _options.MaxRepliesPerMinute)
-            {
-                logger.LogInformation("Bot {Bot}: rate capped ({Count} replies in the last minute)", bot.Name, repliesLastMinute);
-                continue;
-            }
-
-            if (tier1 == Tier1Result.MustRespond) { mustRespond.Add((bot.Id, AddressedPriority)); continue; }
-            if (tier1 == Tier1Result.GroupAddressed) { groupAddressed.Add(bot); continue; }
-
-            // Another bot's message that does not name this one: now and then
-            // it chimes in anyway, but Tiers 2 and 3 are for people's messages.
-            if (message.SenderBotId is not null)
-            {
-                if (Random.Shared.NextDouble() < _options.BotChainChance)
-                    mustRespond.Add((bot.Id, 0));
-                continue;
-            }
-
-            if (addressedToOthers)
-            {
-                logger.LogInformation("Bot {Bot}: message is addressed to someone else; skipping", bot.Name);
-                continue;
-            }
-
-            // Tier 2: Weighted score
-            var botMessagesInLast20 = recentMessages.Count(m => m.SenderBotId == bot.Id);
-
-            var context = new Tier2Context(
-                IsGroupQuestion: message.Content.Contains('?'),
-                BotMessagesInLast20: botMessagesInLast20,
-                TotalRecentMessages: recentMessages.Count,
-                // The bot just spoke and a person answered: it is in the conversation.
-                IsContinuation: message.SenderUserId is not null && justBefore.Any(m => m.SenderBotId == bot.Id),
-                // A picture says something even without a caption.
-                MessageLength: message.Content.Length + 20 * message.Attachments.Count,
-                TotalBotsInChat: totalBotsInChat);
-
-            var score = Tier2WeightedScore.ComputeScore(context);
-            logger.LogInformation(
-                "Bot {Bot}: tier 2 score {Score:F2} (respond >= {Respond}, skip < {Skip})",
-                bot.Name, score, Tier2WeightedScore.RespondThreshold, Tier2WeightedScore.SkipThreshold);
-
-            if (score >= Tier2WeightedScore.RespondThreshold) { mustRespond.Add((bot.Id, score)); continue; }
-            if (score < Tier2WeightedScore.SkipThreshold) continue;
-
-            undecided.Add((bot, score));
-        }
-
-        // Said to the room: some of it answers, not all of it.
-        if (groupAddressed.Count > 0)
-        {
-            var count = Random.Shared.Next(1, groupAddressed.Count + 1);
-            mustRespond.AddRange(groupAddressed
-                .OrderBy(_ => Random.Shared.Next())
-                .Take(count)
-                .Select(b => (b.Id, GroupPriority)));
-        }
-
-        // Tier 3 exists to choose between bots. With a single bot in the chat
-        // there is nothing to disambiguate, so asking a model "which of these
-        // one bots should reply?" only adds a round trip and a chance of an
-        // unexplained silence. Tier 2 has already had its say via SkipThreshold.
-        if (undecided.Count > 0 && totalBotsInChat == 1)
-        {
-            logger.LogInformation("Single bot in chat; responding without a tier 3 call");
-            mustRespond.AddRange(undecided.Select(u => (u.Bot.Id, u.Score)));
-            undecided.Clear();
-        }
-
-        // Tier 3: Single Jev call for all undecided bots - unless the cap is
-        // already full, in which case nobody it picks could answer anyway.
-        if (undecided.Count > 0 && mustRespond.Count < _options.MaxRespondersPerMessage)
-        {
-            var history = recentMessages.OrderBy(m => m.CreatedAt).ToList();
-
-            var judged = await tier3Judge.JudgeAsync(message, undecided, history, ct);
-            logger.LogInformation("Tier 3 judged {Judged} of {Undecided} undecided bots as responders",
-                judged.Count, undecided.Count);
-            mustRespond.AddRange(undecided.Where(u => judged.Contains(u.Bot.Id)).Select(u => (u.Bot.Id, u.Score)));
-        }
-
-        // Never more than a couple of bots on one message: the strongest
-        // claims win, ties broken at random.
-        var responders = mustRespond
-            .OrderByDescending(r => r.Priority)
-            .ThenBy(_ => Random.Shared.Next())
-            .Take(_options.MaxRespondersPerMessage)
-            .Select(r => r.BotId)
-            .ToList();
-
-        logger.LogInformation("Decision for chat {ChatId}: {Count} responder(s) of {Candidates} wanting to",
-            chatId, responders.Count, mustRespond.Count);
-        return responders;
+        return new DecisionState(
+            chatName ?? "",
+            recent.Select(Said).ToList(),
+            Said(message) with { ReplyTo = message.ReplyTo is { } target ? SenderName(target) : null },
+            keyed.ToDictionary(k => k.Key, k => new DecisionBot(k.Bot.Name, Persona(k.Bot))));
     }
+
+    private static DecisionMessage Said(Message m) =>
+        new(SenderName(m), m.SenderBotId is not null, BotPromptBuilder.WithImages(m, maxContentChars: MaxMessageChars));
+
+    private static string SenderName(Message m) =>
+        m.SenderUser?.DisplayName is { Length: > 0 } user ? user : m.SenderBot?.Name ?? "Unknown";
+
+    private static string Persona(Bot bot) =>
+        string.Join(" ", new[] { bot.Personality, Trim(bot.SystemPrompt, MaxSystemPromptChars) }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    private static string Trim(string? text, int max) =>
+        text is null ? string.Empty : text.Length > max ? text[..max] + "..." : text;
+
+    private static string Describe(Bot bot, DecisionAnswer? answer) =>
+        answer?.Choice is { } choice
+            ? $"{bot.Name}={choice} {answer.Probabilities?.GetValueOrDefault(choice) ?? answer.Confidence ?? 0:F2}"
+            : $"{bot.Name}=no answer";
 }
+
+/// <summary>The <c>state</c> Jev reads, in the order it is sent.</summary>
+public record DecisionState(
+    string Chat,
+    List<DecisionMessage> RecentMessages,
+    DecisionMessage NewMessage,
+    Dictionary<string, DecisionBot> Bots);
+
+/// <param name="ReplyTo">Who the message answers, when it is a reply; left out otherwise.</param>
+public record DecisionMessage(string Sender, bool IsBot, string Text, string? ReplyTo = null);
+
+public record DecisionBot(string Name, string Persona);

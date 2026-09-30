@@ -43,7 +43,7 @@ public class DecisionsClientTests
 
     private static readonly Dictionary<string, DecisionQuestion> Questions = new()
     {
-        ["bot_0"] = new DecisionQuestion("noul", "Would `bots.bot_0` reply?", new NoulCriteria("yes", "no")),
+        ["bot_0"] = new DecisionQuestion("choice", "What would `bots.bot_0` do?", new Dictionary<string, string> { ["reply"] = "yes", ["quiet"] = "no" }),
     };
 
     private static DecisionsClient Client(StubHandler handler, string? apiKey = "sk-test") =>
@@ -78,9 +78,10 @@ public class DecisionsClientTests
         await Assert.That(body.RootElement.GetProperty("model").GetString()).IsEqualTo(BotRankingOptions.DefaultModel);
         await Assert.That(body.RootElement.GetProperty("state").GetProperty("new_message").GetString()).IsEqualTo("hi");
         var question = body.RootElement.GetProperty("questions").GetProperty("bot_0");
-        await Assert.That(question.GetProperty("type").GetString()).IsEqualTo("noul");
-        await Assert.That(question.GetProperty("criteria").GetProperty("true").GetString()).IsEqualTo("yes");
-        await Assert.That(question.GetProperty("criteria").GetProperty("false").GetString()).IsEqualTo("no");
+        await Assert.That(question.GetProperty("type").GetString()).IsEqualTo("choice");
+        // Option keys are sent as written, not run through the naming policy.
+        await Assert.That(question.GetProperty("criteria").GetProperty("reply").GetString()).IsEqualTo("yes");
+        await Assert.That(question.GetProperty("criteria").GetProperty("quiet").GetString()).IsEqualTo("no");
     }
 
     [Test]

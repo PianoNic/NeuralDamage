@@ -21,9 +21,11 @@ public interface IDecisionsClient
         object state, IReadOnlyDictionary<string, DecisionQuestion> questions, CancellationToken ct = default);
 }
 
-public record DecisionQuestion(string Type, string Instructions, NoulCriteria? Criteria = null);
-
-public record NoulCriteria(string True, string False);
+/// <param name="Criteria">
+/// For a <c>choice</c> question, each option and what it means. Dictionary
+/// keys are sent as written; only property names become snake_case.
+/// </param>
+public record DecisionQuestion(string Type, string Instructions, IReadOnlyDictionary<string, string>? Criteria = null);
 
 public record DecisionsRequest(string Model, object State, IReadOnlyDictionary<string, DecisionQuestion> Questions);
 
@@ -57,7 +59,7 @@ public class DecisionsClient(HttpClient http, BotRankingOptions options, ILogger
         {
             // Ranking is an optimization, so a missing key degrades decision
             // quality rather than taking the API down.
-            logger.LogWarning("BotRanking has no API key (BotRanking:ApiKey or OpenRouter:ApiKey); falling back to Tier 2 scores.");
+            logger.LogWarning("BotRanking has no API key (BotRanking:ApiKey or OpenRouter:ApiKey); falling back to mentions and replies only.");
             return null;
         }
 
@@ -73,7 +75,7 @@ public class DecisionsClient(HttpClient http, BotRankingOptions options, ILogger
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(ct);
-                logger.LogWarning("Decisions API returned {Status}: {Body}; falling back to Tier 2 scores.",
+                logger.LogWarning("Decisions API returned {Status}: {Body}; falling back to mentions and replies only.",
                     (int)response.StatusCode, body.Length > 500 ? body[..500] : body);
                 return null;
             }
@@ -83,7 +85,7 @@ public class DecisionsClient(HttpClient http, BotRankingOptions options, ILogger
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             // Includes the HttpClient timeout, which surfaces as a cancellation.
-            logger.LogWarning(ex, "Decisions API request failed; falling back to Tier 2 scores.");
+            logger.LogWarning(ex, "Decisions API request failed; falling back to mentions and replies only.");
             return null;
         }
     }

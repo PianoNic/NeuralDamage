@@ -43,82 +43,73 @@ public class BotResponseOrchestrator(
             // which was started on upload and is usually done by now.
             await WaitForDescriptionsAsync(scope.ServiceProvider, db, messageId, cts.Token);
 
-            // Load the trigger message. ReplyTo is what lets a reply to a bot
-            // reach that bot - without it the reply-to rule never fires.
+            // ReplyTo is what Jev reads as "this answers Rex", and what the
+            // fallback uses to pick the bot replied to.
             var message = await db.Messages
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
-                .Include(m => m.ReplyTo)
+                .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
+                .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
                 .Include(m => m.Attachments)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == messageId, cts.Token);
 
-            if (message is null) return;
+            if (message is null || message.Content.StartsWith('/')) return;
 
             // A person spoke since this bot message was queued: the bots answer
             // them instead of carrying on among themselves.
             if (depth > 0 && await db.Messages.AnyAsync(m => m.ChatId == chatId && m.SenderUserId != null && m.CreatedAt > message.CreatedAt, cts.Token))
                 return;
 
-            // Get active bots in this chat
-            var botMembers = await db.ChatMembers
-                .Where(cm => cm.ChatId == chatId && cm.BotId != null)
-                .Include(cm => cm.Bot)
-                .Where(cm => cm.Bot!.IsActive)
+            // The only things applied before Jev are the user's own commands -
+            // /mute and /stop - and that a bot never answers itself.
+            var bots = await db.ChatMembers
+                .Where(cm => cm.ChatId == chatId && cm.BotId != null && cm.Bot!.IsActive)
+                .Select(cm => cm.Bot!)
+                .AsNoTracking()
                 .ToListAsync(cts.Token);
-
-            var bots = botMembers.Select(cm => cm.Bot!).ToList();
+            bots = bots.Where(b => b.Id != message.SenderBotId && !botState.IsMuted(chatId, b.Id) && !botState.IsStopped(chatId)).ToList();
             if (bots.Count == 0) return;
 
-            // Decide which bots respond
-            var responderIds = await decisionEngine.DecideRespondersAsync(chatId, message, bots, cts.Token);
+            // Everything the replies read is as it stands now: a bot answers
+            // this message, not what the others are about to say about it.
+            var roundStart = message.CreatedAt > DateTime.UtcNow ? message.CreatedAt : DateTime.UtcNow;
 
-            var responders = bots.Where(b => responderIds.Contains(b.Id)).ToList();
+            var decided = await decisionEngine.DecideAsync(chatId, message, bots, cts.Token);
+
+            // Reactions land on their own timing, alongside the replies.
+            reactions = Task.WhenAll(decided
+                .Where(d => d.Action == BotAction.React && d.Emoji is not null)
+                .Select(d => ReactAsync(chatId, message.Id, d.Bot, d.Emoji!, cts.Token)));
+
+            var responders = decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot).ToList();
             if (responders.Count > 0)
                 responders = await DropBrokenModelsAsync(scope.ServiceProvider, openRouter, notifications, chatId, responders, cts.Token);
-            // A bot never reacts to its own message, and a muted or stopped bot
-            // is told to keep quiet, which rules out reacting too.
-            var silent = bots.Where(b => !responderIds.Contains(b.Id) && b.Id != message.SenderBotId
-                && !botState.IsMuted(chatId, b.Id) && !botState.IsStopped(chatId)).ToList();
-
-            // Reactions run alongside the replies rather than before them: they
-            // wait a moment of their own, and the bots that are actually
-            // answering should not wait on that.
-            reactions = ReactAsync(chatId, message, silent, cts.Token);
-
             if (responders.Count == 0) return;
 
-            // Get participant names for system prompt
+            // Sorted: the database gives no order, and the names are part of
+            // the system prompt, which has to read the same on every call.
             var members = await db.ChatMembers
                 .Where(cm => cm.ChatId == chatId)
                 .Include(cm => cm.User)
                 .Include(cm => cm.Bot)
+                .AsNoTracking()
                 .ToListAsync(cts.Token);
-            // Sorted: the database gives no order, and the names are part of
-            // the system prompt, which has to read the same on every call.
             var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").Order(StringComparer.Ordinal).ToList();
             var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
-
             var canSee = await VisionModelsAsync(openRouter, cts.Token);
-            var storage = scope.ServiceProvider.GetService<IAttachmentStorage>();
+            var round = new Round(chatId, message, roundStart, participantNames, chatName);
 
-            var roundSent = new List<Message>();
-            foreach (var bot in responders)
-            {
-                cts.Token.ThrowIfCancellationRequested();
+            // Every replying bot starts at once, each with its own read delay,
+            // typing, generation and post. Each works in a scope of its own:
+            // an EF context is not safe to share between them.
+            typingShown = true;
+            var replies = await Task.WhenAll(responders.Select(bot => ReplyAsync(round, bot, canSee.Contains(bot.ModelId), cts.Token)));
 
-                // Read the message before starting to type. This also staggers
-                // the bots, so they do not all start at once.
-                await Task.Delay(BotBehaviorOptions.Between(_options.ReadDelayMin, _options.ReadDelayMax), cts.Token);
-
-                typingShown = true;
-                var images = canSee.Contains(bot.ModelId) ? storage : null;
-                roundSent.AddRange(await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, images, cts.Token));
-            }
-
-            // One hop per round, however many bots answered: chaining from each
-            // responder doubled the rounds at every hop, so two chatty bots
-            // could post a couple of dozen messages after a single question.
-            await ChainAsync(scope.ServiceProvider, chatId, bots, roundSent, depth + 1, cts.Token);
+            // Each reply is a new message and gets its own single Jev call,
+            // which is how bots answer each other - up to the hop limit.
+            var chained = replies.Where(r => r.Count > 0).Select(r => r[^1]).OrderBy(m => m.CreatedAt).ToList();
+            await ChainAsync(scope.ServiceProvider, chatId, chained, depth + 1, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -138,6 +129,34 @@ public class BotResponseOrchestrator(
             // Only remove our own entry: a newer round may already have replaced it.
             _activeTasks.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(chatId, cts));
             cts.Dispose();
+        }
+    }
+
+    /// <summary>What every bot replying to one message shares.</summary>
+    private sealed record Round(Guid ChatId, Message Message, DateTime Start, List<string> ParticipantNames, string? ChatName);
+
+    /// <summary>
+    /// One bot's reply, in its own scope: read, type, generate, post. A failure
+    /// is this bot's alone; only cancellation ends the others too.
+    /// </summary>
+    private async Task<List<Message>> ReplyAsync(Round round, Bot bot, bool canSee, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(BotBehaviorOptions.Between(_options.ReadDelayMin, _options.ReadDelayMax), ct);
+
+            using var scope = scopeFactory.CreateScope();
+            var services = scope.ServiceProvider;
+            return await RespondAsync(
+                services.GetRequiredService<NeuralDamageDbContext>(),
+                services.GetRequiredService<IOpenRouterService>(),
+                services.GetRequiredService<IChatNotificationService>(),
+                round, bot, canSee ? services.GetService<IAttachmentStorage>() : null, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Bot {BotName} failed to reply in chat {ChatId}", bot.Name, round.ChatId);
+            return [];
         }
     }
 
@@ -168,25 +187,23 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>
-    /// Offers a round's replies to the bots, so they can answer them - until
-    /// the chain is <see cref="BotBehaviorOptions.MaxBotChainDepth"/> hops long.
+    /// Queues each reply of the round as a message of its own, so every one
+    /// gets its own Jev call - until the chain is
+    /// <see cref="BotBehaviorOptions.MaxBotChainDepth"/> hops long. A reply
+    /// split into parts is queued by its last part; Jev reads the rest as the
+    /// messages before it.
     /// </summary>
-    private async Task ChainAsync(IServiceProvider services, Guid chatId, List<Bot> bots, List<Message> sent, int depth, CancellationToken ct)
+    private async Task ChainAsync(IServiceProvider services, Guid chatId, List<Message> replies, int depth, CancellationToken ct)
     {
-        if (sent.Count == 0 || depth > _options.MaxBotChainDepth)
+        if (replies.Count == 0 || depth > _options.MaxBotChainDepth)
             return;
 
         var queue = services.GetService<IBotResponseQueue>();
         if (queue is null)
             return;
 
-        // The round is decided on once: by the message that names another bot
-        // if there is one, since naming is what makes a bot answer.
-        var chainFrom = sent.FirstOrDefault(m => bots.Any(b =>
-                b.Id != m.SenderBotId && FuzzyNameMatcher.IsNameMentioned(m.Content, b.Name, b.Aliases)))
-            ?? sent[^1];
-
-        await queue.EnqueueAsync(chatId, chainFrom.Id, depth, ct);
+        foreach (var reply in replies)
+            await queue.EnqueueAsync(chatId, reply.Id, depth, ct);
     }
 
     /// <summary>
@@ -198,25 +215,24 @@ public class BotResponseOrchestrator(
         NeuralDamageDbContext db,
         IOpenRouterService openRouter,
         IChatNotificationService notifications,
-        Guid chatId,
-        Message message,
+        Round round,
         Bot bot,
-        List<string> participantNames,
-        string? chatName,
         IAttachmentStorage? images,
         CancellationToken ct)
     {
+        var (chatId, message) = (round.ChatId, round.Message);
         using var typingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var typing = KeepTypingAsync(notifications, chatId, bot, typingCts.Token);
         var sinceTypingStarted = Stopwatch.StartNew();
 
         try
         {
-            // Build history (reload to include any new bot messages from this
-            // round). It starts where this bot's last history started, so the
-            // prompt begins the same way and hits the provider's cache; the
-            // window only moves on once it outgrows the budget.
-            var query = db.Messages.Where(m => m.ChatId == chatId);
+            // The history as it stood when the round started: the bots reply
+            // side by side, not to each other. It starts where this bot's last
+            // history started, so the prompt begins the same way and hits the
+            // provider's cache; the window only moves on once it outgrows the
+            // budget.
+            var query = db.Messages.Where(m => m.ChatId == chatId && m.CreatedAt <= round.Start);
             if (botState.HistoryStart(chatId, bot.Id) is { } historyStart)
                 query = query.Where(m => m.CreatedAt >= historyStart);
             var recentMessages = await query
@@ -234,7 +250,7 @@ public class BotResponseOrchestrator(
             if (window.Count > 0)
                 botState.SetHistoryStart(chatId, bot.Id, window[0].CreatedAt);
 
-            var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames, chatName);
+            var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, round.ParticipantNames, round.ChatName);
             var pictures = images is null ? null : await LoadImagesAsync(images, window, ct);
             var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures);
 
@@ -255,6 +271,12 @@ public class BotResponseOrchestrator(
             // never a near-duplicate of any one of them on its own.
             var ownRecent = OwnRecentReplies(recentMessages, bot.Id);
             var parts = ToParts(responseText, bot.Name);
+            if (parts.Count == 0)
+            {
+                // Only a stage direction or punctuation: nothing worth posting.
+                logger.LogInformation("Bot {BotName} replied with filler only; dropping it", bot.Name);
+                return [];
+            }
             if (Repeats(parts, ownRecent))
             {
                 logger.LogInformation("Bot {BotName} repeated itself; regenerating once", bot.Name);
@@ -463,24 +485,12 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>
-    /// Gives the bots that decided not to reply a chance to react with an
-    /// emoji instead, so a quiet bot is not an invisible one.
+    /// One bot's reaction, after a moment of its own. Runs in its own scope
+    /// because it overlaps the replies, and never throws: a reaction that fails
+    /// to land is not worth failing a round over.
     /// </summary>
-    /// <remarks>
-    /// Runs in its own scope because it overlaps the replies, and never throws:
-    /// a reaction that fails to land is not worth failing a round over.
-    /// </remarks>
-    private async Task ReactAsync(Guid chatId, Message message, List<Bot> silent, CancellationToken ct)
+    private async Task ReactAsync(Guid chatId, Guid messageId, Bot bot, string emoji, CancellationToken ct)
     {
-        // No keyword, no reaction: a random emoji on a sad message is worse than none.
-        var emoji = BotReactionService.SelectEmoji(message.Content);
-        if (emoji is null)
-            return;
-
-        var reactors = silent.Where(_ => BotReactionService.ShouldReact()).ToList();
-        if (reactors.Count == 0)
-            return;
-
         try
         {
             await Task.Delay(BotBehaviorOptions.Between(_options.ReactionDelayMin, _options.ReactionDelayMax), ct);
@@ -488,43 +498,30 @@ public class BotResponseOrchestrator(
             using var scope = scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
             var notifications = scope.ServiceProvider.GetRequiredService<IChatNotificationService>();
-            var reacted = false;
 
-            foreach (var bot in reactors)
-            {
-                var already = await db.Reactions.AnyAsync(
-                    r => r.MessageId == message.Id && r.BotId == bot.Id && r.Emoji == emoji, ct);
-                if (already)
-                    continue;
-
-                db.Reactions.Add(new Reaction { MessageId = message.Id, BotId = bot.Id, Emoji = emoji });
-                reacted = true;
-
-                logger.LogInformation("Bot {BotName} reacted with {Emoji}", bot.Name, emoji);
-            }
-
-            if (!reacted)
+            if (await db.Reactions.AnyAsync(r => r.MessageId == messageId && r.BotId == bot.Id && r.Emoji == emoji, ct))
                 return;
 
+            db.Reactions.Add(new Reaction { MessageId = messageId, BotId = bot.Id, Emoji = emoji });
             await db.SaveChangesAsync(ct);
+            logger.LogInformation("Bot {BotName} reacted with {Emoji}", bot.Name, emoji);
 
-            // One broadcast for the round: the client replaces the whole reaction
-            // set for the message, so sending it per bot would just be redundant.
+            // The client replaces the message's whole reaction set.
             var reactions = await db.Reactions
-                .Where(r => r.MessageId == message.Id)
+                .Where(r => r.MessageId == messageId)
                 .Include(r => r.User)
                 .Include(r => r.Bot)
                 .AsNoTracking()
                 .ToListAsync(ct);
 
-            await notifications.NotifyReactionUpdated(chatId, message.Id, reactions.ToGroups());
+            await notifications.NotifyReactionUpdated(chatId, messageId, reactions.ToGroups());
         }
         catch (OperationCanceledException)
         {
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to add bot reactions in chat {ChatId}", chatId);
+            logger.LogWarning(ex, "Failed to add {BotName}'s reaction in chat {ChatId}", bot.Name, chatId);
         }
     }
 
@@ -542,10 +539,13 @@ public class BotResponseOrchestrator(
 
     /// <summary>
     /// Cleans a model's reply into the messages that would be posted: its own
-    /// name prefix and any lines written for other people go, then it is split.
+    /// name prefix and any lines written for other people go, then it is split,
+    /// and parts that are only a stage direction or punctuation are dropped.
     /// </summary>
     private List<string> ToParts(string reply, string botName) =>
-        BotReplyFormatter.Split(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName)), _options.MaxReplyParts);
+        BotReplyFormatter.Split(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName)), _options.MaxReplyParts)
+            .Where(p => !BotReplyFormatter.IsFiller(p))
+            .ToList();
 
     private static bool Repeats(List<string> parts, List<string> ownRecent) =>
         BotReplyFormatter.IsNearDuplicate(string.Join("\n", parts), ownRecent)

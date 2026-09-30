@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Tests.Helpers;
 using NSubstitute;
 
@@ -12,21 +12,25 @@ namespace NeuralDamage.Tests.Infrastructure;
 public class BotChainTests
 {
     /// <summary>
-    /// Two bots that always answer each other, so only the depth limit and a
-    /// person speaking can end the chain.
+    /// Bots that reply to every message they are asked about, so only the hop
+    /// limit, the rate cap and a person speaking can end the chain.
     /// </summary>
-    private static async Task<(OrchestratorHarness H, BotResponseQueue Queue)> TwoChattyBotsAsync()
+    private static async Task<(OrchestratorHarness H, BotResponseQueue Queue, FakeJev Jev)> ChattyBotsAsync(int botCount = 2)
     {
         var queue = new BotResponseQueue();
-        var h = await OrchestratorHarness.CreateAsync(botCount: 2,
-            configure: s => s.AddSingleton<IBotResponseQueue>(queue));
-        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => [h.Bots.First(b => b.Id != ci.ArgAt<Message>(1).SenderBotId).Id]);
-        h.Reply("one", "two", "three", "four", "five", "six");
-        return (h, queue);
+        var jev = new FakeJev(_ => FakeJev.Chose(BotDecisionEngine.Reply, 0.9));
+        var h = await OrchestratorHarness.CreateAsync(botCount: botCount, configure: s =>
+        {
+            s.AddSingleton<IBotResponseQueue>(queue);
+            jev.Engine()(s);
+        });
+        var n = 0;
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default)
+            .ReturnsForAnyArgs(_ => $"take number {Interlocked.Increment(ref n)}, on a whole new subject");
+        return (h, queue, jev);
     }
 
-    /// <summary>Runs whatever the round queued, the way the per-chat worker would.</summary>
+    /// <summary>Runs whatever the rounds queued, the way the per-chat worker would.</summary>
     private static async Task<List<int>> DrainAsync(OrchestratorHarness h, BotResponseQueue queue)
     {
         var depths = new List<int>();
@@ -38,84 +42,62 @@ public class BotChainTests
         return depths;
     }
 
-    [Test]
-    public async Task BotsAnswerEachOther_UpToThreeHops()
+    private static async Task<int> BotMessagesAsync(OrchestratorHarness h)
     {
-        var (h, queue) = await TwoChattyBotsAsync();
-        using var _ = h;
+        var total = 0;
+        foreach (var bot in h.Bots)
+            total += (await h.MessagesFromAsync(bot)).Count;
+        return total;
+    }
+
+    [Test]
+    public async Task TwoBots_AnswerEachOther_UpToThreeHops()
+    {
+        var (h, queue, _) = await ChattyBotsAsync();
+        using var disposable = h;
         var trigger = await h.SayAsync("what's the best pizza topping?");
 
         await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
         var depths = await DrainAsync(h, queue);
 
-        // One reply to the person, then three bot-to-bot hops, then quiet.
-        await Assert.That(depths).IsEquivalentTo([1, 2, 3]);
-        var botMessages = (await h.MessagesFromAsync(h.Bots[0])).Count + (await h.MessagesFromAsync(h.Bots[1])).Count;
-        await Assert.That(botMessages).IsEqualTo(4);
+        // Both answer the person. Each answer is a message of its own, which
+        // the other bot answers, for three hops.
+        await Assert.That(depths).IsEquivalentTo([1, 1, 2, 2, 3, 3]);
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(8);
     }
 
     [Test]
-    public async Task TwoBotsAnsweringEachRound_StillChainOneHopAtATime()
+    public async Task EveryReplyGetsItsOwnDecision_AndTheChainStaysBounded()
     {
-        var queue = new BotResponseQueue();
-        using var h = await OrchestratorHarness.CreateAsync(botCount: 3,
-            configure: s => s.AddSingleton<IBotResponseQueue>(queue));
-        // Every bot but the sender answers, two per round.
-        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => h.Bots.Where(b => b.Id != ci.ArgAt<Message>(1).SenderBotId).Take(2).Select(b => b.Id).ToList());
-        h.Reply("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten");
+        var (h, queue, jev) = await ChattyBotsAsync(botCount: 4);
+        using var disposable = h;
         var trigger = await h.SayAsync("what's the best pizza topping?");
 
         await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
         var depths = await DrainAsync(h, queue);
 
-        await Assert.That(depths).IsEquivalentTo([1, 2, 3]);
-    }
-
-    [Test]
-    public async Task ChainRound_NeverRepeatsAReplyTheBotAlreadySplitIntoParts()
-    {
-        var queue = new BotResponseQueue();
-        using var h = await OrchestratorHarness.CreateAsync(botCount: 2,
-            configure: s => s.AddSingleton<IBotResponseQueue>(queue));
-        var (gpt, claude) = (h.Bots[0], h.Bots[1]);
-        // Both answer the person; then GPT answers Claude, and Claude GPT.
-        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.ArgAt<Message>(1).SenderBotId switch
-            {
-                null => [gpt.Id, claude.Id],
-                var id when id == claude.Id => [gpt.Id],
-                _ => [claude.Id],
-            });
-        const string answer = "honestly pineapple is the best topping\n\nfight me on this one, I will not back down";
-        // GPT's answer to the person, Claude's, then GPT on the chain round
-        // saying the same thing twice more, regeneration included.
-        h.Reply(answer, "nah, mushrooms all the way", answer, answer);
-        var trigger = await h.SayAsync("what's the best pizza topping?");
-
-        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
-        await DrainAsync(h, queue);
-
-        var fromGpt = await h.MessagesFromAsync(gpt);
-        await Assert.That(fromGpt.Select(m => m.Content)).IsEquivalentTo(
-            ["honestly pineapple is the best topping", "fight me on this one, I will not back down"]);
-        await h.OpenRouter.ReceivedWithAnyArgs(4).GenerateResponseAsync(default!, default, default!, default!, default);
+        await Assert.That(depths.Max()).IsLessThanOrEqualTo(3);
+        // One decision for the person's message, and one per bot reply queued.
+        await Assert.That(jev.Calls.Count).IsEqualTo(depths.Count + 1);
+        // However eager, no bot replies more often than its rate cap allows.
+        var max = new BotBehaviorOptions().MaxRepliesPerMinute;
+        foreach (var bot in h.Bots)
+            await Assert.That((await h.MessagesFromAsync(bot)).Count).IsLessThanOrEqualTo(max);
     }
 
     [Test]
     public async Task PersonSpeaking_EndsTheChain()
     {
-        var (h, queue) = await TwoChattyBotsAsync();
-        using var _ = h;
+        var (h, queue, _) = await ChattyBotsAsync();
+        using var disposable = h;
         var trigger = await h.SayAsync("what's the best pizza topping?");
         await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
 
-        // The person cuts in before the queued bot message is picked up.
+        // The person cuts in before the queued bot messages are picked up.
         await h.SayAsync("never mind, ordering sushi");
         await DrainAsync(h, queue);
 
-        var botMessages = (await h.MessagesFromAsync(h.Bots[0])).Count + (await h.MessagesFromAsync(h.Bots[1])).Count;
-        await Assert.That(botMessages).IsEqualTo(1);
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(2);
     }
 }
 
