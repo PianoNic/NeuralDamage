@@ -7,7 +7,7 @@ import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmKbdImports } from '@spartan-ng/helm/kbd';
 import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
 import { filter, map } from 'rxjs';
-import { APP_VERSION } from '../../core/version';
+import { AppConfig } from '../../core/app-config';
 import { Logo } from '../../shared/logo';
 import { BotDirectory } from '../bots/bot-directory';
 import { NewChatDialog } from '../chat/chat-dialogs';
@@ -43,7 +43,9 @@ import { SearchPalette } from './search-palette';
             <app-logo [size]="32" />
             <span class="flex flex-col leading-tight">
               <span class="text-sm font-semibold">Neural Damage</span>
-              <span class="text-muted-foreground text-xs">v{{ version }}</span>
+              @if (version(); as version) {
+                <span class="text-muted-foreground text-xs">v{{ version }}</span>
+              }
             </span>
           </a>
           <div class="px-2">
@@ -93,7 +95,8 @@ export class AppSidebar implements OnInit {
   private readonly chatList = inject(ChatList);
   protected readonly bots = inject(BotDirectory);
 
-  protected readonly version = APP_VERSION;
+  /** The running server's release, from `/api/app`. */
+  protected readonly version = inject(AppConfig).version;
   protected readonly creating = signal(false);
   protected readonly searching = signal(false);
 
