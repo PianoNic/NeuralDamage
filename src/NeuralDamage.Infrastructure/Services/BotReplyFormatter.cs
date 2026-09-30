@@ -61,6 +61,13 @@ public static partial class BotReplyFormatter
         return headerLine.Replace(prefix.Replace(reply, "", 1), "");
     }
 
+    /// <summary>
+    /// Drops lines that are only "[image from Alice]" or "[image from Alice: ...]".
+    /// That is how the history shows pictures, and some models imitate it,
+    /// inventing images nobody sent. A reply of nothing else ends up empty.
+    /// </summary>
+    public static string StripImageLines(string reply) => ImageLine().Replace(reply, "").Trim();
+
     /// <summary>Removes headings, bold/italic markers and list bullets.</summary>
     public static string StripMarkdown(string text)
     {
@@ -109,6 +116,10 @@ public static partial class BotReplyFormatter
     // The history's line headers: "[Alice]:", "[Alice, 2h later] (→ Bob):".
     [GeneratedRegex(@"^[ \t]*\[[^\]\n]{1,60}\](?:[ \t]*\([^)\n]*\))*[ \t]*:", RegexOptions.Multiline)]
     private static partial Regex SpeakerHeader();
+
+    // A whole line in the history's picture format, with its line break.
+    [GeneratedRegex(@"^[ \t]*\[image from\b[^\n]*\][ \t]*(?:\r?\n|$)", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex ImageLine();
 
     // A symbol repeated past three ("!!!!!!!!"): what a model that has
     // degenerated sends, hundreds of times over. Nobody types more than three.

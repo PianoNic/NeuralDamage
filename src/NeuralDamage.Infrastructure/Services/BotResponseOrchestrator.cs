@@ -251,7 +251,7 @@ public class BotResponseOrchestrator(
                 botState.SetHistoryStart(chatId, bot.Id, window[0].CreatedAt);
 
             var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, round.ParticipantNames, round.ChatName);
-            var pictures = images is null ? null : await LoadImagesAsync(images, window, ct);
+            var pictures = images is null ? null : await LoadImagesAsync(images, window, message.Id, ct);
             var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures);
 
             var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote()], ct);
@@ -382,20 +382,16 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>
-    /// How many of the history's most recent images a vision model gets as
-    /// pictures. Each one is resent on every turn, so older ones go as their
-    /// descriptions instead.
+    /// The pictures a vision model gets as images: only those on the message
+    /// being answered. Every older one goes in as its description, so the
+    /// history before that message is text only. Some providers stop caching
+    /// a prompt altogether once it holds an image, and an image resent on
+    /// every turn would keep the whole history out of their cache.
     /// </summary>
-    public const int MaxHistoryImages = 4;
-
-    private static async Task<Dictionary<Guid, ImagePart>> LoadImagesAsync(IAttachmentStorage storage, List<Message> window, CancellationToken ct)
+    private static async Task<Dictionary<Guid, ImagePart>> LoadImagesAsync(IAttachmentStorage storage, List<Message> window, Guid answeringId, CancellationToken ct)
     {
-        var recent = window
-            .SelectMany(m => m.Attachments)
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(MaxHistoryImages);
         var images = new Dictionary<Guid, ImagePart>();
-        foreach (var attachment in recent)
+        foreach (var attachment in window.Where(m => m.Id == answeringId).SelectMany(m => m.Attachments))
             if (await storage.ReadAllAsync(attachment.ChatId, attachment.Id, ct) is { } data)
                 images[attachment.Id] = new ImagePart(attachment.ContentType, data);
         return images;
@@ -539,11 +535,12 @@ public class BotResponseOrchestrator(
 
     /// <summary>
     /// Cleans a model's reply into the messages that would be posted: its own
-    /// name prefix and any lines written for other people go, then it is split,
-    /// and parts that are only a stage direction or punctuation are dropped.
+    /// name prefix, any lines written for other people and any invented
+    /// "[image from ...]" lines go, then it is split, and parts that are only a
+    /// stage direction or punctuation are dropped.
     /// </summary>
     private List<string> ToParts(string reply, string botName) =>
-        BotReplyFormatter.Split(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName)), _options.MaxReplyParts)
+        BotReplyFormatter.Split(BotReplyFormatter.StripImageLines(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName))), _options.MaxReplyParts)
             .Where(p => !BotReplyFormatter.IsFiller(p))
             .ToList();
 
