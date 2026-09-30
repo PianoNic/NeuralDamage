@@ -102,6 +102,53 @@ public class ImagePromptTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Only the answered message's pictures go as images; older ones go in as their descriptions,
+    /// so the history before it stays text only and cacheable.
+    /// </summary>
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task VisionBot_GetsOnlyTheAnsweredMessagesPictures_AsImages(bool answeredHasAPicture)
+    {
+        var storage = new InMemoryAttachmentStorage();
+        using var h = await OrchestratorHarness.CreateAsync(configure: s => s.AddSingleton<IAttachmentStorage>(storage));
+        var gpt = h.Bots[0];
+        h.OpenRouter.ListModelsAsync(Arg.Any<CancellationToken>()).Returns([
+            new OpenRouterModel(gpt.ModelId, "GPT", 1000) { Capabilities = [ModelMetadata.Vision] },
+        ]);
+        List<ChatMessage>? sent = null;
+        h.Respond(gpt);
+        h.OpenRouter.GenerateResponseAsync(gpt.ModelId, Arg.Any<double>(), Arg.Any<string>(), Arg.Do<List<ChatMessage>>(m => sent = m), Arg.Any<CancellationToken>())
+            .Returns("nice");
+
+        async Task<Attachment> PictureOn(Message message, string description)
+        {
+            var picture = new Attachment { ChatId = h.Chat.Id, UploaderUserId = h.User.Id, MessageId = message.Id, ContentType = "image/png", SizeBytes = 64, Description = description };
+            h.Db.Attachments.Add(picture);
+            await h.Db.SaveChangesAsync();
+            await storage.SaveAsync(h.Chat.Id, picture.Id, TestImages.Png());
+            return picture;
+        }
+
+        var older = await h.SayAsync("breakfast", at: DateTime.UtcNow.AddMinutes(-3));
+        await PictureOn(older, "Pancakes with syrup.");
+        await h.SayAsync("so good", at: DateTime.UtcNow.AddMinutes(-2));
+        var trigger = await h.SayAsync("and dinner");
+        if (answeredHasAPicture)
+            await PictureOn(trigger, "A margherita pizza.");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
+
+        await Assert.That(sent).IsNotNull();
+        var answered = sent!.FindIndex(m => m.Content.Contains("(you're answering this)"));
+        await Assert.That(answered).IsGreaterThan(0);
+        await Assert.That(sent.Take(answered).All(m => m.Images.Count == 0)).IsTrue();
+        await Assert.That(sent.Take(answered).Any(m => m.Content.EndsWith("breakfast\n[image from Alice: Pancakes with syrup.]"))).IsTrue();
+        await Assert.That(sent[answered].Images.Count).IsEqualTo(answeredHasAPicture ? 1 : 0);
+        await Assert.That(sent.Skip(answered + 1).All(m => m.Images.Count == 0)).IsTrue();
+    }
+
     [Test]
     public async Task TheRound_WaitsForTheDescriber_BeforeAnyoneAnswers()
     {
