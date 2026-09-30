@@ -1,7 +1,9 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -10,16 +12,23 @@ using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services;
 
-public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBotState botState, ILogger<BotResponseOrchestrator> logger) : IBotResponseOrchestrator
+public class BotResponseOrchestrator(
+    IServiceScopeFactory scopeFactory,
+    IChatBotState botState,
+    ILogger<BotResponseOrchestrator> logger,
+    IOptions<BotBehaviorOptions>? options = null) : IBotResponseOrchestrator
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeTasks = new();
+    private readonly BotBehaviorOptions _options = options?.Value ?? new();
 
-    public async Task ProcessMessageAsync(Guid chatId, Guid messageId, CancellationToken ct = default)
+    public async Task ProcessMessageAsync(Guid chatId, Guid messageId, int depth = 0, CancellationToken ct = default)
     {
         CancelPendingResponses(chatId);
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _activeTasks[chatId] = cts;
+        var reactions = Task.CompletedTask;
+        var typingShown = false;
 
         try
         {
@@ -29,13 +38,20 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
             var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
             var notifications = scope.ServiceProvider.GetRequiredService<IChatNotificationService>();
 
-            // Load the trigger message
+            // Load the trigger message. ReplyTo is what lets a reply to a bot
+            // reach that bot - without it the reply-to rule never fires.
             var message = await db.Messages
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
+                .Include(m => m.ReplyTo)
                 .FirstOrDefaultAsync(m => m.Id == messageId, cts.Token);
 
             if (message is null) return;
+
+            // A person spoke since this bot message was queued: the bots answer
+            // them instead of carrying on among themselves.
+            if (depth > 0 && await db.Messages.AnyAsync(m => m.ChatId == chatId && m.SenderUserId != null && m.CreatedAt > message.CreatedAt, cts.Token))
+                return;
 
             // Get active bots in this chat
             var botMembers = await db.ChatMembers
@@ -51,14 +67,15 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
             var responderIds = await decisionEngine.DecideRespondersAsync(chatId, message, bots, cts.Token);
 
             var responders = bots.Where(b => responderIds.Contains(b.Id)).ToList();
-            // A muted or stopped bot is told to keep quiet, which rules out reacting too.
-            var silent = bots.Where(b => !responderIds.Contains(b.Id) && !botState.IsMuted(chatId, b.Id) && !botState.IsStopped(chatId)).ToList();
+            // A bot never reacts to its own message, and a muted or stopped bot
+            // is told to keep quiet, which rules out reacting too.
+            var silent = bots.Where(b => !responderIds.Contains(b.Id) && b.Id != message.SenderBotId
+                && !botState.IsMuted(chatId, b.Id) && !botState.IsStopped(chatId)).ToList();
 
-            // Reactions come before replies. They cost nothing - no model call,
-            // just a keyword match - so landing them first means something
-            // visible happens the moment a message is sent, while the bots that
-            // are actually answering are still generating.
-            await ReactAsync(db, notifications, chatId, message, silent, cts.Token);
+            // Reactions run alongside the replies rather than before them: they
+            // wait a moment of their own, and the bots that are actually
+            // answering should not wait on that.
+            reactions = ReactAsync(chatId, message, silent, cts.Token);
 
             if (responders.Count == 0) return;
 
@@ -69,80 +86,156 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
                 .Include(cm => cm.Bot)
                 .ToListAsync(cts.Token);
             var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").ToList();
+            var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
 
-            // Generate responses with stagger
             foreach (var bot in responders)
             {
                 cts.Token.ThrowIfCancellationRequested();
 
-                // Notify typing
-                await notifications.NotifyBotTyping(chatId, bot.Id, bot.Name);
+                // Read the message before starting to type. This also staggers
+                // the bots, so they do not all start at once.
+                await Task.Delay(BotBehaviorOptions.Between(_options.ReadDelayMin, _options.ReadDelayMax), cts.Token);
 
-                // Build history (reload to include any new bot messages from this round)
-                var recentMessages = await db.Messages
-                    .Where(m => m.ChatId == chatId)
-                    .OrderByDescending(m => m.CreatedAt)
-                    .Take(50)
-                    .Include(m => m.SenderUser)
-                    .Include(m => m.SenderBot)
-                    .ToListAsync(cts.Token);
-                recentMessages.Reverse();
+                typingShown = true;
+                var sent = await RespondAsync(db, openRouter, notifications, chatId, message, bot, participantNames, chatName, cts.Token);
+                await ChainAsync(scope.ServiceProvider, chatId, bot, bots, sent, depth + 1, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation("Bot response processing cancelled for chat {ChatId}", chatId);
+            if (typingShown)
+                await NotifyCancelledAsync(chatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing bot responses for chat {ChatId}", chatId);
+        }
+        finally
+        {
+            // Reactions share the round's token, so it must outlive them.
+            await reactions;
 
-                var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames);
-                var history = BotPromptBuilder.BuildHistory(recentMessages, bot.Id);
+            // Only remove our own entry: a newer round may already have replaced it.
+            _activeTasks.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(chatId, cts));
+            cts.Dispose();
+        }
+    }
 
-                // Generate response. Sampling is non-deterministic and a model
-                // run hot will occasionally return nothing at all, so one empty
-                // result is worth a second attempt before giving up - otherwise
-                // the bot just looks broken to the person who asked.
-                string responseText = string.Empty;
-                for (var attempt = 1; attempt <= 2; attempt++)
+    /// <summary>
+    /// Offers a bot's reply to the other bots, so they can answer it - until
+    /// the chain is <see cref="BotBehaviorOptions.MaxBotChainDepth"/> hops long.
+    /// </summary>
+    private async Task ChainAsync(IServiceProvider services, Guid chatId, Bot bot, List<Bot> bots, List<Message> sent, int depth, CancellationToken ct)
+    {
+        if (sent.Count == 0 || depth > _options.MaxBotChainDepth)
+            return;
+
+        var queue = services.GetService<IBotResponseQueue>();
+        if (queue is null)
+            return;
+
+        // A split reply is decided on once: by the part that names another bot
+        // if there is one, since naming is what makes a bot answer.
+        var chainFrom = sent.FirstOrDefault(m => bots.Any(b =>
+                b.Id != bot.Id && FuzzyNameMatcher.IsNameMentioned(m.Content, b.Name, b.Aliases)))
+            ?? sent[^1];
+
+        await queue.EnqueueAsync(chatId, chainFrom.Id, depth, ct);
+    }
+
+    /// <summary>
+    /// One bot's turn: generate while showing it typing, then post the reply -
+    /// split into a few messages if it has separate thoughts - paced like
+    /// someone typing it. Returns the messages it posted.
+    /// </summary>
+    private async Task<List<Message>> RespondAsync(
+        NeuralDamageDbContext db,
+        IOpenRouterService openRouter,
+        IChatNotificationService notifications,
+        Guid chatId,
+        Message message,
+        Bot bot,
+        List<string> participantNames,
+        string? chatName,
+        CancellationToken ct)
+    {
+        using var typingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var typing = KeepTypingAsync(notifications, chatId, bot, typingCts.Token);
+        var sinceTypingStarted = Stopwatch.StartNew();
+
+        try
+        {
+            // Build history (reload to include any new bot messages from this round)
+            var recentMessages = await db.Messages
+                .Where(m => m.ChatId == chatId)
+                .OrderByDescending(m => m.CreatedAt)
+                .Take(50)
+                .Include(m => m.SenderUser)
+                .Include(m => m.SenderBot)
+                .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
+                .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
+                .ToListAsync(ct);
+            recentMessages.Reverse();
+
+            var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames, chatName);
+            var history = BotPromptBuilder.BuildHistory(recentMessages, bot.Id, message.Id);
+
+            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, history, ct);
+            if (string.IsNullOrWhiteSpace(responseText))
+            {
+                // Both attempts failed or came back empty: say so rather than
+                // leave the room waiting on a bot that is never going to answer.
+                await notifications.NotifySystemMessage(chatId, $"{bot.Name} failed to respond.");
+                return [];
+            }
+
+            // Saying the same thing twice is the quickest way to sound like a
+            // bot, so a near-repeat of a recent message gets one more try.
+            var ownRecent = recentMessages.Where(m => m.SenderBotId == bot.Id).TakeLast(5).Select(m => m.Content).ToList();
+            if (BotReplyFormatter.IsNearDuplicate(responseText, ownRecent))
+            {
+                logger.LogInformation("Bot {BotName} repeated itself; regenerating once", bot.Name);
+                var retry = await GenerateAsync(openRouter, bot,
+                    systemPrompt + $"\n\nYou were about to say \"{responseText}\", which repeats something you already said. Say something different.",
+                    history, ct);
+                if (!string.IsNullOrWhiteSpace(retry))
+                    responseText = retry;
+            }
+
+            // Strip any name prefix the model might add
+            var parts = BotReplyFormatter.Split(StripNamePrefix(responseText, bot.Name), _options.MaxReplyParts);
+            var sent = new List<Message>();
+
+            for (var i = 0; i < parts.Count; i++)
+            {
+                // Keep typing for about as long as a person would need for this
+                // part. Generating the first one already took a while, and that
+                // counts: a slow model does not then also type slowly.
+                var remaining = _options.TypingTime(parts[i].Length) - (i == 0 ? sinceTypingStarted.Elapsed : TimeSpan.Zero);
+                if (remaining > TimeSpan.Zero)
+                    await Task.Delay(remaining, ct);
+
+                // Stop the indicator before the last part lands, so a late
+                // heartbeat cannot bring it back after the message.
+                if (i == parts.Count - 1)
                 {
-                    // A model run hot can spiral: at temperature 2 one reasoning
-                    // model spent 2494 tokens thinking and returned nothing, or
-                    // returned garbage. Retrying at the same setting mostly
-                    // reproduces it, so the second attempt backs the temperature
-                    // off to a range these models stay coherent in.
-                    var attemptTemperature = attempt == 1
-                        ? bot.Temperature
-                        : Math.Min(bot.Temperature, 1.0);
-                    try
-                    {
-                        responseText = await openRouter.GenerateResponseAsync(bot.ModelId, attemptTemperature, systemPrompt, history, cts.Token);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to generate response for bot {BotName}", bot.Name);
-                        if (!cts.Token.IsCancellationRequested)
-                            await notifications.NotifySystemMessage(chatId, $"{bot.Name} failed to respond.");
-                        responseText = string.Empty;
-                        break;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(responseText))
-                        break;
-
-                    logger.LogWarning(
-                        "Bot {BotName} returned an empty response for model {ModelId} at temperature {Temperature} (attempt {Attempt} of 2)",
-                        bot.Name, bot.ModelId, attemptTemperature, attempt);
+                    await typingCts.CancelAsync();
+                    await typing;
                 }
 
-                if (string.IsNullOrWhiteSpace(responseText))
-                    continue;
-
-                // Strip any name prefix the model might add
-                responseText = StripNamePrefix(responseText, bot.Name);
-
-                // Save bot message
+                // Only the first part carries the reply link; the rest read as
+                // the same person carrying on.
                 var botMessage = new Message
                 {
                     ChatId = chatId,
                     SenderBotId = bot.Id,
-                    Content = responseText,
-                    ReplyToId = message.Id
+                    Content = parts[i],
+                    ReplyToId = i == 0 ? message.Id : null
                 };
                 db.Messages.Add(botMessage);
-                await db.SaveChangesAsync(cts.Token);
+                await db.SaveChangesAsync(ct);
+                sent.Add(botMessage);
 
                 // Broadcast
                 var loaded = await db.Messages
@@ -152,27 +245,99 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
                     .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
                     .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
                     .AsNoTracking()
-                    .FirstAsync(m => m.Id == botMessage.Id, cts.Token);
+                    .FirstAsync(m => m.Id == botMessage.Id, ct);
                 await notifications.NotifyMessageNew(chatId, loaded.ToDto());
-
-                // Stagger between bots, but never after the last one - a
-                // single-bot chat was paying up to two seconds for nothing.
-                if (!ReferenceEquals(bot, responders[^1]))
-                    await Task.Delay(Random.Shared.Next(400, 1200), cts.Token);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            logger.LogInformation("Bot response processing cancelled for chat {ChatId}", chatId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error processing bot responses for chat {ChatId}", chatId);
+
+            return sent;
         }
         finally
         {
-            _activeTasks.TryRemove(chatId, out _);
-            cts.Dispose();
+            await typingCts.CancelAsync();
+            await typing;
+        }
+    }
+
+    /// <summary>
+    /// Generates a reply, or returns empty when the model gives nothing usable.
+    /// </summary>
+    private async Task<string> GenerateAsync(IOpenRouterService openRouter, Bot bot, string systemPrompt, List<ChatMessage> history, CancellationToken ct)
+    {
+        // Sampling is non-deterministic and a model run hot will occasionally
+        // return nothing at all, so one empty result is worth a second attempt
+        // before giving up - otherwise the bot just looks broken to the person
+        // who asked.
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            // A model run hot can spiral: at temperature 2 one reasoning
+            // model spent 2494 tokens thinking and returned nothing, or
+            // returned garbage. Retrying at the same setting mostly
+            // reproduces it, so the second attempt backs the temperature
+            // off to a range these models stay coherent in.
+            var attemptTemperature = attempt == 1
+                ? bot.Temperature
+                : Math.Min(bot.Temperature, 1.0);
+
+            string responseText;
+            try
+            {
+                responseText = await openRouter.GenerateResponseAsync(bot.ModelId, attemptTemperature, systemPrompt, history, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Failed to generate response for bot {BotName}", bot.Name);
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(responseText))
+                return responseText;
+
+            logger.LogWarning(
+                "Bot {BotName} returned an empty response for model {ModelId} at temperature {Temperature} (attempt {Attempt} of 2)",
+                bot.Name, bot.ModelId, attemptTemperature, attempt);
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Shows the bot typing until <paramref name="ct"/> is cancelled. The event
+    /// is re-sent on a heartbeat, because the client expires an indicator a few
+    /// seconds after the last one - a fixed timer lost it on slow models.
+    /// </summary>
+    private async Task KeepTypingAsync(IChatNotificationService notifications, Guid chatId, Bot bot, CancellationToken ct)
+    {
+        try
+        {
+            do
+            {
+                await notifications.NotifyBotTyping(chatId, bot.Id, bot.Name);
+                if (_options.TypingHeartbeat <= TimeSpan.Zero)
+                    return;
+                await Task.Delay(_options.TypingHeartbeat, ct);
+            }
+            while (!ct.IsCancellationRequested);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send typing for bot {BotName}", bot.Name);
+        }
+    }
+
+    /// <summary>Clears the typing indicators of a round that was cut short.</summary>
+    private async Task NotifyCancelledAsync(Guid chatId)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IChatNotificationService>().NotifyBotResponseCancelled(chatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send response cancelled for chat {ChatId}", chatId);
         }
     }
 
@@ -181,66 +346,77 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBot
     /// emoji instead, so a quiet bot is not an invisible one.
     /// </summary>
     /// <remarks>
-    /// Only messages a person sent reach this orchestrator, so a bot can never
-    /// end up reacting to itself and there is no reply chain to bound - which
-    /// is what the legacy implementation needed its depth check for.
+    /// Runs in its own scope because it overlaps the replies, and never throws:
+    /// a reaction that fails to land is not worth failing a round over.
     /// </remarks>
-    private async Task ReactAsync(
-        NeuralDamageDbContext db,
-        IChatNotificationService notifications,
-        Guid chatId,
-        Message message,
-        List<Bot> silent,
-        CancellationToken ct)
+    private async Task ReactAsync(Guid chatId, Message message, List<Bot> silent, CancellationToken ct)
     {
-        var reacted = false;
-
-        foreach (var bot in silent)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            if (!BotReactionService.ShouldReact())
-                continue;
-
-            var emoji = BotReactionService.SelectEmoji(message.Content);
-            if (string.IsNullOrEmpty(emoji))
-                continue;
-
-            var already = await db.Reactions.AnyAsync(
-                r => r.MessageId == message.Id && r.BotId == bot.Id && r.Emoji == emoji, ct);
-            if (already)
-                continue;
-
-            db.Reactions.Add(new Reaction { MessageId = message.Id, BotId = bot.Id, Emoji = emoji });
-            reacted = true;
-
-            logger.LogInformation("Bot {BotName} reacted with {Emoji}", bot.Name, emoji);
-        }
-
-        if (!reacted)
+        // No keyword, no reaction: a random emoji on a sad message is worse than none.
+        var emoji = BotReactionService.SelectEmoji(message.Content);
+        if (emoji is null)
             return;
 
-        await db.SaveChangesAsync(ct);
+        var reactors = silent.Where(_ => BotReactionService.ShouldReact()).ToList();
+        if (reactors.Count == 0)
+            return;
 
-        // One broadcast for the round: the client replaces the whole reaction
-        // set for the message, so sending it per bot would just be redundant.
-        var reactions = await db.Reactions
-            .Where(r => r.MessageId == message.Id)
-            .Include(r => r.User)
-            .Include(r => r.Bot)
-            .AsNoTracking()
-            .ToListAsync(ct);
+        try
+        {
+            await Task.Delay(BotBehaviorOptions.Between(_options.ReactionDelayMin, _options.ReactionDelayMax), ct);
 
-        await notifications.NotifyReactionUpdated(chatId, message.Id, reactions.ToGroups());
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
+            var notifications = scope.ServiceProvider.GetRequiredService<IChatNotificationService>();
+            var reacted = false;
+
+            foreach (var bot in reactors)
+            {
+                var already = await db.Reactions.AnyAsync(
+                    r => r.MessageId == message.Id && r.BotId == bot.Id && r.Emoji == emoji, ct);
+                if (already)
+                    continue;
+
+                db.Reactions.Add(new Reaction { MessageId = message.Id, BotId = bot.Id, Emoji = emoji });
+                reacted = true;
+
+                logger.LogInformation("Bot {BotName} reacted with {Emoji}", bot.Name, emoji);
+            }
+
+            if (!reacted)
+                return;
+
+            await db.SaveChangesAsync(ct);
+
+            // One broadcast for the round: the client replaces the whole reaction
+            // set for the message, so sending it per bot would just be redundant.
+            var reactions = await db.Reactions
+                .Where(r => r.MessageId == message.Id)
+                .Include(r => r.User)
+                .Include(r => r.Bot)
+                .AsNoTracking()
+                .ToListAsync(ct);
+
+            await notifications.NotifyReactionUpdated(chatId, message.Id, reactions.ToGroups());
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to add bot reactions in chat {ChatId}", chatId);
+        }
     }
 
     public void CancelPendingResponses(Guid chatId)
     {
-        if (_activeTasks.TryRemove(chatId, out var cts))
-        {
-            cts.Cancel();
-            cts.Dispose();
-        }
+        // Cancel only. The round that owns the source is still using its token
+        // and disposes it in its own finally; disposing here made an ordinary
+        // cancel surface as an ObjectDisposedException.
+        if (!_activeTasks.TryRemove(chatId, out var cts))
+            return;
+
+        try { cts.Cancel(); }
+        catch (ObjectDisposedException) { } // the round finished in between; nothing to cancel
     }
 
     private static string StripNamePrefix(string text, string botName)

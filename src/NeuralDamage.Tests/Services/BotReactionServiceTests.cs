@@ -20,11 +20,10 @@ public class BotReactionServiceTests
     }
 
     [Test]
-    public async Task SelectEmoji_NoKeywords_ReturnsFallback()
+    public async Task SelectEmoji_NoKeywords_NoReaction()
     {
         var emoji = BotReactionService.SelectEmoji("the quick brown fox jumps over the lazy dog");
-        await Assert.That(emoji).IsNotNull();
-        await Assert.That(new[] { "👍", "❤️", "😂", "🔥" }).Contains(emoji);
+        await Assert.That(emoji).IsNull();
     }
 
     [Test]

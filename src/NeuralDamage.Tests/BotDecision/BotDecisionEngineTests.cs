@@ -4,6 +4,7 @@ using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
 using NeuralDamage.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace NeuralDamage.Tests.BotDecision;
@@ -48,30 +49,119 @@ public class BotDecisionEngineTests
     }
 
     [Test]
-    public async Task GroupAddress_AllBotsRespond()
+    public async Task GroupAddress_SomeButNotAllBotsRespond()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        var decisions = Substitute.For<IDecisionsClient>();
-        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
-        var engine = new BotDecisionEngine(db, judge, new ChatBotState(), NullLogger<BotDecisionEngine>.Instance);
+        var bot3 = new Bot { Name = "Gemini", ModelId = "google/gemini", SystemPrompt = "x", CreatedById = user.Id };
+        db.Bots.Add(bot3);
+        db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, BotId = bot3.Id });
+        var engine = EngineWithSilentJudge(db);
 
         var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hey everyone what's your opinion?" };
         db.Messages.Add(msg);
         await db.SaveChangesAsync();
 
+        var counts = new HashSet<int>();
+        var answered = new HashSet<Guid>();
+        for (var i = 0; i < 100; i++)
+        {
+            var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2, bot3]);
+            counts.Add(responders.Count);
+            answered.UnionWith(responders);
+        }
+
+        // One or two answer - never the whole room - and not always the same bot.
+        await Assert.That(counts.All(c => c is 1 or 2)).IsTrue();
+        await Assert.That(counts).Contains(1);
+        await Assert.That(answered.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task SomeoneInAStatement_IsNotGroupAddress()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var engine = EngineWithSilentJudge(db);
+
+        var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "someone told me it rains tomorrow" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
         var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
 
-        await Assert.That(responders).Contains(bot1.Id);
-        await Assert.That(responders).Contains(bot2.Id);
+        await Assert.That(responders).IsEmpty();
+    }
+
+    [Test]
+    public async Task EveryBotNamed_CappedAtTwoResponders()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var bot3 = new Bot { Name = "Gemini", ModelId = "google/gemini", SystemPrompt = "x", CreatedById = user.Id };
+        db.Bots.Add(bot3);
+        var engine = EngineWithSilentJudge(db);
+
+        var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "GPT Claude Gemini, what do you think?" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
+        var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2, bot3]);
+
+        await Assert.That(responders.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task NamedBotOverRateCap_SitsItOut()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var engine = EngineWithSilentJudge(db);
+        var earlier = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "go", CreatedAt = DateTime.UtcNow.AddSeconds(-55) };
+        db.Messages.Add(earlier);
+        for (var i = 0; i < 4; i++)
+            db.Messages.Add(new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = $"reply {i}", ReplyToId = earlier.Id, CreatedAt = DateTime.UtcNow.AddSeconds(-50 + i) });
+
+        var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "GPT, one more thing?" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
+        var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
+
+        await Assert.That(responders).DoesNotContain(bot1.Id);
+    }
+
+    [Test]
+    public async Task BotThatJustSpoke_KeepsTheConversationGoing()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var engine = EngineWithSilentJudge(db);
+        db.Messages.Add(new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "what should I cook tonight", CreatedAt = DateTime.UtcNow.AddSeconds(-20) });
+        db.Messages.Add(new Message { ChatId = chat.Id, SenderBotId = bot2.Id, Content = "risotto, obviously", CreatedAt = DateTime.UtcNow.AddSeconds(-10) });
+
+        // No name, no question: only the fact that Claude just spoke points at it.
+        var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "hmm I have never made that before" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
+        var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
+
+        await Assert.That(responders).IsEquivalentTo([bot2.Id]);
+    }
+
+    /// <summary>A Tier 3 that never picks anyone, so only Tiers 1 and 2 decide.</summary>
+    private static BotDecisionEngine EngineWithSilentJudge(NeuralDamage.Infrastructure.NeuralDamageDbContext db, double botChainChance = 0)
+    {
+        // Jev answers with no probabilities at all: every undecided bot counts as 0.
+        var decisions = Substitute.For<IDecisionsClient>();
+        decisions.DecideAsync(Arg.Any<object>(), Arg.Any<IReadOnlyDictionary<string, DecisionQuestion>>(), Arg.Any<CancellationToken>())
+            .Returns(new DecisionsResponse(null, null, [], null));
+        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
+        return new BotDecisionEngine(db, judge, new ChatBotState(), NullLogger<BotDecisionEngine>.Instance,
+            Options.Create(new BotBehaviorOptions { BotChainChance = botChainChance }));
     }
 
     [Test]
     public async Task BotToBotMessage_NoMention_NeitherResponds()
     {
         var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
-        var decisions = Substitute.For<IDecisionsClient>();
-        var judge = new Tier3LlmJudge(decisions, new BotRankingOptions(), NullLogger<Tier3LlmJudge>.Instance);
-        var engine = new BotDecisionEngine(db, judge, new ChatBotState(), NullLogger<BotDecisionEngine>.Instance);
+        var engine = EngineWithSilentJudge(db, botChainChance: 0);
 
         var msg = new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = "I agree with that" };
         db.Messages.Add(msg);
@@ -81,6 +171,21 @@ public class BotDecisionEngineTests
 
         await Assert.That(responders).DoesNotContain(bot1.Id); // sender bot skipped
         await Assert.That(responders).DoesNotContain(bot2.Id); // not mentioned
+    }
+
+    [Test]
+    public async Task BotToBotMessage_NoMention_ChimesInOnTheChance()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var engine = EngineWithSilentJudge(db, botChainChance: 1);
+
+        var msg = new Message { ChatId = chat.Id, SenderBotId = bot1.Id, Content = "I agree with that" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
+        var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
+
+        await Assert.That(responders).IsEquivalentTo([bot2.Id]);
     }
 
     [Test]
