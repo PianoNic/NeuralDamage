@@ -1,0 +1,109 @@
+import { toast } from '@spartan-ng/brain/sonner';
+import { Component, computed, effect, inject, input, OnInit, output, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { HlmButton } from '@spartan-ng/helm/button';
+import { HlmInput } from '@spartan-ng/helm/input';
+import { HlmTextarea } from '@spartan-ng/helm/textarea';
+import { HlmLabel } from '@spartan-ng/helm/label';
+import { HlmAutocompleteImports } from '@spartan-ng/helm/autocomplete';
+import { HlmSliderImports } from '@spartan-ng/helm/slider';
+import { BotDto, OpenRouterModel } from '../../core/models';
+import { BotsService } from '../../api/api/bots.service';
+import { firstValueFrom } from 'rxjs';
+
+@Component({
+  selector: 'app-bot-form',
+  imports: [DecimalPipe, FormsModule, HlmButton, HlmInput, HlmTextarea, HlmLabel, HlmAutocompleteImports, HlmSliderImports],
+  templateUrl: './bot-form.html',
+})
+export class BotForm implements OnInit {
+  private readonly botsApi = inject(BotsService);
+
+  readonly bot = input<BotDto | null>(null);
+  readonly saved = output<void>();
+  readonly cancel = output<void>();
+
+  readonly name = signal('');
+  readonly selectedModel = signal<OpenRouterModel | null>(null);
+  readonly modelSearch = signal('');
+  readonly systemPrompt = signal('');
+  readonly personality = signal('');
+  readonly temperature = signal(0.7);
+  readonly aliases = signal('');
+  readonly availableModels = signal<OpenRouterModel[]>([]);
+  readonly loading = signal(false);
+  readonly isEditing = signal(false);
+
+  readonly filteredModels = computed(() => {
+    const search = this.modelSearch().toLowerCase();
+    if (!search) return this.availableModels();
+    return this.availableModels().filter(
+      (m) => m.name.toLowerCase().includes(search) || m.id.toLowerCase().includes(search),
+    );
+  });
+
+  constructor() {
+    effect(() => {
+      const b = this.bot();
+      if (b) {
+        this.isEditing.set(true);
+        this.name.set(b.name);
+        this.selectedModel.set({ id: b.modelId, name: b.modelId, provider: '', capabilities: [], priceTier: 1 });
+        this.systemPrompt.set(b.systemPrompt);
+        this.personality.set(b.personality ?? '');
+        this.temperature.set(b.temperature);
+        this.aliases.set(b.aliases ?? '');
+      } else {
+        this.isEditing.set(false);
+      }
+    });
+  }
+
+  async ngOnInit() {
+    try {
+      const models = await firstValueFrom(this.botsApi.apiBotsModelsGet());
+      this.availableModels.set(models);
+    } catch {
+      toast.error('Could not load the model list. Check your connection and try again.');
+    }
+  }
+
+  modelToString = (model: OpenRouterModel | null) => model?.name ?? '';
+
+  async onSave() {
+    this.loading.set(true);
+    try {
+      const modelId = this.selectedModel()?.id ?? '';
+      if (this.isEditing()) {
+        const b = this.bot()!;
+        await firstValueFrom(this.botsApi.apiBotsBotIdPut(b.id, {
+          name: this.name(),
+          modelId,
+          systemPrompt: this.systemPrompt(),
+          personality: this.personality() || undefined,
+          temperature: this.temperature(),
+          aliases: this.aliases() || undefined,
+        }));
+      } else {
+        await firstValueFrom(this.botsApi.apiBotsPost({
+          isPublic: true,
+          name: this.name(),
+          modelId,
+          systemPrompt: this.systemPrompt(),
+          personality: this.personality() || undefined,
+          temperature: this.temperature(),
+          aliases: this.aliases() || undefined,
+        }));
+      }
+      this.saved.emit();
+    } catch {
+      toast.error('Could not save the bot. Please try again.');
+    }
+    this.loading.set(false);
+  }
+
+  onCancel() {
+    this.cancel.emit();
+  }
+}

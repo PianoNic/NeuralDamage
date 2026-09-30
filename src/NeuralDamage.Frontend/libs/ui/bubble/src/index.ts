@@ -8,4 +8,9 @@ export * from './lib/hlm-bubble-content';
 export * from './lib/hlm-bubble-group';
 export * from './lib/hlm-bubble-reactions';
 
-export const HlmBubbleImports = [HlmBubble, HlmBubbleContent, HlmBubbleGroup, HlmBubbleReactions] as const;
+export const HlmBubbleImports = [
+  HlmBubble,
+  HlmBubbleContent,
+  HlmBubbleGroup,
+  HlmBubbleReactions,
+] as const;

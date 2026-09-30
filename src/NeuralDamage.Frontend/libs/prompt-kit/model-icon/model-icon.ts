@@ -1,9 +1,8 @@
-// ngx-prompt-kit original — not part of ibelick/prompt-kit.
-// Ported from ngx-prompt-kit 21.x, which shipped this as a generated utility;
-// the 22.x schematics no longer include it.
+// ngx-prompt-kit original — not part of ibelick/prompt-kit
 /**
  * Resolves a brand icon for an AI model from LobeHub's static icon set
- * (https://github.com/lobehub/lobe-icons).
+ * (https://github.com/lobehub/lobe-icons) — pair it with `pk-model-picker` /
+ * `pk-model-list` (which accept an `iconUrl`).
  *
  * Model ids are expected in OpenRouter's `vendor/model` form (e.g.
  * `openai/gpt-4o-mini`). The vendor prefix is normalised (routing markers
@@ -84,7 +83,8 @@ function slugFor(id: string, provider?: string): string | undefined {
 
 /**
  * Icon URL for a model: the vendor's LobeHub brand icon, or a neutral generic
- * glyph when the vendor has no known icon. Always returns a URL.
+ * glyph when the vendor has no known icon. Always returns a URL. Pass the
+ * model's `id` (and optionally `provider` as a fallback vendor).
  */
 export function modelIconUrl(model: { id: string; provider?: string }): string {
   const slug = slugFor(model.id, model.provider);

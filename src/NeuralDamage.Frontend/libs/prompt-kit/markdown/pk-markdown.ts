@@ -1,4 +1,4 @@
-﻿import { isPlatformBrowser } from '@angular/common';
+import { isPlatformBrowser } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -94,7 +94,7 @@ export class PkMarkdown {
     // marked emits author HTML verbatim - it dropped its own sanitize option in
     // v5 and defers to a sanitizer - so parsed output is untrusted. Handing it
     // straight to bypassSecurityTrustHtml would execute <script>, inline event
-    // handlers and javascript: URLs from any message body.
+    // handlers and javascript: URLs from any rendered content.
     if (!isPlatformBrowser(this.platformId)) {
       // No DOM for DOMPurify to work against during SSR. Return the raw string
       // so Angular's own sanitizer strips dangerous markup instead.
@@ -229,6 +229,8 @@ export class PkMarkdown {
             const html = await codeToHtml(code, { lang, theme });
             parsed = new DOMParser().parseFromString(html, 'text/html');
           } catch {
+            // Plain fallback — build a <pre><code>{textContent}</code></pre>.
+            // No innerHTML; textContent escapes for us.
             const pre = document.createElement('pre');
             const codeNode = document.createElement('code');
             codeNode.textContent = code;
@@ -238,6 +240,7 @@ export class PkMarkdown {
             container.replaceWith(wrapper);
             continue;
           }
+          // Shiki returns a single <pre> wrapper. Move it into the body.
           const pre = parsed.body.querySelector('pre');
           if (pre) body.appendChild(pre);
         }
@@ -380,6 +383,11 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Build the static chrome (header bar + body container) for an enhanced
+ * fenced-code block. Built with DOM APIs only so we never pass user-supplied
+ * text through innerHTML.
+ */
 function buildCodeBlockShell(lang: string): HTMLDivElement {
   const wrapper = document.createElement('div');
   wrapper.className =

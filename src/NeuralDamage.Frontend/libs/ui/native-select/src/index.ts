@@ -6,4 +6,8 @@ export * from './lib/hlm-native-select';
 export * from './lib/hlm-native-select-opt-group';
 export * from './lib/hlm-native-select-option';
 
-export const HlmNativeSelectImports = [HlmNativeSelect, HlmNativeSelectOption, HlmNativeSelectOptGroup] as const;
+export const HlmNativeSelectImports = [
+  HlmNativeSelect,
+  HlmNativeSelectOption,
+  HlmNativeSelectOptGroup,
+] as const;
