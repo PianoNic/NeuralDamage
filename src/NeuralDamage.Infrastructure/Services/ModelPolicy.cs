@@ -6,9 +6,10 @@ namespace NeuralDamage.Infrastructure.Services;
 /// Which models a bot may use. The defaults are safe and cheap: only models
 /// with a zero-data-retention endpoint, no <c>:batch</c> variants, and at most
 /// 0.25 / 0.60 dollars per million prompt / completion tokens. A price of zero
-/// on either side means that side is not capped.
+/// on either side means that side is not capped. With reasoning turned off,
+/// models that cannot stop reasoning are refused too.
 /// </summary>
-public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bool ZdrOnly = false, bool ExcludeBatchModels = false)
+public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bool ZdrOnly = false, bool ExcludeBatchModels = false, bool DisableReasoning = false)
 {
     public const decimal DefaultMaxPromptPrice = 0.25m;
     public const decimal DefaultMaxCompletionPrice = 0.60m;
@@ -17,7 +18,8 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
         Price(configuration, "OpenRouter:MaxPromptPrice", DefaultMaxPromptPrice),
         Price(configuration, "OpenRouter:MaxCompletionPrice", DefaultMaxCompletionPrice),
         configuration.GetValue("OpenRouter:ZdrOnly", true),
-        configuration.GetValue("OpenRouter:ExcludeBatchModels", true));
+        configuration.GetValue("OpenRouter:ExcludeBatchModels", true),
+        configuration.GetValue("OpenRouter:DisableReasoning", true));
 
     /// <summary>Unset (or blank, as an empty .env line gives) falls back to the default; an explicit 0 lifts the cap.</summary>
     private static decimal Price(IConfiguration configuration, string key, decimal fallback) =>
@@ -30,14 +32,18 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
     /// is only consulted under <see cref="ZdrOnly"/>.
     /// A model with no pricing, or variable pricing (OpenRouter reports -1 for
     /// routers such as openrouter/auto), cannot be checked, so it is refused
-    /// whenever a price cap is set.
+    /// whenever a price cap is set. <paramref name="reasoningMandatory"/> is
+    /// whether the model always reasons, which only matters under
+    /// <see cref="DisableReasoning"/>: such a model rejects the request to stop.
     /// </summary>
-    public string? Refusal(string modelId, ModelPricing? pricing, IReadOnlySet<string> zdrModelIds)
+    public string? Refusal(string modelId, ModelPricing? pricing, IReadOnlySet<string> zdrModelIds, bool reasoningMandatory = false)
     {
         if (ExcludeBatchModels && modelId.EndsWith(":batch", StringComparison.Ordinal))
             return $"Model '{modelId}' is a batch variant, which cannot answer in a live chat.";
         if (ZdrOnly && !zdrModelIds.Contains(modelId))
             return $"Model '{modelId}' has no zero-data-retention endpoint on OpenRouter.";
+        if (DisableReasoning && reasoningMandatory)
+            return $"Model '{modelId}' always reasons, and reasoning is turned off (OpenRouter:DisableReasoning).";
         if (IsPriceUnlimited)
             return null;
         if (pricing is null || pricing.Prompt < 0 || pricing.Completion < 0)
@@ -54,7 +60,7 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
     public async Task<List<OpenRouterModel>> FilterAsync(IOpenRouterService openRouter, IEnumerable<OpenRouterModel> models, CancellationToken ct = default)
     {
         var zdr = await ZdrIdsAsync(openRouter, ct);
-        return models.Where(m => Refusal(m.Id, m.Pricing, zdr) is null).ToList();
+        return models.Where(m => Refusal(m.Id, m.Pricing, zdr, m.ReasoningMandatory) is null).ToList();
     }
 
     /// <summary>
@@ -65,10 +71,10 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
     public async Task<string?> CheckModelAsync(IOpenRouterService openRouter, string modelId, CancellationToken ct = default)
     {
         var zdr = await ZdrIdsAsync(openRouter, ct);
-        var pricing = IsPriceUnlimited
+        var model = IsPriceUnlimited && !DisableReasoning
             ? null
-            : (await openRouter.ListModelsAsync(ct)).FirstOrDefault(m => m.Id == modelId)?.Pricing;
-        return Refusal(modelId, pricing, zdr);
+            : (await openRouter.ListModelsAsync(ct)).FirstOrDefault(m => m.Id == modelId);
+        return Refusal(modelId, model?.Pricing, zdr, model?.ReasoningMandatory ?? false);
     }
 
     /// <summary>
@@ -116,7 +122,7 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
     {
         if (!catalogue.TryGetValue(modelId, out var model))
             return new ModelStatus(ModelStatus.Missing, $"Model '{modelId}' is no longer offered on OpenRouter.");
-        return Refusal(modelId, model.Pricing, zdrModelIds) is { } refusal
+        return Refusal(modelId, model.Pricing, zdrModelIds, model.ReasoningMandatory) is { } refusal
             ? new ModelStatus(ModelStatus.NotAllowed, refusal)
             : ModelStatus.Ok;
     }

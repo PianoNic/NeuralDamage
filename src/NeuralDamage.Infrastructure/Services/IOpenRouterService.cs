@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Infrastructure.Services;
@@ -19,6 +20,14 @@ public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelP
 
     /// <summary>1 (cheap) to 3 (expensive), relative to the configured price caps.</summary>
     public int PriceTier { get; init; }
+
+    /// <summary>Whether the model takes OpenRouter's <c>reasoning</c> parameter, so its effort can be set.</summary>
+    [JsonIgnore]
+    public bool AcceptsReasoning { get; init; }
+
+    /// <summary>Whether the model always reasons (<c>reasoning.mandatory</c>) and rejects an effort of none.</summary>
+    [JsonIgnore]
+    public bool ReasoningMandatory { get; init; }
 }
 
 public interface IOpenRouterService
