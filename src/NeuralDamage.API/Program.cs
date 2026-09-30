@@ -21,6 +21,7 @@ builder.Services.AddDbContext<NeuralDamageDbContext>(options => options.UseNpgsq
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
+builder.Services.AddSingleton<IChatBotState, ChatBotState>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();
 builder.Services.AddSingleton(ModelPriceCap.FromConfiguration(builder.Configuration));
 builder.Services.AddScoped<IOpenRouterService, OpenRouterAgentService>();

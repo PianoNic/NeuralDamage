@@ -19,4 +19,5 @@ public interface IChatNotificationService
     Task NotifyReactionUpdated(Guid chatId, Guid messageId, List<ReactionGroupDto> reactions);
     Task NotifyBotTyping(Guid chatId, Guid botId, string botName);
     Task NotifyBotResponseCancelled(Guid chatId);
+    Task NotifySystemMessage(Guid chatId, string content);
 }

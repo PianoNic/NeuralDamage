@@ -31,6 +31,7 @@ public class BotReactionOrchestrationTests
         IChatNotificationService Notifications,
         IBotDecisionEngine Decisions,
         IOpenRouterService OpenRouter,
+        IChatBotState BotState,
         Guid ChatId,
         Bot Bot);
 
@@ -59,11 +60,13 @@ public class BotReactionOrchestrationTests
         services.AddSingleton(openRouter);
         var provider = services.BuildServiceProvider();
 
+        var botState = new ChatBotState();
         var orchestrator = new BotResponseOrchestrator(
             provider.GetRequiredService<IServiceScopeFactory>(),
+            botState,
             NullLogger<BotResponseOrchestrator>.Instance);
 
-        return new Harness(orchestrator, db, notifications, decisions, openRouter, chat.Id, bot);
+        return new Harness(orchestrator, db, notifications, decisions, openRouter, botState, chat.Id, bot);
     }
 
     /// <summary>A fresh message each run, so the duplicate guard never hides a reaction.</summary>
@@ -120,6 +123,40 @@ public class BotReactionOrchestrationTests
 
         await Assert.That(await h.Db.Reactions.AnyAsync()).IsFalse();
         await h.Notifications.DidNotReceiveWithAnyArgs().NotifyReactionUpdated(default, default, default!);
+        h.Db.Dispose();
+    }
+
+    [Test]
+    public async Task MutedBot_DoesNotReact()
+    {
+        var h = await BuildAsync();
+        h.BotState.Mute(h.ChatId, h.Bot.Id);
+        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        for (var i = 0; i < Runs; i++)
+        {
+            var message = await AddMessageAsync(h.Db, h.ChatId, $"that is hilarious {i}");
+            await h.Orchestrator.ProcessMessageAsync(h.ChatId, message.Id);
+        }
+
+        await Assert.That(await h.Db.Reactions.AnyAsync()).IsFalse();
+        h.Db.Dispose();
+    }
+
+    [Test]
+    public async Task FailedReply_PostsSystemMessage()
+    {
+        var h = await BuildAsync();
+        h.Decisions.DecideRespondersAsync(Arg.Any<Guid>(), Arg.Any<Message>(), Arg.Any<List<Bot>>(), Arg.Any<CancellationToken>())
+            .Returns([h.Bot.Id]);
+        h.OpenRouter.GenerateResponseAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new HttpRequestException("boom"));
+
+        var message = await AddMessageAsync(h.Db, h.ChatId, "hello");
+        await h.Orchestrator.ProcessMessageAsync(h.ChatId, message.Id);
+
+        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "GPT failed to respond.");
         h.Db.Dispose();
     }
 }

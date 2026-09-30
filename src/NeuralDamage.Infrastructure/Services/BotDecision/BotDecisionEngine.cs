@@ -6,7 +6,7 @@ using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services.BotDecision;
 
-public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judge, ILogger<BotDecisionEngine> logger) : IBotDecisionEngine
+public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judge, IChatBotState botState, ILogger<BotDecisionEngine> logger) : IBotDecisionEngine
 {
     public async Task<List<Guid>> DecideRespondersAsync(Guid chatId, Message message, List<Bot> candidateBots, CancellationToken ct = default)
     {
@@ -28,7 +28,7 @@ public class BotDecisionEngine(NeuralDamageDbContext db, Tier3LlmJudge tier3Judg
         foreach (var bot in candidateBots)
         {
             // Tier 1: Hard rules
-            var tier1 = Tier1HardRules.Evaluate(message, bot, isMuted: false, isStopped: false);
+            var tier1 = Tier1HardRules.Evaluate(message, bot, isMuted: botState.IsMuted(chatId, bot.Id), isStopped: botState.IsStopped(chatId));
             if (tier1 != Tier1Result.Undecided)
                 logger.LogInformation("Bot {Bot}: tier 1 says {Tier1}", bot.Name, tier1);
             if (tier1 == Tier1Result.MustRespond) { mustRespond.Add(bot.Id); continue; }

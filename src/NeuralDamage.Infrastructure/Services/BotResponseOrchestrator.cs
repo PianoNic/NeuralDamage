@@ -10,7 +10,7 @@ using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services;
 
-public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<BotResponseOrchestrator> logger) : IBotResponseOrchestrator
+public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, IChatBotState botState, ILogger<BotResponseOrchestrator> logger) : IBotResponseOrchestrator
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeTasks = new();
 
@@ -51,7 +51,8 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
             var responderIds = await decisionEngine.DecideRespondersAsync(chatId, message, bots, cts.Token);
 
             var responders = bots.Where(b => responderIds.Contains(b.Id)).ToList();
-            var silent = bots.Where(b => !responderIds.Contains(b.Id)).ToList();
+            // A muted or stopped bot is told to keep quiet, which rules out reacting too.
+            var silent = bots.Where(b => !responderIds.Contains(b.Id) && !botState.IsMuted(chatId, b.Id) && !botState.IsStopped(chatId)).ToList();
 
             // Reactions come before replies. They cost nothing - no model call,
             // just a keyword match - so landing them first means something
@@ -112,6 +113,8 @@ public class BotResponseOrchestrator(IServiceScopeFactory scopeFactory, ILogger<
                     catch (Exception ex)
                     {
                         logger.LogWarning(ex, "Failed to generate response for bot {BotName}", bot.Name);
+                        if (!cts.Token.IsCancellationRequested)
+                            await notifications.NotifySystemMessage(chatId, $"{bot.Name} failed to respond.");
                         responseText = string.Empty;
                         break;
                     }

@@ -11,13 +11,17 @@ namespace NeuralDamage.Application.Commands;
 
 public record SendMessageCommand(Guid ChatId, Guid SenderUserId, string Content, Guid? ReplyToId = null) : ICommand<Result>;
 
-public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IBotResponseOrchestrator botOrchestrator, IBotResponseQueue botQueue) : ICommandHandler<SendMessageCommand, Result>
+public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IBotResponseOrchestrator botOrchestrator, IBotResponseQueue botQueue, ISender sender, IChatBotState botState) : ICommandHandler<SendMessageCommand, Result>
 {
     public async ValueTask<Result> Handle(SendMessageCommand request, CancellationToken cancellationToken)
     {
         var isMember = await db.ChatMembers.AnyAsync(cm => cm.ChatId == request.ChatId && cm.UserId == request.SenderUserId, cancellationToken);
         if (!isMember)
             return Result.Failure("You are not a member of this chat.");
+
+        // Commands act on the chat instead of joining the conversation, so they are never saved
+        if (SlashCommand.Parse(request.Content) is not null)
+            return await sender.Send(new RunSlashCommand(request.ChatId, request.SenderUserId, request.Content), cancellationToken);
 
         if (request.ReplyToId is not null)
         {
@@ -28,6 +32,8 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
 
         // Cancel any pending bot responses for this chat (human interrupted)
         botOrchestrator.CancelPendingResponses(request.ChatId);
+        // A new human message lifts /stop (but not /mute)
+        botState.Resume(request.ChatId);
 
         var message = new Message
         {
@@ -53,8 +59,7 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
         await notifications.NotifyMessageNew(request.ChatId, loaded.ToDto());
 
         // Enqueue bot response processing (fire-and-forget via background service)
-        if (!request.Content.StartsWith('/'))
-            await botQueue.EnqueueAsync(request.ChatId, message.Id, cancellationToken);
+        await botQueue.EnqueueAsync(request.ChatId, message.Id, cancellationToken);
 
         return Result.Success();
     }

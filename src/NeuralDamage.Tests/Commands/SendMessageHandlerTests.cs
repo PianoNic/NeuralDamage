@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Mediator;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
@@ -34,7 +35,7 @@ public class SendMessageHandlerTests
         using var _ = db;
         var notifications = MockNotifications();
 
-        var handler = new SendMessageHandler(db, notifications, MockOrchestrator(), MockQueue());
+        var handler = new SendMessageHandler(db, notifications, MockOrchestrator(), MockQueue(), Substitute.For<ISender>(), new ChatBotState());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Hello world"), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -54,7 +55,7 @@ public class SendMessageHandlerTests
         db.Messages.Add(original);
         await db.SaveChangesAsync();
 
-        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
+        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue(), Substitute.For<ISender>(), new ChatBotState());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Reply", original.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -72,7 +73,7 @@ public class SendMessageHandlerTests
         db.Users.Add(outsider);
         await db.SaveChangesAsync();
 
-        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
+        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue(), Substitute.For<ISender>(), new ChatBotState());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, outsider.Id, "Sneaky"), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -85,10 +86,45 @@ public class SendMessageHandlerTests
         var (db, user, chat) = await SetupChatWithMember();
         using var _ = db;
 
-        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue());
+        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue(), Substitute.For<ISender>(), new ChatBotState());
         var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "Reply", Guid.NewGuid()), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error!).Contains("Reply target");
+    }
+
+    [Test]
+    public async Task Handle_SlashCommand_IsRunNotSaved()
+    {
+        var (db, user, chat) = await SetupChatWithMember();
+        using var _ = db;
+        var notifications = MockNotifications();
+        var queue = MockQueue();
+        var sender = Substitute.For<ISender>();
+        sender.Send(Arg.Any<RunSlashCommand>(), Arg.Any<CancellationToken>())
+            .Returns(NeuralDamage.Infrastructure.Models.Result.Success());
+
+        var handler = new SendMessageHandler(db, notifications, MockOrchestrator(), queue, sender, new ChatBotState());
+        var result = await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "/mute Grumpy"), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.Messages.AnyAsync()).IsFalse();
+        await sender.Received(1).Send(new RunSlashCommand(chat.Id, user.Id, "/mute Grumpy"), Arg.Any<CancellationToken>());
+        await notifications.DidNotReceiveWithAnyArgs().NotifyMessageNew(default, default!);
+        await queue.DidNotReceiveWithAnyArgs().EnqueueAsync(default, default);
+    }
+
+    [Test]
+    public async Task Handle_HumanMessage_LiftsStop()
+    {
+        var (db, user, chat) = await SetupChatWithMember();
+        using var _ = db;
+        var botState = new ChatBotState();
+        botState.Stop(chat.Id);
+
+        var handler = new SendMessageHandler(db, MockNotifications(), MockOrchestrator(), MockQueue(), Substitute.For<ISender>(), botState);
+        await handler.Handle(new SendMessageCommand(chat.Id, user.Id, "carry on"), CancellationToken.None);
+
+        await Assert.That(botState.IsStopped(chat.Id)).IsFalse();
     }
 }

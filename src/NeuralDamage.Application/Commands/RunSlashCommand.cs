@@ -1,0 +1,153 @@
+using Mediator;
+using Microsoft.EntityFrameworkCore;
+using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Models;
+using NeuralDamage.Domain;
+
+namespace NeuralDamage.Application.Commands;
+
+/// <summary>A chat message starting with <c>/</c>, split into the command and whatever follows it.</summary>
+public record SlashCommand(string Name, string Argument)
+{
+    /// <summary>What /help prints, in order.</summary>
+    public static readonly IReadOnlyList<(string Usage, string Description)> Help =
+    [
+        ("/stop", "Pause all bots until the next message"),
+        ("/mute BotName", "Stop a bot from replying or reacting"),
+        ("/unmute BotName", "Let a muted bot talk again"),
+        ("/clear", "Clear all messages in this chat"),
+        ("/kick BotName", "Remove a bot from the chat"),
+        ("/rename New Name", "Rename the chat"),
+        ("/bots", "List the bots in this chat"),
+        ("/help", "Show available commands"),
+    ];
+
+    public static SlashCommand? Parse(string content)
+    {
+        var text = content.Trim();
+        if (!text.StartsWith('/'))
+            return null;
+
+        var split = text.IndexOfAny([' ', '\t', '\r', '\n']);
+        return split < 0
+            ? new SlashCommand(text.ToLowerInvariant(), string.Empty)
+            : new SlashCommand(text[..split].ToLowerInvariant(), text[split..].Trim());
+    }
+}
+
+/// <remarks>
+/// Only reached through <see cref="SendMessageCommand"/>, which has already
+/// checked that the user is a member of the chat.
+/// </remarks>
+public record RunSlashCommand(Guid ChatId, Guid UserId, string Content) : ICommand<Result>;
+
+/// <summary>
+/// Runs a slash command and tells the chat what happened with a system message.
+/// Errors are reported the same way rather than failing the request, so the
+/// person who typed the command sees why it did nothing.
+/// </summary>
+public class RunSlashCommandHandler(
+    NeuralDamageDbContext db,
+    ISender sender,
+    IChatNotificationService notifications,
+    IChatBotState botState,
+    IBotResponseOrchestrator botOrchestrator) : ICommandHandler<RunSlashCommand, Result>
+{
+    public async ValueTask<Result> Handle(RunSlashCommand request, CancellationToken cancellationToken)
+    {
+        var command = SlashCommand.Parse(request.Content)!;
+        var feedback = await RunAsync(request.ChatId, request.UserId, command, cancellationToken);
+        await notifications.NotifySystemMessage(request.ChatId, feedback);
+        return Result.Success();
+    }
+
+    private async Task<string> RunAsync(Guid chatId, Guid userId, SlashCommand command, CancellationToken ct)
+    {
+        var userName = await db.Users.Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct) ?? "Someone";
+
+        switch (command.Name)
+        {
+            case "/stop":
+                botState.Stop(chatId);
+                botOrchestrator.CancelPendingResponses(chatId);
+                await notifications.NotifyBotResponseCancelled(chatId);
+                return $"{userName} stopped all bots until the next message.";
+
+            case "/mute":
+            case "/unmute":
+            {
+                if (command.Argument.Length == 0)
+                    return $"Usage: {command.Name} BotName";
+                var bot = await FindBotAsync(chatId, command.Argument, ct);
+                if (bot is null)
+                    return $"Bot '{command.Argument}' not found in this chat.";
+
+                if (command.Name == "/mute")
+                {
+                    botState.Mute(chatId, bot.Id);
+                    return $"{userName} muted {bot.Name}.";
+                }
+                botState.Unmute(chatId, bot.Id);
+                return $"{userName} unmuted {bot.Name}.";
+            }
+
+            case "/clear":
+            {
+                var result = await sender.Send(new ClearChatCommand(chatId, userId), ct);
+                return result.IsSuccess ? $"{userName} cleared the chat." : result.Error!;
+            }
+
+            case "/kick":
+            {
+                if (command.Argument.Length == 0)
+                    return "Usage: /kick BotName";
+                var bot = await FindBotAsync(chatId, command.Argument, ct);
+                if (bot is null)
+                    return $"Bot '{command.Argument}' not found in this chat.";
+
+                var result = await sender.Send(new KickBotCommand(chatId, bot.Id, userId), ct);
+                return result.IsSuccess ? $"{userName} kicked {bot.Name} from the chat." : result.Error!;
+            }
+
+            case "/rename":
+            {
+                if (command.Argument.Length == 0)
+                    return "Usage: /rename New Name";
+                if (command.Argument.Length > 256)
+                    return "Chat names can be at most 256 characters.";
+
+                var result = await sender.Send(new UpdateChatCommand(chatId, command.Argument, userId), ct);
+                return result.IsSuccess ? $"{userName} renamed the chat to \"{command.Argument}\"." : result.Error!;
+            }
+
+            case "/bots":
+            {
+                var bots = await LoadBotsAsync(chatId, ct);
+                if (bots.Count == 0)
+                    return "No bots in this chat.";
+                var lines = bots.Select(b => $"• {b.Name} ({b.ModelId})" + (botState.IsMuted(chatId, b.Id) ? " - muted" : ""));
+                return "Bots in this chat:\n" + string.Join('\n', lines);
+            }
+
+            case "/help":
+                return "Available commands:\n" + string.Join('\n', SlashCommand.Help.Select(h => $"{h.Usage} - {h.Description}"));
+
+            default:
+                return $"Unknown command {command.Name}. Type /help to see available commands.";
+        }
+    }
+
+    private Task<List<Bot>> LoadBotsAsync(Guid chatId, CancellationToken ct) =>
+        db.ChatMembers
+            .Where(cm => cm.ChatId == chatId && cm.BotId != null)
+            .Select(cm => cm.Bot!)
+            .OrderBy(b => b.Name)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+    // Names are matched in memory: a chat has a handful of bots, and this keeps
+    // the case-insensitive comparison identical across database providers.
+    private async Task<Bot?> FindBotAsync(Guid chatId, string name, CancellationToken ct) =>
+        (await LoadBotsAsync(chatId, ct)).FirstOrDefault(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase));
+}
