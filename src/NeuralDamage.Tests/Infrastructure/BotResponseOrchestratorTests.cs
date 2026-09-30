@@ -23,16 +23,24 @@ public class BotPromptBuilderTests
     }
 
     [Test]
-    public async Task BuildSystemPrompt_PersonaComesFirst_WithChatNameAndTime()
+    public async Task BuildSystemPrompt_PersonaComesFirst_WithChatName()
     {
         var bot = new Bot { Name = "GPT", ModelId = "test", SystemPrompt = "You are a grumpy pirate.", CreatedById = Guid.NewGuid() };
 
-        var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"], "Movie Night", new DateTimeOffset(2026, 9, 30, 21, 15, 0, TimeSpan.Zero));
+        var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"], "Movie Night");
 
         await Assert.That(prompt.StartsWith("You are a grumpy pirate.")).IsTrue();
         await Assert.That(prompt).Contains("\"Movie Night\"");
-        await Assert.That(prompt).Contains("Wednesday, 21:15");
         await Assert.That(prompt).DoesNotContain("1-3 sentences");
+    }
+
+    [Test]
+    public async Task BuildNote_CarriesTheTimeAndAnyInstruction()
+    {
+        var note = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 21, 15, 0, TimeSpan.Zero), "Say something different.");
+
+        await Assert.That(note.Role).IsEqualTo(ChatMessage.Note);
+        await Assert.That(note.Content).IsEqualTo("(It is Wednesday, 21:15 local time. Say something different.)");
     }
 
     [Test]

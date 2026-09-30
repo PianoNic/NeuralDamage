@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
 using AgentChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -36,9 +37,11 @@ public class OpenRouterAgentService : IOpenRouterService
     private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly int _maxOutputTokens;
+    private readonly ILogger<OpenRouterAgentService> _logger;
 
-    public OpenRouterAgentService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ModelPolicy policy)
+    public OpenRouterAgentService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ModelPolicy policy, ILogger<OpenRouterAgentService> logger)
     {
+        _logger = logger;
         _apiKey = configuration["OpenRouter:ApiKey"]
             ?? throw new InvalidOperationException("OpenRouter:ApiKey is not configured.");
         _httpClientFactory = httpClientFactory;
@@ -59,10 +62,9 @@ public class OpenRouterAgentService : IOpenRouterService
             .AsIChatClient()
             .AsAIAgent(instructions: systemPrompt);
 
+        var cacheUpTo = MarksCache(modelId) ? history.FindLastIndex(m => m.Role != ChatMessage.Note) : -1;
         var messages = history
-            .Select(m => new AgentChatMessage(
-                m.Role == "assistant" ? ChatRole.Assistant : ChatRole.User,
-                m.Content))
+            .Select(m => new AgentChatMessage(m.Role == "assistant" ? ChatRole.Assistant : ChatRole.User, m.Content))
             .ToList();
 
         var effort = await ReasoningEffortAsync(modelId, ct);
@@ -81,6 +83,8 @@ public class OpenRouterAgentService : IOpenRouterService
                 var raw = new ChatCompletionOptions();
                 if (effort is not null)
                     raw.Patch.Set("$.reasoning.effort"u8, effort);
+                if (cacheUpTo >= 0)
+                    raw.Patch.Set("$.messages"u8, MessagesWithCacheBreakpoint(systemPrompt, history, cacheUpTo));
                 // The model was checked against the policy when the bot was
                 // saved, but a model routes to several providers at different
                 // prices and retention terms, so both also have to hold per
@@ -99,6 +103,12 @@ public class OpenRouterAgentService : IOpenRouterService
         try
         {
             var response = await agent.RunAsync(messages, options: options, cancellationToken: ct);
+            // OpenRouter reports usage on every response; logged so the prompt
+            // cache hit rate can be read off the logs.
+            if (response.Usage is { } usage)
+                _logger.LogInformation(
+                    "Reply from {ModelId}: {PromptTokens} prompt tokens ({CachedTokens} cached), {CompletionTokens} completion tokens ({ReasoningTokens} reasoning)",
+                    modelId, usage.InputTokenCount ?? 0, usage.CachedInputTokenCount ?? 0, usage.OutputTokenCount ?? 0, usage.ReasoningTokenCount ?? 0);
             return response.Text ?? string.Empty;
         }
         catch (ClientResultException ex) when (ex.Status == 404)
@@ -111,6 +121,35 @@ public class OpenRouterAgentService : IOpenRouterService
                 "Switch the bot to an allowed model or relax the policy.", ex);
         }
     }
+
+    /// <summary>
+    /// DeepSeek, OpenAI, Grok and others cache a repeated prompt start on their
+    /// own; Anthropic and Gemini only cache up to a <c>cache_control</c> marker.
+    /// </summary>
+    private static bool MarksCache(string modelId) =>
+        modelId.StartsWith("anthropic/", StringComparison.Ordinal) || modelId.StartsWith("google/", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The request's messages with a <c>cache_control</c> breakpoint on turn
+    /// <paramref name="breakpoint"/>, the last one before the note, so the
+    /// system prompt and the history are cached and only the note is not.
+    /// </summary>
+    /// <remarks>
+    /// Microsoft.Extensions.AI has no way to put the marker on a message part,
+    /// and the OpenAI SDK's own message passed through as the raw
+    /// representation did not reach the wire, so the whole list is written
+    /// here and patched over the one the client serialises.
+    /// </remarks>
+    public static BinaryData MessagesWithCacheBreakpoint(string systemPrompt, List<ChatMessage> history, int breakpoint) =>
+        BinaryData.FromObjectAsJson(history
+            .Select((m, i) => new
+            {
+                role = m.Role == "assistant" ? "assistant" : "user",
+                content = i == breakpoint
+                    ? (object)new[] { new { type = "text", text = m.Content, cache_control = new { type = "ephemeral" } } }
+                    : m.Content,
+            })
+            .Prepend(new { role = "system", content = (object)systemPrompt }));
 
     /// <summary>
     /// Bots are chat participants, not problem solvers: reasoning only makes a

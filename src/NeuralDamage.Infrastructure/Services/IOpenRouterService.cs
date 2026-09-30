@@ -3,7 +3,15 @@ using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Infrastructure.Services;
 
-public record ChatMessage(string Role, string Content);
+/// <summary>A turn sent to the model: "user", "assistant" or <see cref="Note"/>.</summary>
+public record ChatMessage(string Role, string Content)
+{
+    /// <summary>
+    /// A line from the app after the history (the time, a one-off instruction).
+    /// It is sent as a user turn, and never as part of the cached prefix.
+    /// </summary>
+    public const string Note = "note";
+}
 /// <summary>Dollars per million tokens.</summary>
 public record ModelPricing(decimal Prompt, decimal Completion);
 

@@ -87,7 +87,9 @@ public class BotResponseOrchestrator(
                 .Include(cm => cm.User)
                 .Include(cm => cm.Bot)
                 .ToListAsync(cts.Token);
-            var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").ToList();
+            // Sorted: the database gives no order, and the names are part of
+            // the system prompt, which has to read the same on every call.
+            var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").Order(StringComparer.Ordinal).ToList();
             var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
 
             var roundSent = new List<Message>();
@@ -199,11 +201,16 @@ public class BotResponseOrchestrator(
 
         try
         {
-            // Build history (reload to include any new bot messages from this round)
-            var recentMessages = await db.Messages
-                .Where(m => m.ChatId == chatId)
+            // Build history (reload to include any new bot messages from this
+            // round). It starts where this bot's last history started, so the
+            // prompt begins the same way and hits the provider's cache; the
+            // window only moves on once it outgrows the budget.
+            var query = db.Messages.Where(m => m.ChatId == chatId);
+            if (botState.HistoryStart(chatId, bot.Id) is { } historyStart)
+                query = query.Where(m => m.CreatedAt >= historyStart);
+            var recentMessages = await query
                 .OrderByDescending(m => m.CreatedAt)
-                .Take(50)
+                .Take(BotPromptBuilder.MaxHistoryMessages * 2)
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
                 .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
@@ -211,10 +218,14 @@ public class BotResponseOrchestrator(
                 .ToListAsync(ct);
             recentMessages.Reverse();
 
-            var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames, chatName);
-            var history = BotPromptBuilder.BuildHistory(recentMessages, bot.Id, message.Id);
+            var window = BotPromptBuilder.TrimHistory(recentMessages, message.Id);
+            if (window.Count > 0)
+                botState.SetHistoryStart(chatId, bot.Id, window[0].CreatedAt);
 
-            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, history, ct);
+            var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, participantNames, chatName);
+            var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id);
+
+            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote()], ct);
             if (string.IsNullOrWhiteSpace(responseText))
             {
                 // Both attempts failed or came back empty: say so rather than
@@ -234,9 +245,9 @@ public class BotResponseOrchestrator(
             if (Repeats(parts, ownRecent))
             {
                 logger.LogInformation("Bot {BotName} repeated itself; regenerating once", bot.Name);
-                var retry = await GenerateAsync(openRouter, bot,
-                    systemPrompt + $"\n\nYou were about to say \"{responseText}\", which repeats something you already said. Say something different.",
-                    history, ct);
+                var retry = await GenerateAsync(openRouter, bot, systemPrompt,
+                    [.. history, BotPromptBuilder.BuildNote(instruction: $"You were about to say \"{responseText}\", which repeats something you already said. Say something different.")],
+                    ct);
                 parts = string.IsNullOrWhiteSpace(retry) ? [] : ToParts(retry, bot.Name);
                 if (parts.Count == 0 || Repeats(parts, ownRecent))
                 {
