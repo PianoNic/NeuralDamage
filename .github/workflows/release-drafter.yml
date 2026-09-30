@@ -1,10 +1,11 @@
 name: Release Drafter
 
+# Keeps a draft GitHub Release with the next version and its notes up to date on every push to main.
+# Publishing that draft is the one manual step of a release (see release.yaml).
+
 on:
   push:
     branches: [main]
-  pull_request_target:
-    types: [opened, reopened, synchronize, closed]
 
 permissions:
   contents: write
