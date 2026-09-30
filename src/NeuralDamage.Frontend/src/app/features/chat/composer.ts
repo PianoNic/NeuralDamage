@@ -20,7 +20,7 @@ import {
   lucideArrowUp,
   lucideAtSign,
   lucideImagePlus,
-  lucidePlus,
+  lucideSlash,
   lucideReply,
   lucideSmile,
   lucideX,
@@ -117,7 +117,7 @@ export interface Suggestion {
       lucideArrowUp,
       lucideAtSign,
       lucideImagePlus,
-      lucidePlus,
+      lucideSlash,
       lucideReply,
       lucideSmile,
       lucideX,
@@ -285,7 +285,7 @@ export interface Suggestion {
           hlmTooltip="Commands"
           (click)="insertTrigger('/')"
         >
-          <ng-icon name="lucidePlus" />
+          <ng-icon name="lucideSlash" />
         </button>
         <button
           hlmBtn
