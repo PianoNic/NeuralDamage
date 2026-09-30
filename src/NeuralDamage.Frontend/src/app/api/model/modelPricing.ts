@@ -7,13 +7,10 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { ModelPricing } from './modelPricing';
 
 
-export interface OpenRouterModel { 
-    id: string;
-    name: string;
-    contextLength?: number | null;
-    pricing?: ModelPricing;
+export interface ModelPricing { 
+    prompt: number;
+    completion: number;
 }
 

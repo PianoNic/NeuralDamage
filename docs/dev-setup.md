@@ -96,10 +96,23 @@ Oidc__PostLogoutRedirectUri=http://localhost:4200/
 Oidc__Scope=openid profile email
 Oidc__RequireHttpsMetadata=false
 
-# Model price caps ($/million tokens, 0 = no limit)
-MAX_PROMPT_PRICE=0.25
-MAX_COMPLETION_PRICE=0.60
+# OpenRouter
+OpenRouter__ApiKey=sk-or-v1-your-key-here
+
+# Model price caps ($/million tokens, 0 or unset = no limit)
+OpenRouter__MaxPromptPrice=0.25
+OpenRouter__MaxCompletionPrice=0.60
 ```
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `OpenRouter:ApiKey` | - | Required. OpenRouter API key. |
+| `OpenRouter:BaseUrl` | `https://openrouter.ai/api/v1` | Point at a gateway or a local listener. |
+| `OpenRouter:MaxPromptPrice` | `0` (no limit) | Max prompt price, $/million tokens. |
+| `OpenRouter:MaxCompletionPrice` | `0` (no limit) | Max completion price, $/million tokens. |
+| `OpenRouter:MaxOutputTokens` | `1500` | Output token budget per bot reply. Reasoning models spend part of it thinking, so keep headroom. |
+
+With either price cap set, models over it (or without fixed pricing, such as `openrouter/auto`) are left out of `GET /api/bots/models` and refused when a bot is created or switched to them, and every generation call sends the caps as OpenRouter's `provider.max_price`, so a request is never routed to a provider charging more.
 
 To view all configured secrets:
 

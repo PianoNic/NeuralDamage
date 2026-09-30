@@ -7,6 +7,7 @@ export * from './chatMemberDto';
 export * from './createBotRequest';
 export * from './createChatRequest';
 export * from './messageDto';
+export * from './modelPricing';
 export * from './openRouterModel';
 export * from './problemDetails';
 export * from './reactionGroupDto';

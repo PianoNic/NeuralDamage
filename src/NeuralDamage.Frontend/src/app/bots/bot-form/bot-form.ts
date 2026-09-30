@@ -1,5 +1,6 @@
 ﻿import { toast } from '@spartan-ng/brain/sonner';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnInit, output, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmInput } from '@spartan-ng/helm/input';
@@ -14,7 +15,7 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-bot-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, HlmButton, HlmInput, HlmTextarea, HlmLabel, HlmAutocompleteImports, HlmSliderImports],
+  imports: [DecimalPipe, FormsModule,HlmButton, HlmInput, HlmTextarea, HlmLabel, HlmAutocompleteImports, HlmSliderImports],
   templateUrl: './bot-form.html',
 })
 export class BotFormComponent implements OnInit {
