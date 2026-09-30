@@ -1,6 +1,9 @@
-﻿using NeuralDamage.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Domain;
+using NeuralDamage.Tests.Helpers;
 using NSubstitute;
 
 namespace NeuralDamage.Tests.Infrastructure;
@@ -35,12 +38,74 @@ public class BotPromptBuilderTests
     }
 
     [Test]
-    public async Task BuildNote_CarriesTheTimeAndAnyInstruction()
+    public async Task BuildNote_CarriesTheDayAndPartOfDay_AndAnyInstruction()
     {
-        var note = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 21, 15, 0, TimeSpan.Zero), "Say something different.");
+        // 14:51 UTC is 16:51 in Zurich in summer time.
+        var note = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 14, 51, 0, TimeSpan.Zero), "Say something different.",
+            new BotClock(BotClock.Resolve("Europe/Zurich")));
 
         await Assert.That(note.Role).IsEqualTo(ChatMessage.Note);
-        await Assert.That(note.Content).IsEqualTo("(It is Wednesday, 21:15 local time. Say something different.)");
+        await Assert.That(note.Content).IsEqualTo(
+            "(It is Wednesday afternoon. Don't bring up the time or day unless it matters. Say something different.)");
+        await Assert.That(note.Content).DoesNotContain(":");
+        await Assert.That(note.Content).DoesNotContain("51");
+    }
+
+    [Test]
+    public async Task BuildNote_StaysTheSameWithinAPartOfDay()
+    {
+        var clock = new BotClock(BotClock.Resolve("Europe/Zurich"));
+        var first = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 10, 0, 0, TimeSpan.Zero), clock: clock);
+        var later = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 14, 59, 0, TimeSpan.Zero), clock: clock);
+
+        await Assert.That(later.Content).IsEqualTo(first.Content);
+    }
+
+    [Test]
+    [Arguments(0, "night")]
+    [Arguments(4, "night")]
+    [Arguments(5, "morning")]
+    [Arguments(11, "morning")]
+    [Arguments(12, "afternoon")]
+    [Arguments(16, "afternoon")]
+    [Arguments(17, "evening")]
+    [Arguments(21, "evening")]
+    [Arguments(22, "night")]
+    [Arguments(23, "night")]
+    public async Task PartOfDay_Buckets(int hour, string expected)
+    {
+        await Assert.That(BotClock.PartOfDay(hour)).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task BotClock_ConvertsToTheConfiguredZone()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:TimeZone"] = "America/New_York" }).Build();
+        var clock = BotClock.FromConfiguration(config);
+
+        // Thursday 01:30 UTC is still Wednesday evening in New York.
+        await Assert.That(clock.Describe(new DateTimeOffset(2026, 10, 1, 1, 30, 0, TimeSpan.Zero))).IsEqualTo("Wednesday evening");
+        await Assert.That(clock.Local(new DateTimeOffset(2026, 10, 1, 1, 30, 0, TimeSpan.Zero)).Hour).IsEqualTo(21);
+    }
+
+    [Test]
+    public async Task BotClock_DefaultsToZurich()
+    {
+        var clock = BotClock.FromConfiguration(new ConfigurationBuilder().Build());
+
+        await Assert.That(clock.Zone.Id).IsEqualTo(BotClock.Resolve("Europe/Zurich").Id);
+        await Assert.That(clock.Local(new DateTimeOffset(2026, 9, 30, 16, 51, 0, TimeSpan.Zero)).Hour).IsEqualTo(18);
+    }
+
+    [Test]
+    public async Task BotClock_UnknownZone_FallsBackToUtc_WithAWarning()
+    {
+        var logger = new ListLogger<BotClock>();
+
+        var zone = BotClock.Resolve("Mars/Olympus_Mons", logger);
+
+        await Assert.That(zone).IsEqualTo(TimeZoneInfo.Utc);
+        await Assert.That(logger.Entries.Any(e => e.Level == LogLevel.Warning && e.Message.Contains("Mars/Olympus_Mons"))).IsTrue();
     }
 
     [Test]

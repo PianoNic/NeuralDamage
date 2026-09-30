@@ -1,4 +1,3 @@
-using System.Globalization;
 using NeuralDamage.Domain;
 
 namespace NeuralDamage.Infrastructure.Services;
@@ -62,15 +61,16 @@ public static class BotPromptBuilder
     }
 
     /// <summary>
-    /// The line sent after the history: the local time, plus an instruction for
-    /// this call only when there is one. It goes last so that everything before
-    /// it can be served from the provider's prompt cache.
+    /// The line sent after the history: the day and part of day in the chat's
+    /// time zone, plus an instruction for this call only when there is one. It
+    /// goes last so that everything before it can be served from the provider's
+    /// prompt cache; without the minute it also stays the same for hours.
     /// </summary>
-    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null)
+    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null, BotClock? clock = null)
     {
-        var time = (now ?? DateTimeOffset.Now).ToString("dddd, HH:mm", CultureInfo.InvariantCulture);
+        var when = (clock ?? BotClock.Default).Describe(now ?? DateTimeOffset.UtcNow);
         var extra = string.IsNullOrWhiteSpace(instruction) ? "" : $" {instruction.Trim()}";
-        return new ChatMessage(ChatMessage.Note, $"(It is {time} local time.{extra})");
+        return new ChatMessage(ChatMessage.Note, $"(It is {when}. Don't bring up the time or day unless it matters.{extra})");
     }
 
     /// <summary>
