@@ -74,7 +74,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
         }
       }
 
-      @if (message().replyTo; as reply) {
+      @if (showReply() && message().replyTo; as reply) {
         <button
           type="button"
           class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex max-w-full min-w-0 items-center gap-1 rounded-sm text-xs outline-none focus-visible:ring-2"
@@ -174,6 +174,8 @@ export class MessageItem {
   /** The first of a run from one sender, which carries the name and time. */
   readonly first = input(true);
   readonly highlighted = input(false);
+  /** Show the one-line reference to the replied-to message (off when it is the message right above). */
+  readonly showReply = input(true);
   /** Every member's name, to mark their @mentions. */
   readonly memberNames = input<readonly string[]>([]);
 

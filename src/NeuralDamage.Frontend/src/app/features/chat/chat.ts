@@ -98,7 +98,11 @@ const TYPING_SEND_INTERVAL_MS = 3000;
       [open]="peopleOpen()"
       [chatId]="chatId()"
       [members]="members()"
+      [currentUserId]="currentUserId()"
       (closed)="peopleOpen.set(false)"
+      (mention)="mention($event)"
+      (patchMember)="patchMember($event.id, $event.changes)"
+      (refresh)="reloadMembers()"
     />
   `,
 })
@@ -116,6 +120,7 @@ export class Chat implements OnDestroy {
   readonly chatId = input.required<string>();
 
   private readonly list = viewChild(MessageList);
+  private readonly composer = viewChild(Composer);
 
   protected readonly chat = signal<ChatDetailDto | null>(null);
   protected readonly messages = signal<Message[]>([]);
@@ -214,6 +219,8 @@ export class Chat implements OnDestroy {
   private readonly onSystemMessage = (message: SystemMessage) => {
     if (message.chatId !== this.currentChatId) return;
     this.systemMessages.update((list) => [...list, message]);
+    // Notices follow member state changes the hub has no event for (a mute, a model gone bad).
+    void this.reloadMembers();
   };
 
   constructor() {
@@ -260,6 +267,27 @@ export class Chat implements OnDestroy {
               network: 'Message not sent. Check your connection and try again.',
             }),
       );
+    }
+  }
+
+  protected mention(name: string): void {
+    this.peopleOpen.set(false);
+    this.composer()?.insertMention(name);
+  }
+
+  protected patchMember(id: string, changes: Partial<ChatMember>): void {
+    this.members.update((list) => list.map((m) => (m.id === id ? { ...m, ...changes } : m)));
+  }
+
+  /** Re-reads the member list (mute state, model status); the rest of the chat stays as it is. */
+  protected async reloadMembers(): Promise<void> {
+    const chatId = this.currentChatId;
+    if (!chatId) return;
+    try {
+      const chat = await firstValueFrom(this.chatsApi.apiChatsChatIdGet(chatId));
+      if (chatId === this.currentChatId) this.members.set(toChatMembers(chat.members));
+    } catch {
+      // Keep what is shown; the next notice or reload tries again.
     }
   }
 

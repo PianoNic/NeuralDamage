@@ -1,266 +1,382 @@
-import { Component, computed, effect, inject, input, OnDestroy, output, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  input,
+  OnDestroy,
+  output,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucidePencil, lucidePlus, lucideTrash2, lucideUserPlus, lucideX } from '@ng-icons/lucide';
+import {
+  lucideAtSign,
+  lucideEllipsis,
+  lucidePencil,
+  lucidePlus,
+  lucideSearch,
+  lucideTriangleAlert,
+  lucideUserMinus,
+  lucideVolume2,
+  lucideVolumeX,
+  lucideX,
+} from '@ng-icons/lucide';
 import { toast } from '@spartan-ng/brain/sonner';
-import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
-import { HlmAvatarImports } from '@spartan-ng/helm/avatar';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
-import { HlmDialogImports } from '@spartan-ng/helm/dialog';
-import { HlmInput } from '@spartan-ng/helm/input';
-import { HlmSeparator } from '@spartan-ng/helm/separator';
+import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
+import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
+import { HlmPopoverImports } from '@spartan-ng/helm/popover';
 import { HlmSheetImports } from '@spartan-ng/helm/sheet';
+import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
 import { firstValueFrom } from 'rxjs';
+import { BotsService } from '../../api/api/bots.service';
+import { ChatBotsService } from '../../api/api/chatBots.service';
 import { ChatMembersService } from '../../api/api/chatMembers.service';
 import { UserService } from '../../api/api/user.service';
 import { describeApiError } from '../../core/http-errors';
+import { mediaQuery } from '../../core/media-query';
 import { BotDto, ChatMember, UserDto } from '../../core/models';
-import { initials } from '../../shared/initials';
+import { MemberAvatar } from '../../shared/member-avatar';
+import { BotDialog } from '../bots/bot-dialog';
 import { BotDirectory } from '../bots/bot-directory';
-import { BotForm } from './bot-form';
+import { hasModelProblem, modelProblemLabel } from '../bots/bot-meta';
+import { MemberProfile } from './member-profile';
+import { joinedLabel } from './people-meta';
+
+/** Vertical room the profile card needs before it is pushed up from the row it belongs to. */
+const PROFILE_HEIGHT = 340;
 
 /**
- * Who is in the chat, in a sheet from the right: people (invite more), bots in the chat, and the
- * bots that could join. Issue #54 redesigns this; the behaviour is the members panel's.
+ * Who is in the chat, in a sheet from the right: bots, then people. A row opens a profile card beside
+ * the sheet; its menu has the quick actions. "Add" invites people and adds public bots, or makes a
+ * new bot for this chat.
  */
 @Component({
   selector: 'app-people-sheet',
   imports: [
     NgIcon,
-    HlmAlertDialogImports,
-    HlmAvatarImports,
     HlmBadge,
     HlmButton,
-    HlmDialogImports,
-    HlmInput,
-    HlmSeparator,
+    HlmDropdownMenuImports,
+    HlmInputGroupImports,
+    HlmPopoverImports,
     HlmSheetImports,
-    BotForm,
+    HlmTooltipImports,
+    MemberAvatar,
+    MemberProfile,
+    BotDialog,
   ],
-  providers: [provideIcons({ lucidePencil, lucidePlus, lucideTrash2, lucideUserPlus, lucideX })],
+  providers: [
+    provideIcons({
+      lucideAtSign,
+      lucideEllipsis,
+      lucidePencil,
+      lucidePlus,
+      lucideSearch,
+      lucideTriangleAlert,
+      lucideUserMinus,
+      lucideVolume2,
+      lucideVolumeX,
+      lucideX,
+    }),
+  ],
   template: `
-    <hlm-sheet side="right" [state]="open() ? 'open' : 'closed'" (closed)="closed.emit()">
-      <hlm-sheet-content *hlmSheetPortal="let ctx" class="w-full gap-0 p-0 sm:max-w-sm">
-        <hlm-sheet-header class="border-b">
-          <h2 hlmSheetTitle>People</h2>
-          <p hlmSheetDescription>
-            {{ bots().length }} {{ bots().length === 1 ? 'bot' : 'bots' }},
-            {{ people().length }} {{ people().length === 1 ? 'person' : 'people' }}
-          </p>
-        </hlm-sheet-header>
+    <hlm-sheet side="right" [state]="open() ? 'open' : 'closed'" (closed)="onSheetClosed()">
+      <hlm-sheet-content
+        *hlmSheetPortal="let ctx"
+        [showCloseButton]="false"
+        class="w-full gap-0 p-0 sm:max-w-sm"
+      >
+        <div #panel class="flex min-h-0 flex-1 flex-col gap-3.5 p-4">
+          <div class="flex items-start gap-2">
+            <div class="flex flex-1 flex-col gap-1">
+              <h2 hlmSheetTitle>People</h2>
+              <p hlmSheetDescription>{{ members().length }} in this chat</p>
+            </div>
 
-        <div class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
-          <section class="flex flex-col gap-1">
-            <h3 class="text-muted-foreground px-2 text-xs font-medium">People</h3>
-            @for (member of people(); track member.id) {
-              <div class="hover:bg-muted/50 flex items-center gap-3 rounded-md px-2 py-1.5">
-                <hlm-avatar size="sm">
-                  @if (member.avatarUrl) {
-                    <img hlmAvatarImage [src]="member.avatarUrl" alt="" />
+            <hlm-popover align="end" [sideOffset]="6" (stateChanged)="addOpen.set($event === 'open')">
+              <button hlmBtn hlmPopoverTrigger variant="outline" size="sm">
+                <ng-icon name="lucidePlus" />
+                Add
+              </button>
+              <hlm-popover-content *hlmPopoverPortal="let popover" class="w-80 gap-1 p-2">
+                <div hlmInputGroup class="mb-1">
+                  <input
+                    hlmInputGroupInput
+                    type="search"
+                    placeholder="Search people and bots"
+                    aria-label="Search people and bots to add"
+                    [value]="addQuery()"
+                    (input)="addQuery.set($any($event.target).value)"
+                  />
+                  <div hlmInputGroupAddon><ng-icon name="lucideSearch" /></div>
+                </div>
+                <div class="flex max-h-80 flex-col gap-0.5 overflow-y-auto">
+                  @if (addableBots().length) {
+                    <p class="text-muted-foreground px-2 pt-1 text-xs font-medium">Public bots</p>
+                    @for (bot of addableBots(); track bot.id) {
+                      <button type="button" [class]="pickClass" (click)="addBot(bot)">
+                        <app-member-avatar [name]="bot.name" [avatarUrl]="bot.avatarUrl" [modelId]="bot.modelId" [px]="24" />
+                        <span class="flex min-w-0 flex-1 flex-col leading-tight">
+                          <span class="truncate text-sm">{{ bot.name }}</span>
+                          @if (bot.personality) {
+                            <span class="text-muted-foreground truncate text-xs">{{ bot.personality }}</span>
+                          }
+                        </span>
+                        <ng-icon name="lucidePlus" class="text-muted-foreground" />
+                      </button>
+                    }
                   }
-                  <span hlmAvatarFallback class="text-[10px]">{{ initialsOf(member.displayName) }}</span>
-                </hlm-avatar>
-                <span class="flex-1 truncate text-sm">{{ member.displayName }}</span>
-                @if (member.role === 'Owner') {
-                  <span hlmBadge variant="outline">Owner</span>
-                } @else {
-                  <button
-                    hlmBtn
-                    variant="ghost"
-                    size="icon-xs"
-                    [attr.aria-label]="'Remove ' + member.displayName"
-                    (click)="removeMember(member.id)"
-                  >
-                    <ng-icon name="lucideX" />
-                  </button>
-                }
-              </div>
-            }
-
-            <input
-              hlmInput
-              type="search"
-              class="mt-2"
-              placeholder="Invite by name or email…"
-              aria-label="Search people to invite"
-              [value]="inviteQuery()"
-              (input)="inviteQuery.set($any($event.target).value)"
-            />
-            @for (user of invitable(); track user.id) {
-              <div class="hover:bg-muted/50 flex items-center gap-3 rounded-md px-2 py-1.5">
-                <hlm-avatar size="sm">
-                  @if (user.avatarUrl) {
-                    <img hlmAvatarImage [src]="user.avatarUrl" alt="" />
+                  @if (invitable().length) {
+                    <p class="text-muted-foreground px-2 pt-1 text-xs font-medium">People</p>
+                    @for (user of invitable(); track user.id) {
+                      <button type="button" [class]="pickClass" (click)="invite(user)">
+                        <app-member-avatar [name]="user.displayName || user.email" [avatarUrl]="user.avatarUrl" [px]="24" />
+                        <span class="flex min-w-0 flex-1 flex-col leading-tight">
+                          <span class="truncate text-sm">{{ user.displayName || user.email }}</span>
+                          @if (user.displayName) {
+                            <span class="text-muted-foreground truncate text-xs">{{ user.email }}</span>
+                          }
+                        </span>
+                        <ng-icon name="lucidePlus" class="text-muted-foreground" />
+                      </button>
+                    }
                   }
-                  <span hlmAvatarFallback class="text-[10px]">{{ initialsOf(user.displayName || user.email) }}</span>
-                </hlm-avatar>
-                <div class="min-w-0 flex-1 leading-tight">
-                  <span class="block truncate text-sm">{{ user.displayName || user.email }}</span>
-                  @if (user.displayName) {
-                    <span class="text-muted-foreground block truncate text-xs">{{ user.email }}</span>
+                  @if (!addableBots().length && !invitable().length) {
+                    <p class="text-muted-foreground px-2 py-3 text-center text-xs">
+                      {{ addQuery().trim() ? 'Nothing matches.' : 'Everyone is already here.' }}
+                    </p>
                   }
                 </div>
-                <button
-                  hlmBtn
-                  variant="outline"
-                  size="icon-xs"
-                  [attr.aria-label]="'Invite ' + (user.displayName || user.email)"
-                  (click)="invite(user.id)"
-                >
-                  <ng-icon name="lucideUserPlus" />
-                </button>
-              </div>
-            } @empty {
-              <p class="text-muted-foreground px-2 text-xs">
-                {{ inviteQuery().trim() ? 'Nobody matches.' : 'Everyone is already here.' }}
-              </p>
-            }
-          </section>
-
-          <section class="flex flex-col gap-1">
-            <h3 class="text-muted-foreground px-2 text-xs font-medium">Bots in this chat</h3>
-            @for (member of bots(); track member.id) {
-              <div class="hover:bg-muted/50 flex items-center gap-3 rounded-md px-2 py-1.5">
-                <hlm-avatar size="sm">
-                  @if (member.avatarUrl) {
-                    <img hlmAvatarImage [src]="member.avatarUrl" alt="" />
-                  }
-                  <span hlmAvatarFallback class="text-[10px]">{{ initialsOf(member.displayName) }}</span>
-                </hlm-avatar>
-                <span class="flex-1 truncate text-sm">{{ member.displayName }}</span>
-                <span hlmBadge variant="secondary">Bot</span>
-                <button
-                  hlmBtn
-                  variant="ghost"
-                  size="icon-xs"
-                  [attr.aria-label]="'Remove ' + member.displayName"
-                  (click)="removeMember(member.id)"
-                >
-                  <ng-icon name="lucideX" />
-                </button>
-              </div>
-            } @empty {
-              <p class="text-muted-foreground px-2 text-xs">No bots yet. Add one below.</p>
-            }
-          </section>
-
-          <hlm-separator />
-
-          <section class="flex flex-col gap-1">
-            <h3 class="text-muted-foreground px-2 text-xs font-medium">Add a bot</h3>
-            <input
-              hlmInput
-              type="search"
-              class="mb-1"
-              placeholder="Search bots…"
-              aria-label="Search bots"
-              [value]="botQuery()"
-              (input)="botQuery.set($any($event.target).value)"
-            />
-            @for (bot of available(); track bot.id) {
-              <div class="hover:bg-muted/50 flex items-center gap-3 rounded-md px-2 py-1.5">
-                <hlm-avatar size="sm">
-                  @if (bot.avatarUrl) {
-                    <img hlmAvatarImage [src]="bot.avatarUrl" alt="" />
-                  }
-                  <span hlmAvatarFallback class="text-[10px]">{{ initialsOf(bot.name) }}</span>
-                </hlm-avatar>
-                <div class="min-w-0 flex-1 leading-tight">
-                  <span class="block truncate text-sm">{{ bot.name }}</span>
-                  <span class="text-muted-foreground block truncate text-xs">{{ bot.modelId }}</span>
-                </div>
-                <button hlmBtn variant="outline" size="icon-xs" [attr.aria-label]="'Add ' + bot.name" (click)="addBot(bot.id)">
+                <button hlmBtn variant="ghost" size="sm" class="mt-1 justify-start" (click)="popover.close(); newBot()">
                   <ng-icon name="lucidePlus" />
+                  New bot for this chat
                 </button>
-                <button hlmBtn variant="ghost" size="icon-xs" [attr.aria-label]="'Edit ' + bot.name" (click)="editBot(bot)">
-                  <ng-icon name="lucidePencil" />
-                </button>
-                <button hlmBtn variant="ghost" size="icon-xs" [attr.aria-label]="'Delete ' + bot.name" (click)="deletingBot.set(bot)">
-                  <ng-icon name="lucideTrash2" />
-                </button>
-              </div>
-            } @empty {
-              <p class="text-muted-foreground px-2 text-xs">No other bots.</p>
-            }
-            <button hlmBtn variant="outline" class="mt-2" (click)="editBot(null)">
-              <ng-icon name="lucidePlus" />
-              Create a bot
+              </hlm-popover-content>
+            </hlm-popover>
+
+            <button hlmBtn variant="ghost" size="icon-sm" aria-label="Close" (click)="ctx.close()">
+              <ng-icon name="lucideX" />
             </button>
-          </section>
+          </div>
+
+          <div class="-mx-1 flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-1">
+            @for (group of groups(); track group.label) {
+              <section class="flex flex-col" [attr.aria-label]="group.label">
+                <h3 class="text-muted-foreground flex items-center gap-1.5 pb-1 text-xs font-medium">
+                  {{ group.label }}<span class="tabular-nums">{{ group.members.length }}</span>
+                </h3>
+                <ul class="-mx-1 flex flex-col gap-0.5">
+                  @for (member of group.members; track member.id) {
+                    <li
+                      class="group/row hover:bg-muted/60 flex items-center gap-0.5 rounded-lg pe-1"
+                      [class.bg-muted]="profileId() === member.id"
+                    >
+                      <button
+                        type="button"
+                        class="focus-visible:ring-ring/50 flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left outline-none focus-visible:ring-2"
+                        [attr.aria-label]="'Open ' + member.displayName + '\\'s profile'"
+                        [attr.aria-expanded]="profileId() === member.id"
+                        (click)="toggleProfile(member, $event)"
+                      >
+                        <app-member-avatar [name]="member.displayName" [avatarUrl]="member.avatarUrl" [modelId]="member.modelId" [px]="28" />
+                        <span class="flex min-w-0 flex-col leading-snug">
+                          <span class="flex min-w-0 items-center gap-1.5">
+                            <span class="truncate text-sm font-medium">{{ member.displayName }}</span>
+                            @if (member.role === 'Owner') {
+                              <span hlmBadge variant="secondary">Owner</span>
+                            }
+                            @if (member.isMuted) {
+                              <span hlmBadge variant="outline">Muted</span>
+                            }
+                            @if (isPrivate(member)) {
+                              <span hlmBadge variant="outline">Private</span>
+                            }
+                            @if (broken(member)) {
+                              <span
+                                hlmBadge
+                                variant="destructive"
+                                tabindex="0"
+                                [hlmTooltip]="member.modelStatusReason || problemLabel(member)"
+                                [attr.aria-label]="problemLabel(member) + ': ' + (member.modelStatusReason || '')"
+                              >
+                                <ng-icon name="lucideTriangleAlert" />
+                                {{ problemLabel(member) }}
+                              </span>
+                            }
+                          </span>
+                          <span class="text-muted-foreground truncate text-xs">{{ lineFor(member) }}</span>
+                        </span>
+                      </button>
+
+                      <button
+                        hlmBtn
+                        variant="ghost"
+                        size="icon-sm"
+                        class="opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
+                        [attr.aria-label]="'Actions for ' + member.displayName"
+                        [hlmDropdownMenuTrigger]="menu"
+                        [hlmDropdownMenuTriggerData]="{ $implicit: member }"
+                        align="end"
+                      >
+                        <ng-icon name="lucideEllipsis" />
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+          </div>
         </div>
+
+        @if (profileMember(); as member) {
+          <app-member-profile
+            class="absolute z-10 w-[calc(100%-1.5rem)] max-sm:inset-x-3 sm:right-[calc(100%+0.75rem)] sm:w-88"
+            [style.top.px]="desktop() ? profileTop() : 64"
+            [member]="member"
+            [bot]="member.botId ? (details().get(member.botId) ?? null) : null"
+            [currentUserId]="currentUserId()"
+            (close)="profileId.set(null)"
+            (mention)="mentionMember(member)"
+            (toggleMute)="toggleMute(member)"
+            (edit)="editBot(member, false)"
+            (updateModel)="editBot(member, true)"
+          />
+        }
       </hlm-sheet-content>
     </hlm-sheet>
 
-    <hlm-dialog [state]="formOpen() ? 'open' : 'closed'" (closed)="closeForm()">
-      <hlm-dialog-content *hlmDialogPortal="let ctx" class="max-h-[90vh] w-full overflow-y-auto sm:max-w-lg">
-        <hlm-dialog-header>
-          <h2 hlmDialogTitle>{{ editing() ? 'Edit bot' : 'Create a bot' }}</h2>
-          <p hlmDialogDescription>Its model, instructions and personality.</p>
-        </hlm-dialog-header>
-        @if (formOpen()) {
-          <app-bot-form [bot]="editing()" (saved)="onSaved(); ctx.close()" (cancel)="ctx.close()" />
+    <ng-template #menu let-member>
+      <hlm-dropdown-menu class="w-48">
+        <button hlmDropdownMenuItem (triggered)="mentionMember(member)">
+          <ng-icon name="lucideAtSign" />
+          Mention
+        </button>
+        @if (member.memberType === 'bot') {
+          <button hlmDropdownMenuItem (triggered)="toggleMute(member)">
+            <ng-icon [name]="member.isMuted ? 'lucideVolume2' : 'lucideVolumeX'" />
+            {{ member.isMuted ? 'Unmute' : 'Mute' }}
+          </button>
+          @if (canEdit(member)) {
+            <button hlmDropdownMenuItem (triggered)="editBot(member, broken(member))">
+              <ng-icon name="lucidePencil" />
+              {{ broken(member) ? 'Update model' : 'Edit bot' }}
+            </button>
+          }
         }
-      </hlm-dialog-content>
-    </hlm-dialog>
+        @if (member.role !== 'Owner') {
+          <hlm-dropdown-menu-separator />
+          <button hlmDropdownMenuItem variant="destructive" (triggered)="removeMember(member)">
+            <ng-icon name="lucideUserMinus" />
+            Remove from chat
+          </button>
+        }
+      </hlm-dropdown-menu>
+    </ng-template>
 
-    <hlm-alert-dialog [state]="deletingBot() ? 'open' : 'closed'" (closed)="deletingBot.set(null)">
-      <hlm-alert-dialog-content *hlmAlertDialogPortal="let ctx">
-        <hlm-alert-dialog-header>
-          <h2 hlmAlertDialogTitle>Delete {{ deletingBot()?.name }}?</h2>
-          <p hlmAlertDialogDescription>
-            The bot is deleted for good. Messages it already sent stay.
-          </p>
-        </hlm-alert-dialog-header>
-        <hlm-alert-dialog-footer>
-          <button hlmAlertDialogCancel (click)="ctx.close()">Cancel</button>
-          <button hlmAlertDialogAction variant="destructive" (click)="deleteBot(); ctx.close()">Delete</button>
-        </hlm-alert-dialog-footer>
-      </hlm-alert-dialog-content>
-    </hlm-alert-dialog>
+    <app-bot-dialog
+      [open]="dialogOpen()"
+      [bot]="dialogBot()"
+      [chatId]="chatId()"
+      [focusModel]="dialogFocusModel()"
+      (closed)="dialogOpen.set(false)"
+      (saved)="onBotSaved($event.id)"
+    />
   `,
 })
 export class PeopleSheet implements OnDestroy {
   private readonly directory = inject(BotDirectory);
+  private readonly botsApi = inject(BotsService);
+  private readonly chatBotsApi = inject(ChatBotsService);
   private readonly membersApi = inject(ChatMembersService);
   private readonly usersApi = inject(UserService);
 
   readonly open = input(false);
   readonly chatId = input.required<string>();
   readonly members = input.required<ChatMember[]>();
-  readonly closed = output();
+  readonly currentUserId = input<string | null>(null);
 
-  protected readonly botQuery = signal('');
-  protected readonly inviteQuery = signal('');
+  readonly closed = output();
+  /** Put `@name` in the composer. */
+  readonly mention = output<string>();
+  /** A local change to one member before the server confirms it (mute). */
+  readonly patchMember = output<{ id: string; changes: Partial<ChatMember> }>();
+  /** Members may have changed server-side (a bot's model was fixed); reload them. */
+  readonly refresh = output();
+
+  protected readonly desktop = mediaQuery('(min-width: 640px)');
+  private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
+
+  protected readonly pickClass =
+    'hover:bg-muted focus-visible:ring-ring/50 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-2';
+
+  /** Bot details (personality, stats, creator) by bot id; members only carry a summary. */
+  protected readonly details = signal<ReadonlyMap<string, BotDto>>(new Map());
+  protected readonly profileId = signal<string | null>(null);
+  protected readonly profileTop = signal(0);
+
+  protected readonly addOpen = signal(false);
+  protected readonly addQuery = signal('');
   protected readonly invitable = signal<UserDto[]>([]);
-  protected readonly formOpen = signal(false);
-  protected readonly editing = signal<BotDto | null>(null);
-  protected readonly deletingBot = signal<BotDto | null>(null);
   private inviteTimer?: ReturnType<typeof setTimeout>;
 
-  protected readonly people = computed(() => this.members().filter((m) => m.memberType === 'user'));
+  protected readonly dialogOpen = signal(false);
+  protected readonly dialogBot = signal<BotDto | null>(null);
+  protected readonly dialogFocusModel = signal(false);
+
   protected readonly bots = computed(() => this.members().filter((m) => m.memberType === 'bot'));
-  protected readonly available = computed(() => {
+  protected readonly people = computed(() => this.members().filter((m) => m.memberType === 'user'));
+  protected readonly groups = computed(() => [
+    { label: 'Bots', members: this.bots() },
+    { label: 'People', members: this.people() },
+  ]);
+  protected readonly profileMember = computed(
+    () => this.members().find((m) => m.id === this.profileId()) ?? null,
+  );
+
+  protected readonly addableBots = computed(() => {
     const inChat = new Set(this.bots().map((m) => m.botId));
-    const query = this.botQuery().trim().toLowerCase();
+    const query = this.addQuery().trim().toLowerCase();
     return this.directory
       .bots()
-      .filter((b) => !inChat.has(b.id) && (!query || b.name.toLowerCase().includes(query)));
+      .filter(
+        (b) =>
+          !inChat.has(b.id) &&
+          (!query || b.name.toLowerCase().includes(query) || (b.personality ?? '').toLowerCase().includes(query)),
+      );
   });
 
   constructor() {
-    // Re-query when the search changes (debounced) or someone joins or leaves, since the endpoint
-    // leaves out the chat's current members. Only while the sheet is open.
+    // Load the details of every bot in the chat while the sheet is open.
     effect(() => {
-      const open = this.open();
-      const chatId = this.chatId();
-      const search = this.inviteQuery().trim();
-      this.members();
-      clearTimeout(this.inviteTimer);
-      if (!open || !chatId) return;
-      this.inviteTimer = setTimeout(() => void this.loadInvitable(chatId, search), 250);
+      if (!this.open()) return;
+      const ids = this.bots().map((m) => m.botId!);
+      untracked(() => void this.loadDetails(ids.filter((id) => !this.details().has(id))));
     });
     effect(() => {
       if (this.open()) void this.directory.load();
+    });
+    // People to invite: re-query when the search changes (debounced) or someone joins or leaves.
+    effect(() => {
+      const open = this.addOpen();
+      const chatId = this.chatId();
+      const search = this.addQuery().trim();
+      this.members();
+      clearTimeout(this.inviteTimer);
+      if (!open || !chatId) return;
+      this.inviteTimer = setTimeout(() => void this.loadInvitable(chatId, search), 200);
+    });
+    // Another chat: forget this one's cards.
+    effect(() => {
+      this.chatId();
+      untracked(() => {
+        this.profileId.set(null);
+        this.details.set(new Map());
+      });
     });
   }
 
@@ -268,58 +384,132 @@ export class PeopleSheet implements OnDestroy {
     clearTimeout(this.inviteTimer);
   }
 
-  protected initialsOf(name: string): string {
-    return initials(name);
+  protected onSheetClosed(): void {
+    this.profileId.set(null);
+    this.addOpen.set(false);
+    this.closed.emit();
   }
 
-  protected async addBot(botId: string): Promise<void> {
+  protected lineFor(member: ChatMember): string {
+    if (member.memberType === 'bot') {
+      return this.details().get(member.botId!)?.personality?.split('\n')[0] || 'Bot';
+    }
+    return member.userId === this.currentUserId() ? 'You' : joinedLabel(member.joinedAt);
+  }
+
+  protected isPrivate(member: ChatMember): boolean {
+    const bot = member.botId ? this.details().get(member.botId) : null;
+    return !!bot && !bot.isPublic;
+  }
+
+  protected broken(member: ChatMember): boolean {
+    return hasModelProblem(member.modelStatus);
+  }
+
+  protected problemLabel(member: ChatMember): string {
+    return modelProblemLabel(member.modelStatus);
+  }
+
+  protected canEdit(member: ChatMember): boolean {
+    const bot = member.botId ? this.details().get(member.botId) : null;
+    return !!bot && bot.createdById === this.currentUserId();
+  }
+
+  protected toggleProfile(member: ChatMember, event: MouseEvent): void {
+    if (this.profileId() === member.id) {
+      this.profileId.set(null);
+      return;
+    }
+    const panel = this.panel()?.nativeElement.getBoundingClientRect();
+    const row = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const top = panel ? row.top - panel.top : 0;
+    this.profileTop.set(Math.max(12, Math.min(top, window.innerHeight - PROFILE_HEIGHT - 12)));
+    this.profileId.set(member.id);
+    if (member.botId && !this.details().has(member.botId)) void this.loadDetails([member.botId]);
+  }
+
+  protected mentionMember(member: ChatMember): void {
+    this.mention.emit(member.displayName);
+    this.profileId.set(null);
+  }
+
+  protected async toggleMute(member: ChatMember): Promise<void> {
+    if (!member.botId) return;
+    const muted = !member.isMuted;
+    this.patchMember.emit({ id: member.id, changes: { isMuted: muted } });
     try {
-      await firstValueFrom(this.membersApi.apiChatsChatIdMembersPost(this.chatId(), { botId }));
+      await firstValueFrom(
+        muted
+          ? this.chatBotsApi.apiChatsChatIdBotsBotIdMutePost(this.chatId(), member.botId)
+          : this.chatBotsApi.apiChatsChatIdBotsBotIdUnmutePost(this.chatId(), member.botId),
+      );
     } catch (error) {
-      toast.error(describeApiError(error, { fallback: 'Could not add that bot to the chat.' }));
+      this.patchMember.emit({ id: member.id, changes: { isMuted: !muted } });
+      toast.error(describeApiError(error, { fallback: `Could not ${muted ? 'mute' : 'unmute'} ${member.displayName}.` }));
     }
   }
 
-  protected async removeMember(memberId: string): Promise<void> {
+  protected async editBot(member: ChatMember, focusModel: boolean): Promise<void> {
+    if (!member.botId) return;
+    let bot = this.details().get(member.botId);
+    if (!bot) {
+      await this.loadDetails([member.botId]);
+      bot = this.details().get(member.botId);
+    }
+    if (!bot) return;
+    this.dialogBot.set(bot);
+    this.dialogFocusModel.set(focusModel);
+    this.dialogOpen.set(true);
+  }
+
+  protected newBot(): void {
+    this.dialogBot.set(null);
+    this.dialogFocusModel.set(false);
+    this.dialogOpen.set(true);
+  }
+
+  protected async onBotSaved(id: string): Promise<void> {
+    await this.loadDetails([id]);
+    void this.directory.reload();
+    this.refresh.emit();
+  }
+
+  protected async removeMember(member: ChatMember): Promise<void> {
+    if (this.profileId() === member.id) this.profileId.set(null);
     try {
-      await firstValueFrom(this.membersApi.apiChatsChatIdMembersMemberIdDelete(this.chatId(), memberId));
+      await firstValueFrom(this.membersApi.apiChatsChatIdMembersMemberIdDelete(this.chatId(), member.id));
     } catch (error) {
-      toast.error(describeApiError(error, { fallback: 'Could not remove that member.' }));
+      toast.error(describeApiError(error, { fallback: `Could not remove ${member.displayName}.` }));
     }
   }
 
-  protected async invite(userId: string): Promise<void> {
+  protected async addBot(bot: BotDto): Promise<void> {
     try {
-      await firstValueFrom(this.membersApi.apiChatsChatIdMembersPost(this.chatId(), { userId }));
-      this.invitable.update((list) => list.filter((u) => u.id !== userId));
+      await firstValueFrom(this.membersApi.apiChatsChatIdMembersPost(this.chatId(), { botId: bot.id }));
+    } catch (error) {
+      toast.error(describeApiError(error, { fallback: `Could not add ${bot.name}.` }));
+    }
+  }
+
+  protected async invite(user: UserDto): Promise<void> {
+    try {
+      await firstValueFrom(this.membersApi.apiChatsChatIdMembersPost(this.chatId(), { userId: user.id }));
+      this.invitable.update((list) => list.filter((u) => u.id !== user.id));
     } catch (error) {
       toast.error(describeApiError(error, { fallback: 'Could not invite that person.' }));
     }
   }
 
-  protected editBot(bot: BotDto | null): void {
-    this.editing.set(bot);
-    this.formOpen.set(true);
-  }
-
-  protected closeForm(): void {
-    this.formOpen.set(false);
-    this.editing.set(null);
-  }
-
-  protected async onSaved(): Promise<void> {
-    this.closeForm();
-    await this.directory.reload();
-  }
-
-  protected async deleteBot(): Promise<void> {
-    const bot = this.deletingBot();
-    if (!bot) return;
-    try {
-      await this.directory.remove(bot.id);
-    } catch (error) {
-      toast.error(describeApiError(error, { fallback: 'Could not delete that bot.' }));
-    }
+  private async loadDetails(ids: readonly string[]): Promise<void> {
+    if (!ids.length) return;
+    const loaded = await Promise.all(
+      ids.map((id) => firstValueFrom(this.botsApi.apiBotsBotIdGet(id)).catch(() => null)),
+    );
+    this.details.update((map) => {
+      const next = new Map(map);
+      for (const bot of loaded) if (bot) next.set(bot.id, bot);
+      return next;
+    });
   }
 
   private async loadInvitable(chatId: string, search: string): Promise<void> {

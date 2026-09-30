@@ -54,6 +54,10 @@ export function toChatMember(dto: ChatMemberDto): ChatMember {
       : (dto.user?.displayName ?? dto.user?.email ?? 'Unknown'),
     avatarUrl: (isBot ? dto.bot?.avatarUrl : dto.user?.avatarUrl) ?? null,
     memberType: isBot ? 'bot' : 'user',
+    modelId: isBot ? (dto.bot?.modelId ?? null) : null,
+    isMuted: dto.isMuted ?? false,
+    modelStatus: dto.modelStatus ?? null,
+    modelStatusReason: dto.modelStatusReason ?? null,
   };
 }
 

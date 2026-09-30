@@ -27,13 +27,14 @@ const HIGHLIGHT_MS = 1500;
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export type TimelineItem =
-  | { kind: 'message'; key: string; at: number; message: Message; first: boolean }
+  | { kind: 'message'; key: string; at: number; message: Message; first: boolean; showReply: boolean }
   | { kind: 'system'; key: string; at: number; content: string }
   | { kind: 'day'; key: string; at: number; label: string };
 
 /**
  * Persisted messages and ephemeral system notices slotted in by time, day separators between days,
- * and each message flagged as the first of its sender's run or not.
+ * and each message flagged as the first of its sender's run or not. The one-line reply reference
+ * is only shown when the reply target is not the message right above, where it would be noise.
  */
 export function buildTimeline(
   messages: readonly Message[],
@@ -58,6 +59,7 @@ export function buildTimeline(
   const items: TimelineItem[] = [];
   let lastDay = '';
   let previous = null as TimelineItem | null;
+  let previousMessageId: string | null = null;
   for (const entry of entries) {
     const day = new Date(entry.at).toDateString();
     if (day !== lastDay) {
@@ -71,7 +73,10 @@ export function buildTimeline(
         senderOf(previous.message) === senderOf(entry.message) &&
         entry.at - previous.at < GROUP_GAP_MS
       );
-      previous = { ...entry, first };
+      const replyToId = entry.message.replyTo?.id ?? null;
+      const showReply = !!replyToId && replyToId !== previousMessageId;
+      previousMessageId = entry.message.id;
+      previous = { ...entry, first, showReply };
     } else {
       previous = entry;
     }
@@ -123,6 +128,7 @@ function dayLabel(date: Date, now: Date): string {
                 <app-message-item
                   [message]="item.message"
                   [first]="item.first"
+                  [showReply]="item.showReply"
                   [currentUserId]="currentUserId()"
                   [memberNames]="memberNames()"
                   [highlighted]="highlightedId() === item.message.id"

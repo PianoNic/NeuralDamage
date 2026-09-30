@@ -1,90 +1,63 @@
 import { computed, inject, Service } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
-import { priceTier, type SelectorModel } from '@prompt-kit/model-selector';
 import { BotsService } from '../../api/api/bots.service';
 import { OpenRouterModel } from '../../core/models';
 import { providerIconUrl } from '../../shared/provider-icon';
+import { modelDisplayName } from './bot-meta';
 
-/** Makers listed first, in this order; the rest follow alphabetically. */
-const LEADING_MAKERS = ['Anthropic', 'OpenAI', 'Google', 'xAI', 'Mistral', 'DeepSeek', 'Meta'];
+/** Providers listed first, in this order; the rest follow alphabetically. */
+const LEADING_PROVIDERS = ['DeepSeek', 'OpenAI', 'Google', 'Anthropic', 'Mistral', 'Meta', 'Qwen', 'xAI'];
 
-/** Makers whose OpenRouter prefix doesn't read well as a name. */
-const MAKER_NAMES: Readonly<Record<string, string>> = {
-  openai: 'OpenAI',
-  'x-ai': 'xAI',
-  'meta-llama': 'Meta',
-  mistralai: 'Mistral',
-  deepseek: 'DeepSeek',
-  moonshotai: 'Moonshot',
-  'z-ai': 'Z.ai',
-  qwen: 'Qwen',
-  minimax: 'MiniMax',
-};
-
-/**
- * The OpenRouter models a bot can run on, shaped for prompt-kit's model selector. Taken over from
- * Tessaly's picker; issue #54 wires it into the New bot flow.
- */
+/** The OpenRouter models a bot may run on: the allowed ones only, loaded once and shared. */
 @Service()
 export class ModelCatalog {
   private readonly api = inject(BotsService);
   private readonly resource = rxResource({ stream: () => this.api.apiBotsModelsGet() });
 
   readonly models = computed<readonly OpenRouterModel[]>(() =>
-    this.resource.hasValue() ? [...this.resource.value()].sort(byMakerThenName) : [],
+    this.resource.hasValue() ? [...this.resource.value()].sort(byProviderThenName) : [],
   );
   readonly loading = this.resource.isLoading;
+  readonly failed = computed(() => !!this.resource.error());
 
-  readonly selectorModels = computed<readonly SelectorModel[]>(() =>
-    this.models().map((model) => ({
-      id: model.id,
-      name: displayName(model),
-      maker: makerOf(model),
-      iconUrl: providerIconUrl(model),
-      priceTier: isPriced(model)
-        ? priceTier(model.pricing!.prompt, model.pricing!.completion)
-        : undefined,
-      costLabel: isPriced(model)
-        ? `$${model.pricing!.prompt} / $${model.pricing!.completion} per 1M tokens`
-        : undefined,
-    })),
-  );
+  /** Providers in rail order. */
+  readonly providers = computed(() => {
+    const seen = new Map<string, string>();
+    for (const model of this.models()) {
+      if (!seen.has(model.provider)) seen.set(model.provider, providerIconUrl(model));
+    }
+    return [...seen].map(([name, iconUrl]) => ({ name, iconUrl }));
+  });
 
+  find(id: string | null | undefined): OpenRouterModel | undefined {
+    return this.models().find((model) => model.id === id);
+  }
+
+  /** The model's name without its provider prefix, or the raw id when it is not (or no longer) allowed. */
   nameOf(id: string | null | undefined): string {
-    const model = this.models().find((candidate) => candidate.id === id);
-    return model ? displayName(model) : (id ?? '');
+    const model = this.find(id);
+    return model ? modelDisplayName(model) : (id ?? '');
   }
 }
 
-function byMakerThenName(a: OpenRouterModel, b: OpenRouterModel): number {
-  const rank = (maker: string) => {
-    const index = LEADING_MAKERS.indexOf(maker);
-    return index === -1 ? LEADING_MAKERS.length : index;
+function byProviderThenName(a: OpenRouterModel, b: OpenRouterModel): number {
+  const rank = (provider: string) => {
+    const index = LEADING_PROVIDERS.indexOf(provider);
+    return index === -1 ? LEADING_PROVIDERS.length : index;
   };
-  const makerA = makerOf(a);
-  const makerB = makerOf(b);
   return (
-    rank(makerA) - rank(makerB) ||
-    makerA.localeCompare(makerB) ||
-    displayName(a).localeCompare(displayName(b))
+    rank(a.provider) - rank(b.provider) ||
+    a.provider.localeCompare(b.provider) ||
+    modelDisplayName(a).localeCompare(modelDisplayName(b))
   );
 }
 
-/** Routers such as openrouter/auto price per request (reported as -1), so there is no tier. */
-function isPriced(model: OpenRouterModel): boolean {
-  return !!model.pricing && model.pricing.prompt >= 0 && model.pricing.completion >= 0;
-}
-
-/** OpenRouter names carry the maker as a prefix ("Anthropic: Claude Sonnet 4"); the picker groups by maker already. */
-function displayName(model: OpenRouterModel): string {
-  const colon = model.name.indexOf(': ');
-  return colon > 0 ? model.name.slice(colon + 2) : model.name;
-}
-
-function makerOf(model: OpenRouterModel): string {
-  const prefix = model.id.split('/')[0] ?? '';
-  if (MAKER_NAMES[prefix]) return MAKER_NAMES[prefix];
-  const colon = model.name.indexOf(': ');
-  if (colon > 0) return model.name.slice(0, colon);
-  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+/** Case-insensitive match on name, id, provider, description and capabilities ("fast", "code"). */
+export function modelMatches(model: OpenRouterModel, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [model.name, model.id, model.provider, model.description ?? '', ...model.capabilities]
+    .join('\n')
+    .toLowerCase()
+    .includes(q);
 }
