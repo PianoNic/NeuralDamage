@@ -48,8 +48,8 @@ public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService
             var alreadyMember = await db.ChatMembers.AnyAsync(cm => cm.ChatId == request.ChatId && cm.BotId == request.BotId, cancellationToken);
             if (alreadyMember) return Result.Failure("Bot is already a member.");
 
-            if (await BotNames.TakenInChatAsync(db, request.ChatId, bot.Name, bot.Id, cancellationToken))
-                return Result.Failure(BotNames.Taken(bot.Name));
+            if (await BotNames.ClashInChatAsync(db, request.ChatId, bot.Name, bot.Aliases, bot.Id, cancellationToken) is { } clash)
+                return Result.Failure(clash);
         }
 
         var member = new ChatMember

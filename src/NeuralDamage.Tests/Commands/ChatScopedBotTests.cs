@@ -50,8 +50,8 @@ public class ChatScopedBotTests
     private static AddMemberHandler Add(NeuralDamageDbContext db) =>
         new(db, Substitute.For<IChatNotificationService>(), new ChatBotState(), Substitute.For<IOpenRouterService>(), NoCap);
 
-    private static CreateBotCommand NewBot(string name, Guid ownerId, bool isPublic = true, Guid? chatId = null) =>
-        new(name, "m/x", "x", null, 0.7, null, null, ownerId, isPublic, chatId);
+    private static CreateBotCommand NewBot(string name, Guid ownerId, bool isPublic = true, Guid? chatId = null, string? aliases = null) =>
+        new(name, "m/x", "x", null, 0.7, null, aliases, ownerId, isPublic, chatId);
 
     [Test]
     public async Task CreatePublicBot_OutsideAChat_MayReuseAnyName()
@@ -135,6 +135,81 @@ public class ChatScopedBotTests
         await Assert.That(clash.IsFailure).IsTrue();
         await Assert.That(clash.Error).IsEqualTo("This chat already has a bot named rex.");
         await Assert.That(ownCase.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateBotIntoChat_NicknameEqualsABotsName_IsRefused()
+    {
+        var w = await SeedAsync();
+        using var _ = w.Db;
+
+        var result = await Create(w.Db).Handle(NewBot("Rover", w.Owner.Id, chatId: w.Chat.Id, aliases: "dog, REX"), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).IsEqualTo("This chat already has a bot named REX.");
+    }
+
+    [Test]
+    public async Task CreateBotIntoChat_NameOrNicknameEqualsABotsNickname_IsRefused()
+    {
+        var w = await SeedAsync();
+        using var _ = w.Db;
+        w.Byte.Aliases = "bitsy, nibble";
+        await w.Db.SaveChangesAsync();
+
+        var byName = await Create(w.Db).Handle(NewBot("Nibble", w.Owner.Id, chatId: w.Chat.Id), CancellationToken.None);
+        var byNickname = await Create(w.Db).Handle(NewBot("Kilo", w.Owner.Id, chatId: w.Chat.Id, aliases: "BITSY"), CancellationToken.None);
+        var elsewhere = await Create(w.Db).Handle(NewBot("Kilo", w.Owner.Id, chatId: w.OtherChat.Id, aliases: "bitsy"), CancellationToken.None);
+
+        await Assert.That(byName.Error).IsEqualTo("This chat already has a bot nicknamed Nibble (Byte).");
+        await Assert.That(byNickname.Error).IsEqualTo("This chat already has a bot nicknamed BITSY (Byte).");
+        await Assert.That(elsewhere.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task AddBot_NicknameTakenInTheChat_IsRefused()
+    {
+        var w = await SeedAsync();
+        using var _ = w.Db;
+        var kilo = new Bot { Name = "Kilo", ModelId = "m", SystemPrompt = "x", CreatedById = w.Owner.Id, Aliases = "k, byte" };
+        w.Db.Bots.Add(kilo);
+        await w.Db.SaveChangesAsync();
+
+        var result = await Add(w.Db).Handle(new AddMemberCommand(w.Chat.Id, null, kilo.Id, w.Owner.Id), CancellationToken.None);
+
+        await Assert.That(result.Error).IsEqualTo("This chat already has a bot named byte.");
+        await Assert.That(await w.Db.ChatMembers.AnyAsync(cm => cm.BotId == kilo.Id)).IsFalse();
+    }
+
+    [Test]
+    public async Task EditNicknames_ToOneTakenInTheChat_IsRefused_ButItsOwnAreFine()
+    {
+        var w = await SeedAsync();
+        using var _ = w.Db;
+        w.Rex.Aliases = "doggo";
+        await w.Db.SaveChangesAsync();
+        var handler = new UpdateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
+
+        var clash = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, null, null, null, null, null, null, "bits, Doggo", null), CancellationToken.None);
+        var own = await handler.Handle(new UpdateBotCommand(w.Rex.Id, w.Owner.Id, null, null, null, null, null, null, "doggo, rexy", null), CancellationToken.None);
+
+        await Assert.That(clash.Error).IsEqualTo("This chat already has a bot nicknamed Doggo (Rex).");
+        await Assert.That((await w.Db.Bots.AsNoTracking().SingleAsync(b => b.Id == w.Byte.Id)).Aliases).IsNull();
+        await Assert.That(own.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task RenameBot_ToAnotherBotsNickname_IsRefused()
+    {
+        var w = await SeedAsync();
+        using var _ = w.Db;
+        w.Rex.Aliases = "doggo";
+        await w.Db.SaveChangesAsync();
+        var handler = new UpdateBotHandler(w.Db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
+
+        var result = await handler.Handle(new UpdateBotCommand(w.Byte.Id, w.Owner.Id, "DOGGO", null, null, null, null, null, null, null), CancellationToken.None);
+
+        await Assert.That(result.Error).IsEqualTo("This chat already has a bot nicknamed DOGGO (Rex).");
     }
 
     [Test]

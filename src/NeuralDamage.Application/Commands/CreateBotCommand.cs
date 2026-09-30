@@ -27,10 +27,10 @@ public class CreateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             && !await db.ChatMembers.AnyAsync(cm => cm.ChatId == chatId && cm.UserId == request.CreatedById, cancellationToken))
             return Result<BotDto>.Failure("You are not a member of this chat.");
 
-        // Names only clash within a chat, so a bot made outside one can take any name.
+        // Names and nicknames only clash within a chat, so a bot made outside one can take any.
         if (request.ChatId is { } intoChatId
-            && await BotNames.TakenInChatAsync(db, intoChatId, request.Name, null, cancellationToken))
-            return Result<BotDto>.Failure(BotNames.Taken(request.Name));
+            && await BotNames.ClashInChatAsync(db, intoChatId, request.Name, request.Aliases, null, cancellationToken) is { } clash)
+            return Result<BotDto>.Failure(clash);
 
         if (await modelPolicy.CheckModelAsync(openRouter, request.ModelId, cancellationToken) is { } refusal)
             return Result<BotDto>.Failure(refusal);
