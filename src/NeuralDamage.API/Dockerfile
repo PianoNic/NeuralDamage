@@ -6,6 +6,7 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+COPY application.properties /application.properties
 COPY ["src/Directory.Build.props", "."]
 COPY ["src/NeuralDamage.API/NeuralDamage.API.csproj", "NeuralDamage.API/"]
 COPY ["src/NeuralDamage.Application/NeuralDamage.Application.csproj", "NeuralDamage.Application/"]
