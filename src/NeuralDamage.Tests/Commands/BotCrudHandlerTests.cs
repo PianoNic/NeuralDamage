@@ -225,12 +225,34 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new DeleteBotHandler(db);
+        var handler = new DeleteBotHandler(db, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new DeleteBotCommand(bot.Id, user.Id), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(bot.IsActive).IsFalse();
         await Assert.That(await db.Bots.FirstOrDefaultAsync(b => b.Id == bot.Id)).IsNotNull(); // still in DB
+    }
+
+    [Test]
+    public async Task DeleteBot_LeavesEveryChatItIsIn()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+        var bot = new Bot { Name = "GPT", ModelId = "openai/gpt-4o", SystemPrompt = "X", CreatedById = user.Id };
+        var chat = new Chat { Name = "Lab", CreatedById = user.Id };
+        db.Bots.Add(bot);
+        db.Chats.Add(chat);
+        await db.SaveChangesAsync();
+        var member = new ChatMember { ChatId = chat.Id, BotId = bot.Id };
+        db.ChatMembers.Add(member);
+        await db.SaveChangesAsync();
+        var notifications = Substitute.For<IChatNotificationService>();
+
+        var result = await new DeleteBotHandler(db, notifications).Handle(new DeleteBotCommand(bot.Id, user.Id), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(await db.ChatMembers.AnyAsync(cm => cm.BotId == bot.Id)).IsFalse();
+        await notifications.Received(1).NotifyMemberRemoved(chat.Id, member.Id);
     }
 
     [Test]
@@ -244,7 +266,7 @@ public class BotCrudHandlerTests
         db.Bots.Add(bot);
         await db.SaveChangesAsync();
 
-        var handler = new DeleteBotHandler(db);
+        var handler = new DeleteBotHandler(db, Substitute.For<IChatNotificationService>());
         var result = await handler.Handle(new DeleteBotCommand(bot.Id, other.Id), CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
