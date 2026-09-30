@@ -459,7 +459,9 @@ export class PeopleSheet implements OnDestroy {
     const top = panel ? row.top - panel.top : 0;
     this.profileTop.set(Math.max(12, Math.min(top, window.innerHeight - PROFILE_HEIGHT - 12)));
     this.profileId.set(member.id);
-    if (member.botId && !this.details().has(member.botId)) void this.loadDetails([member.botId]);
+    // Always refetch: the card shows live stats (replies today), and the cached copy is
+    // from whenever the sheet first opened. The cached one shows until the fresh one lands.
+    if (member.botId) void this.loadDetails([member.botId]);
   }
 
   protected mentionMember(member: ChatMember): void {
