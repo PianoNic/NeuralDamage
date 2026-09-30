@@ -2,15 +2,13 @@ import { Component, computed, input, output } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideReply, lucideSmilePlus } from '@ng-icons/lucide';
 import { PkMarkdown } from '@prompt-kit/markdown';
-import { HlmAvatarImports } from '@spartan-ng/helm/avatar';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmPopoverImports } from '@spartan-ng/helm/popover';
 import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
 import { Message, ReactionGroupDto } from '../../core/models';
 import { formatTime } from '../../shared/dates';
-import { initials } from '../../shared/initials';
-import { providerIconUrl } from '../../shared/provider-icon';
+import { MemberAvatar } from '../../shared/member-avatar';
 import { isAttachmentUrl, MessageImages } from './attachments';
 import { markMentions } from './mentions';
 import { replyLabel } from './reply-label';
@@ -26,11 +24,11 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
   imports: [
     NgIcon,
     PkMarkdown,
-    HlmAvatarImports,
     HlmBadge,
     HlmButton,
     HlmPopoverImports,
     HlmTooltipImports,
+    MemberAvatar,
     MessageImages,
   ],
   providers: [provideIcons({ lucideReply, lucideSmilePlus })],
@@ -46,19 +44,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
     @if (!own()) {
       <div class="w-8 shrink-0">
         @if (first()) {
-          <hlm-avatar [class.bg-background]="brandIcon()">
-            @if (avatarSrc()) {
-              <img
-                hlmAvatarImage
-                [src]="avatarSrc()"
-                alt=""
-                [class.p-1.5]="brandIcon()"
-                [class.object-contain]="brandIcon()"
-                [class.dark:invert]="brandIcon()"
-              />
-            }
-            <span hlmAvatarFallback class="text-xs font-medium">{{ initial() }}</span>
-          </hlm-avatar>
+          <app-member-avatar [name]="message().senderName" [avatarUrl]="message().senderAvatar" [modelId]="message().senderModelId" [px]="32" />
         }
       </div>
     }
@@ -202,19 +188,8 @@ export class MessageItem {
     () => !!this.currentUserId() && this.message().senderUserId === this.currentUserId(),
   );
   protected readonly isBot = computed(() => this.message().senderType === 'bot');
-  protected readonly initial = computed(() => initials(this.message().senderName));
   protected readonly body = computed(() =>
     markMentions(this.message().content, this.memberNames()),
-  );
-
-  /** A bot's own avatar wins; otherwise its model vendor's icon, rather than an initial. */
-  protected readonly avatarSrc = computed(() => {
-    const message = this.message();
-    if (message.senderAvatar) return message.senderAvatar;
-    return message.senderModelId ? providerIconUrl({ id: message.senderModelId }) : null;
-  });
-  protected readonly brandIcon = computed(
-    () => !this.message().senderAvatar && !!this.message().senderModelId,
   );
 
   protected readonly sentAt = computed(() => {
