@@ -1,4 +1,4 @@
-import { ChatMember, ChatMemberDto, Message, MessageDto } from '@app/models';
+import { ChatMember, ChatMemberDto, Message, MessageDto } from '../../core/models';
 
 /**
  * The API returns a `MessageDto` — sender identity lives in nested

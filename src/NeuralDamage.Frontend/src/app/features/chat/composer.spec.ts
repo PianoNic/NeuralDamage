@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { ChatMember } from '@app/models';
-import { MessageInputComponent } from './message-input';
+import { ChatMember } from '../../core/models';
+import { Composer, MAX_MESSAGE_LENGTH } from './composer';
 
 function member(id: string, displayName: string, memberType: 'user' | 'bot'): ChatMember {
   return {
@@ -16,15 +16,17 @@ function member(id: string, displayName: string, memberType: 'user' | 'bot'): Ch
   };
 }
 
-describe('MessageInputComponent', () => {
+describe('Composer', () => {
   async function setup() {
-    await TestBed.configureTestingModule({ imports: [MessageInputComponent] }).compileComponents();
-    const fixture = TestBed.createComponent(MessageInputComponent);
+    await TestBed.configureTestingModule({ imports: [Composer] }).compileComponents();
+    const fixture = TestBed.createComponent(Composer);
     fixture.componentRef.setInput('members', [
       member('u1', 'Alice', 'user'),
+      member('me', 'Nic', 'user'),
       member('b1', 'Gemini', 'bot'),
       member('b2', 'Grok', 'bot'),
     ]);
+    fixture.componentRef.setInput('currentUserId', 'me');
     await fixture.whenStable();
     const textarea = (fixture.nativeElement as HTMLElement).querySelector('textarea')!;
     const type = async (value: string) => {
@@ -53,6 +55,12 @@ describe('MessageInputComponent', () => {
     expect(component.suggestions().map((s) => s.result)).toEqual(['/kick Gemini', '/kick Grok']);
   });
 
+  it('never offers yourself as a mention', async () => {
+    const { component, type } = await setup();
+    await type('@');
+    expect(component.suggestions().map((s) => s.label)).toEqual(['Alice', 'Gemini', 'Grok']);
+  });
+
   it('navigates suggestions with the keyboard and picks with Tab', async () => {
     const { component, type, press } = await setup();
     await type('@');
@@ -70,6 +78,26 @@ describe('MessageInputComponent', () => {
     await press('Enter');
     expect(component.content()).toBe('/stop');
     expect(sent).toEqual([]);
+  });
+
+  it('sends on Enter once there is nothing to pick', async () => {
+    const { component, type, press } = await setup();
+    const sent: string[] = [];
+    component.send.subscribe((e) => sent.push(e.content));
+    await type('hello there');
+    await press('Enter');
+    expect(sent).toEqual(['hello there']);
+    expect(component.content()).toBe('');
+  });
+
+  it('refuses to send a message over the limit and says so', async () => {
+    const { fixture, component, type, press } = await setup();
+    const sent: string[] = [];
+    component.send.subscribe((e) => sent.push(e.content));
+    await type('x'.repeat(MAX_MESSAGE_LENGTH + 1));
+    await press('Enter');
+    expect(sent).toEqual([]);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(`${MAX_MESSAGE_LENGTH + 1} / ${MAX_MESSAGE_LENGTH}`);
   });
 
   it('closes the popup on Esc, then Esc cancels a reply', async () => {

@@ -1,5 +1,5 @@
-﻿import { toast } from '@spartan-ng/brain/sonner';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnInit, output, signal } from '@angular/core';
+import { toast } from '@spartan-ng/brain/sonner';
+import { Component, computed, effect, inject, input, OnInit, output, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HlmButton } from '@spartan-ng/helm/button';
@@ -8,17 +8,16 @@ import { HlmTextarea } from '@spartan-ng/helm/textarea';
 import { HlmLabel } from '@spartan-ng/helm/label';
 import { HlmAutocompleteImports } from '@spartan-ng/helm/autocomplete';
 import { HlmSliderImports } from '@spartan-ng/helm/slider';
-import { BotDto, OpenRouterModel } from '@app/models';
-import { BotsService } from '@app/api/api/bots.service';
+import { BotDto, OpenRouterModel } from '../../core/models';
+import { BotsService } from '../../api/api/bots.service';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-bot-form',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormsModule,HlmButton, HlmInput, HlmTextarea, HlmLabel, HlmAutocompleteImports, HlmSliderImports],
+  imports: [DecimalPipe, FormsModule, HlmButton, HlmInput, HlmTextarea, HlmLabel, HlmAutocompleteImports, HlmSliderImports],
   templateUrl: './bot-form.html',
 })
-export class BotFormComponent implements OnInit {
+export class BotForm implements OnInit {
   private readonly botsApi = inject(BotsService);
 
   readonly bot = input<BotDto | null>(null);
