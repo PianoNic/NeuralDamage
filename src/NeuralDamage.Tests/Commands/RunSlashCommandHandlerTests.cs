@@ -169,6 +169,18 @@ public class RunSlashCommandHandlerTests
     }
 
     [Test]
+    public async Task Rename_TooLong_SaysWhatTheMenuSays()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+
+        await RunAsync(h, "/rename " + new string('x', 257));
+
+        await h.Sender.DidNotReceiveWithAnyArgs().Send(default(UpdateChatCommand)!, default);
+        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, NeuralDamage.Application.Validators.UpdateChatValidator.TooLongName);
+    }
+
+    [Test]
     public async Task Bots_ListsBotsAndMuteState()
     {
         var h = await BuildAsync();

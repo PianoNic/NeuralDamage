@@ -1,8 +1,17 @@
+using System.Text.Json.Serialization;
 using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Infrastructure.Services;
 
-public record ChatMessage(string Role, string Content);
+/// <summary>A turn sent to the model: "user", "assistant" or <see cref="Note"/>.</summary>
+public record ChatMessage(string Role, string Content)
+{
+    /// <summary>
+    /// A line from the app after the history (the time, a one-off instruction).
+    /// It is sent as a user turn, and never as part of the cached prefix.
+    /// </summary>
+    public const string Note = "note";
+}
 /// <summary>Dollars per million tokens.</summary>
 public record ModelPricing(decimal Prompt, decimal Completion);
 
@@ -19,6 +28,14 @@ public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelP
 
     /// <summary>1 (cheap) to 3 (expensive), relative to the configured price caps.</summary>
     public int PriceTier { get; init; }
+
+    /// <summary>Whether the model takes OpenRouter's <c>reasoning</c> parameter, so its effort can be set.</summary>
+    [JsonIgnore]
+    public bool AcceptsReasoning { get; init; }
+
+    /// <summary>Whether the model always reasons (<c>reasoning.mandatory</c>) and rejects an effort of none.</summary>
+    [JsonIgnore]
+    public bool ReasoningMandatory { get; init; }
 }
 
 public interface IOpenRouterService

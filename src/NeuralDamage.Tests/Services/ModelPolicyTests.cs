@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using NeuralDamage.Infrastructure.Services;
+using NSubstitute;
 
 namespace NeuralDamage.Tests.Services;
 
@@ -15,7 +16,7 @@ public class ModelPolicyTests
     {
         var policy = FromConfig();
 
-        await Assert.That(policy).IsEqualTo(new ModelPolicy(0.25m, 0.60m, ZdrOnly: true, ExcludeBatchModels: true));
+        await Assert.That(policy).IsEqualTo(new ModelPolicy(0.25m, 0.60m, ZdrOnly: true, ExcludeBatchModels: true, DisableReasoning: true));
     }
 
     [Test]
@@ -39,9 +40,9 @@ public class ModelPolicyTests
     [Test]
     public async Task Switches_CanBeTurnedOff()
     {
-        var policy = FromConfig(("OpenRouter:ZdrOnly", "false"), ("OpenRouter:ExcludeBatchModels", "false"), ("OpenRouter:MaxPromptPrice", "1.5"));
+        var policy = FromConfig(("OpenRouter:ZdrOnly", "false"), ("OpenRouter:ExcludeBatchModels", "false"), ("OpenRouter:MaxPromptPrice", "1.5"), ("OpenRouter:DisableReasoning", "false"));
 
-        await Assert.That(policy).IsEqualTo(new ModelPolicy(1.5m, 0.60m, ZdrOnly: false, ExcludeBatchModels: false));
+        await Assert.That(policy).IsEqualTo(new ModelPolicy(1.5m, 0.60m, ZdrOnly: false, ExcludeBatchModels: false, DisableReasoning: false));
         await Assert.That(policy.Refusal("cheap/model:batch", new ModelPricing(0.1m, 0.2m), new HashSet<string>())).IsNull();
     }
 
@@ -55,5 +56,54 @@ public class ModelPolicyTests
         await Assert.That(policy.Refusal("cheap/model:batch", new ModelPricing(0.1m, 0.4m), zdr)!).Contains("batch");
         await Assert.That(policy.Refusal("retaining/model", new ModelPricing(0.1m, 0.4m), zdr)!).Contains("zero-data-retention");
         await Assert.That(policy.Refusal("pricey/model", new ModelPricing(2m, 8m), zdr)!).Contains("price cap");
+    }
+
+    private static readonly OpenRouterModel AlwaysReasons = new("a/always-reasons", "Always reasons", 8000, new ModelPricing(0.1m, 0.2m)) { AcceptsReasoning = true, ReasoningMandatory = true };
+    private static readonly OpenRouterModel CanReason = new("a/can-reason", "Can reason", 8000, new ModelPricing(0.1m, 0.2m)) { AcceptsReasoning = true };
+
+    private static IOpenRouterService Catalogue()
+    {
+        var openRouter = Substitute.For<IOpenRouterService>();
+        openRouter.ListModelsAsync(Arg.Any<CancellationToken>()).Returns([AlwaysReasons, CanReason]);
+        return openRouter;
+    }
+
+    [Test]
+    public async Task ReasoningOff_RefusesModelsThatAlwaysReason()
+    {
+        var policy = new ModelPolicy(0.25m, 0.60m, DisableReasoning: true);
+        var openRouter = Catalogue();
+
+        // Hidden from the model browser...
+        var allowed = await policy.FilterAsync(openRouter, await openRouter.ListModelsAsync());
+        await Assert.That(allowed.Select(m => m.Id)).IsEquivalentTo(["a/can-reason"]);
+
+        // ...refused on create or switch...
+        await Assert.That((await policy.CheckModelAsync(openRouter, AlwaysReasons.Id))!).Contains("always reasons");
+        await Assert.That(await policy.CheckModelAsync(openRouter, CanReason.Id)).IsNull();
+
+        // ...and flagged on bots that already use one.
+        var status = (await policy.StatusLookupAsync(openRouter))(AlwaysReasons.Id);
+        await Assert.That(status.Status).IsEqualTo(ModelStatus.NotAllowed);
+        await Assert.That(status.Reason!).Contains("OpenRouter:DisableReasoning");
+    }
+
+    [Test]
+    public async Task ReasoningOff_ChecksTheCatalogueEvenWithoutAPriceCap()
+    {
+        var policy = new ModelPolicy(0, 0, DisableReasoning: true);
+
+        await Assert.That(await policy.CheckModelAsync(Catalogue(), AlwaysReasons.Id)).IsNotNull();
+    }
+
+    [Test]
+    public async Task ReasoningOn_AllowsModelsThatAlwaysReason()
+    {
+        var policy = new ModelPolicy(0.25m, 0.60m, DisableReasoning: false);
+        var openRouter = Catalogue();
+
+        await Assert.That((await policy.FilterAsync(openRouter, await openRouter.ListModelsAsync())).Count).IsEqualTo(2);
+        await Assert.That(await policy.CheckModelAsync(openRouter, AlwaysReasons.Id)).IsNull();
+        await Assert.That((await policy.StatusLookupAsync(openRouter))(AlwaysReasons.Id)).IsEqualTo(ModelStatus.Ok);
     }
 }

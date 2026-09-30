@@ -11,6 +11,7 @@ public class ChatBotState : IChatBotState
     private readonly ConcurrentDictionary<Guid, byte> _stopped = new();
     private readonly ConcurrentDictionary<(Guid ChatId, Guid BotId), byte> _muted = new();
     private readonly ConcurrentDictionary<(Guid ChatId, Guid BotId), byte> _modelNotices = new();
+    private readonly ConcurrentDictionary<(Guid ChatId, Guid BotId), DateTime> _historyStarts = new();
 
     public void Stop(Guid chatId) => _stopped[chatId] = 0;
     public void Resume(Guid chatId) => _stopped.TryRemove(chatId, out _);
@@ -26,4 +27,8 @@ public class ChatBotState : IChatBotState
         foreach (var key in _modelNotices.Keys.Where(k => k.BotId == botId))
             _modelNotices.TryRemove(key, out _);
     }
+
+    public DateTime? HistoryStart(Guid chatId, Guid botId) =>
+        _historyStarts.TryGetValue((chatId, botId), out var start) ? start : null;
+    public void SetHistoryStart(Guid chatId, Guid botId, DateTime start) => _historyStarts[(chatId, botId)] = start;
 }

@@ -21,4 +21,12 @@ public interface IChatBotState
     bool TryMarkModelNotice(Guid chatId, Guid botId);
     /// <summary>Lets the notice show again, in every chat, once the bot's model is changed.</summary>
     void ClearModelNotices(Guid botId);
+
+    /// <summary>
+    /// When the oldest message in the bot's last history window was sent, so
+    /// the next reply starts its history there too and the prompt keeps the
+    /// same beginning (see <see cref="BotPromptBuilder.TrimHistory"/>).
+    /// </summary>
+    DateTime? HistoryStart(Guid chatId, Guid botId);
+    void SetHistoryStart(Guid chatId, Guid botId, DateTime start);
 }

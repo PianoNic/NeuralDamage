@@ -50,7 +50,8 @@ public class ModelMetadataTests
               "description":"The smallest GPT-5. Built for speed.",
               "pricing":{"prompt":"0.00000005","completion":"0.0000004"},
               "architecture":{"input_modalities":["text","image","file"]},
-              "supported_parameters":["reasoning","tools"]
+              "supported_parameters":["reasoning","tools"],
+              "reasoning":{"mandatory":true,"supported_efforts":["low","medium","high"]}
             }]}
             """;
 
@@ -60,6 +61,24 @@ public class ModelMetadataTests
         await Assert.That(model.Description).IsEqualTo("The smallest GPT-5.");
         await Assert.That(model.Capabilities).IsEquivalentTo([ModelMetadata.Reasoning, ModelMetadata.Vision, ModelMetadata.Fast]);
         await Assert.That(model.Pricing).IsEqualTo(new ModelPricing(0.05m, 0.4m));
+        await Assert.That(model.AcceptsReasoning).IsTrue();
+        await Assert.That(model.ReasoningMandatory).IsTrue();
+    }
+
+    [Test]
+    public async Task ParseModels_ReasoningFlagsDefaultToOff()
+    {
+        const string json = """
+            {"data":[
+              {"id":"a/optional","name":"Optional","supported_parameters":["include_reasoning"],"reasoning":{"mandatory":false}},
+              {"id":"a/plain","name":"Plain"}
+            ]}
+            """;
+
+        var models = OpenRouterAgentService.ParseModels(json);
+
+        // include_reasoning alone shows the capability but does not take an effort.
+        await Assert.That(models.Any(m => m.AcceptsReasoning || m.ReasoningMandatory)).IsFalse();
     }
 
     [Test]

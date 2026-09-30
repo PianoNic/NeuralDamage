@@ -1,4 +1,5 @@
 using Mediator;
+using NeuralDamage.Application.Validators;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure;
@@ -135,8 +136,8 @@ public class RunSlashCommandHandler(
             {
                 if (command.Argument.Length == 0)
                     return "Usage: /rename New Name";
-                if (command.Argument.Length > 256)
-                    return "Chat names can be at most 256 characters.";
+                if (command.Argument.Length > UpdateChatValidator.MaxNameLength)
+                    return UpdateChatValidator.TooLongName;
 
                 // Renaming tells the chat itself, however it is done.
                 var result = await sender.Send(new UpdateChatCommand(chatId, command.Argument, userId), ct);
