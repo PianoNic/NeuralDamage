@@ -46,21 +46,22 @@
 
 ```env
 # OIDC Provider (Pocket ID, Google, etc.)
-OIDC__Authority=https://your-oidc-provider.com
-OIDC__ClientId=your-client-id
-OIDC__RedirectUri=http://localhost:3000/callback
-OIDC__PostLogoutRedirectUri=http://localhost:3000/
-
-# Database
-ConnectionStrings__DefaultConnection=Host=db;Database=neuraldamage;Username=neuraldamage;Password=changeme
+Oidc__Authority=https://your-oidc-provider.com
+Oidc__ClientId=your-client-id
+Oidc__RedirectUri=http://localhost:3000/callback
+Oidc__PostLogoutRedirectUri=http://localhost:3000/
+Oidc__Scope=openid profile email
 
 # OpenRouter (AI models)
-OPENROUTER_API_KEY=sk-or-v1-your-key-here
+OpenRouter__ApiKey=sk-or-v1-your-key-here
 
-# Model price caps ($/million tokens, 0 = no limit)
-MAX_PROMPT_PRICE=0.25
-MAX_COMPLETION_PRICE=0.60
+# Bot response ranking - any OpenAI-compatible endpoint (optional)
+BotRanking__Endpoint=https://your-gateway.example.com/v1
+BotRanking__ApiKey=your-ranking-api-key
+BotRanking__Model=your-model-id
 ```
+
+The database connection (`ConnectionStrings__DefaultConnection`) is set in `compose.yml`.
 
 2. **Start it:**
 
@@ -104,7 +105,7 @@ See [docs/dev-setup.md](docs/dev-setup.md) for full development setup instructio
 
 ```
 NeuralDamage/
-├── docker-compose.yml
+├── compose.yml
 ├── docs/
 │   └── dev-setup.md
 ├── frontend/                        # React SPA

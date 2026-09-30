@@ -123,27 +123,20 @@ if (app.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseSpaStaticFiles();
-}
-
 app.UseRouting();
 if (app.Environment.IsDevelopment())
     app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapToamaisutaaConfiguration();
 app.MapHub<NeuralDamage.API.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<NeuralDamage.API.Hubs.UserHub>("/hubs/user");
 
+// The SPA shell has to load before the user can sign in, so it bypasses the
+// fallback authorization policy that guards everything else.
 if (!app.Environment.IsDevelopment())
-{
-    app.UseSpa(spa =>
-    {
-        spa.Options.SourcePath = "wwwroot";
-    });
-}
+    app.MapFallbackToFile("index.html").AllowAnonymous();
 
 app.Run();

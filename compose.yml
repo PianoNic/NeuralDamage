@@ -1,13 +1,13 @@
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     container_name: neuraldamage-db
     environment:
       POSTGRES_USER: neuraldamage
       POSTGRES_PASSWORD: changeme
       POSTGRES_DB: neuraldamage
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - db-data:/var/lib/postgresql
     ports:
       - "5432:5432"
     healthcheck:
@@ -26,18 +26,15 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=db;Database=neuraldamage;Username=neuraldamage;Password=changeme
     ports:
-      - "5012:8080"
+      - "3000:8080"
     depends_on:
       db:
         condition: service_healthy
-
-  frontend:
-    build: ./frontend
-    container_name: neuraldamage-frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - api
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /api/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   db-data:
