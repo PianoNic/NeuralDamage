@@ -45,15 +45,18 @@ public class BotDecisionEngine(
             .Take(2)
             .ToList();
 
-        // A person talking to another person by name ("hey alice, ...") is not
-        // talking to the bots, however recently one of them spoke.
+        // A person who names someone - another person ("hey alice, ...") or
+        // particular bots ("Byte, tabs or spaces?") - is talking to them. The
+        // bots left unnamed stay out, however recently one of them spoke.
         var otherPeople = message.SenderUserId is null
             ? []
             : await db.ChatMembers
                 .Where(cm => cm.ChatId == chatId && cm.UserId != null && cm.UserId != message.SenderUserId)
                 .Select(cm => cm.User!.DisplayName)
                 .ToListAsync(ct);
-        var toAPerson = otherPeople.Any(name => FuzzyNameMatcher.IsNameMentioned(message.Content, name, null));
+        var addressedToOthers = message.SenderUserId is not null
+            && (otherPeople.Any(name => FuzzyNameMatcher.IsNameMentioned(message.Content, name, null))
+                || candidateBots.Any(b => FuzzyNameMatcher.IsNameMentioned(message.Content, b.Name, b.Aliases)));
 
         foreach (var bot in candidateBots)
         {
@@ -87,9 +90,9 @@ public class BotDecisionEngine(
                 continue;
             }
 
-            if (toAPerson)
+            if (addressedToOthers)
             {
-                logger.LogInformation("Bot {Bot}: message is addressed to another person; skipping", bot.Name);
+                logger.LogInformation("Bot {Bot}: message is addressed to someone else; skipping", bot.Name);
                 continue;
             }
 

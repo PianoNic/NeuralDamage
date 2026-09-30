@@ -166,6 +166,21 @@ public class BotDecisionEngineTests
         await Assert.That(await engine.DecideRespondersAsync(chat.Id, toBoth, [bot1, bot2])).IsEquivalentTo([bot2.Id]);
     }
 
+    [Test]
+    public async Task OneBotNamed_TheBotThatJustSpokeStaysOut()
+    {
+        var (db, user, chat, bot1, bot2) = await SetupChatWithBots();
+        var engine = EngineWithSilentJudge(db);
+        db.Messages.Add(new Message { ChatId = chat.Id, SenderBotId = bot2.Id, Content = "risotto, obviously", CreatedAt = DateTime.UtcNow.AddSeconds(-10) });
+        var msg = new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "GPT, tabs or spaces?" };
+        db.Messages.Add(msg);
+        await db.SaveChangesAsync();
+
+        var responders = await engine.DecideRespondersAsync(chat.Id, msg, [bot1, bot2]);
+
+        await Assert.That(responders).IsEquivalentTo([bot1.Id]);
+    }
+
     /// <summary>A Tier 3 that never picks anyone, so only Tiers 1 and 2 decide.</summary>
     private static BotDecisionEngine EngineWithSilentJudge(NeuralDamage.Infrastructure.NeuralDamageDbContext db, double botChainChance = 0)
     {
