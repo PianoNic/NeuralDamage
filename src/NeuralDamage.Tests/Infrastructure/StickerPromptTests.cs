@@ -68,6 +68,17 @@ public class StickerPromptTests
     }
 
     [Test]
+    public async Task ImageDescriber_NamesWhoItRecognises_WithoutMakingNamesUp()
+    {
+        var prompt = NeuralDamage.Infrastructure.Services.Attachments.ImageDescriber.Prompt;
+
+        await Assert.That(prompt).DoesNotContain("never guess who they are");
+        await Assert.That(prompt).Contains("Name the person, character or meme when you recognise them");
+        await Assert.That(prompt).Contains("never make up a name");
+        await Assert.That(prompt).Contains("Copy any visible text word for word.");
+    }
+
+    [Test]
     public async Task StickerDescriber_NamesWhoItRecognises_WithoutMakingNamesUp()
     {
         var prompt = NeuralDamage.Infrastructure.Services.Attachments.ImageDescriber.StickerPrompt;
