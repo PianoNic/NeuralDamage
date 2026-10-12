@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideAtSign,
@@ -12,6 +12,7 @@ import {
 } from '@ng-icons/lucide';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
+import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { BotDto, ChatMember } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
@@ -21,6 +22,8 @@ import { joinedDate, joinedLabel, roleLabel, visibilityLabel } from './people-me
 
 /** About what fits on the subtitle line of the card. */
 const SUBTITLE_CHARS = 40;
+/** About what four lines of the card hold. */
+const READ_MORE_CHARS = 200;
 
 /**
  * Who a bot or person is, and what you can do with them: a card beside the People sheet on wider
@@ -28,7 +31,7 @@ const SUBTITLE_CHARS = 40;
  */
 @Component({
   selector: 'app-member-profile',
-  imports: [NgIcon, HlmBadge, HlmButton, HlmSpinner, MemberAvatar],
+  imports: [NgIcon, HlmBadge, HlmButton, HlmDialogImports, HlmSpinner, MemberAvatar],
   providers: [
     provideIcons({
       lucideAtSign,
@@ -71,8 +74,19 @@ const SUBTITLE_CHARS = 40;
       @if (!bot()) {
         <div class="flex justify-center py-4"><hlm-spinner /></div>
       } @else {
-        @if (about()) {
-          <p class="text-muted-foreground text-[13px] leading-relaxed whitespace-pre-line">{{ about() }}</p>
+        @if (description()) {
+          <p class="text-[13px] leading-relaxed">{{ description() }}</p>
+        }
+        @if (character()) {
+          <div class="flex flex-col items-start gap-1">
+            <p class="text-muted-foreground line-clamp-4 text-[13px] leading-relaxed whitespace-pre-line">{{ character() }}</p>
+            @if (characterIsLong()) {
+              <button hlmBtn variant="link" size="sm" class="h-auto p-0 text-[13px]" (click)="reading.set(true)">Read more</button>
+            }
+          </div>
+        }
+        @if (nicknames()) {
+          <p class="text-muted-foreground text-[13px]">Nicknames: {{ nicknames() }}.</p>
         }
 
         @if (broken()) {
@@ -149,6 +163,21 @@ const SUBTITLE_CHARS = 40;
         {{ isSelf() ? 'Leave chat' : 'Remove from chat' }}
       </button>
     }
+
+    <hlm-dialog [state]="reading() ? 'open' : 'closed'" (closed)="reading.set(false)">
+      <hlm-dialog-content *hlmDialogPortal="let ctx" class="sm:max-w-lg">
+        <hlm-dialog-header>
+          <h2 hlmDialogTitle>{{ member().displayName }}</h2>
+          @if (bot()?.personality?.trim(); as short) {
+            <p hlmDialogDescription>{{ short }}</p>
+          }
+        </hlm-dialog-header>
+        <div class="max-h-[60vh] overflow-y-auto text-sm leading-relaxed whitespace-pre-line">{{ character() }}</div>
+        @if (nicknames()) {
+          <p class="text-muted-foreground text-[13px]">Nicknames: {{ nicknames() }}.</p>
+        }
+      </hlm-dialog-content>
+    </hlm-dialog>
   `,
 })
 export class MemberProfile {
@@ -187,18 +216,18 @@ export class MemberProfile {
     return joinedLabel(member.joinedAt);
   });
 
-  /** The persona beyond the one-line subtitle, and the nicknames it answers to. */
-  protected readonly about = computed(() => {
-    const bot = this.bot();
-    if (!bot) return '';
-    const lines = [];
-    const personality = bot.personality?.trim() ?? '';
-    // The subtitle only fits a short line; a longer persona is shown in full here.
-    if (personality.includes('\n') || personality.length > SUBTITLE_CHARS) lines.push(personality);
-    if (bot.systemPrompt?.trim()) lines.push(bot.systemPrompt.trim());
-    if (bot.aliases?.trim()) lines.push(`Nicknames: ${bot.aliases.trim()}.`);
-    return lines.filter(Boolean).join('\n');
+  /** Whether the full character is open in its own dialog. */
+  protected readonly reading = signal(false);
+
+  /** The short description, in full when the subtitle line had to cut it. */
+  protected readonly description = computed(() => {
+    const personality = this.bot()?.personality?.trim() ?? '';
+    return personality.includes('\n') || personality.length > SUBTITLE_CHARS ? personality : '';
   });
+  protected readonly character = computed(() => this.bot()?.systemPrompt?.trim() ?? '');
+  /** Past about four lines of the card the character is cut, and "Read more" shows the rest. */
+  protected readonly characterIsLong = computed(() => this.character().length > READ_MORE_CHARS);
+  protected readonly nicknames = computed(() => this.bot()?.aliases?.trim() ?? '');
 
   protected readonly modelName = computed(() => this.catalog.nameOf(this.bot()?.modelId ?? this.member().modelId));
   protected readonly visibility = computed(() => {
