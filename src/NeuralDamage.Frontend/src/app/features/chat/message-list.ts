@@ -149,7 +149,7 @@ function senderOf(message: Message): string {
                 <div class="my-2 flex justify-center">
                   <span
                     role="status"
-                    class="bg-muted text-muted-foreground max-w-[85%] rounded-full px-3 py-1 text-center text-xs whitespace-pre-wrap"
+                    class="bg-muted text-muted-foreground max-w-[85%] rounded-xl px-3 py-1 text-center text-xs whitespace-pre-wrap"
                     >{{ item.content }}</span
                   >
                 </div>
