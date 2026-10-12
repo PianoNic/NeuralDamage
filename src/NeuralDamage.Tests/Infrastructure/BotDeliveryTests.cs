@@ -31,6 +31,20 @@ public class BotDeliveryTests
     }
 
     [Test]
+    [Arguments("honestly—no idea", "honestly, no idea")]
+    [Arguments("honestly — no idea", "honestly, no idea")]
+    [Arguments("honestly – no idea", "honestly, no idea")]
+    [Arguments("— whatever", "whatever")]
+    [Arguments("wait—", "wait")]
+    [Arguments("wait —!", "wait!")]
+    [Arguments("send me an e-mail", "send me an e-mail")]
+    [Arguments("in 2-3 days, or 2–3", "in 2-3 days, or 2–3")]
+    public async Task EmDashes_NeverReachTheChat(string reply, string expected)
+    {
+        await Assert.That(BotReplyFormatter.Split(reply, 3)).IsEquivalentTo(new[] { expected });
+    }
+
+    [Test]
     public async Task NearDuplicateOfARecentMessage_RegeneratesOnce()
     {
         using var h = await OrchestratorHarness.CreateAsync();
