@@ -128,7 +128,7 @@ public class BotPromptBuilderTests
 
         await Assert.That(prompt).Contains("Commit to the character fully");
         await Assert.That(prompt).Contains("don't lecture or moralise");
-        await Assert.That(prompt).Contains("Let the character decide how much to say, and don't pad.");
+        await Assert.That(prompt).Contains("Most of your messages are a line or two, the length of a real text.");
         await Assert.That(prompt).DoesNotContain("Vary your length");
         await Assert.That(prompt).DoesNotContain("roleplay violent");
     }
