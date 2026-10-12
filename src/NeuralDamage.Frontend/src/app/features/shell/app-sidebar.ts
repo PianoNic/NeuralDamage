@@ -77,8 +77,8 @@ import { SearchPalette } from './search-palette';
                 <ng-icon name="lucideSticker" />
                 <span>Stickers</span>
               </a>
-              @if (stickers.stickers().length) {
-                <div hlmSidebarMenuBadge class="text-muted-foreground">{{ stickers.stickers().length }}</div>
+              @if (stickers.count()) {
+                <div hlmSidebarMenuBadge class="text-muted-foreground">{{ stickers.count() }}</div>
               }
             </li>
           </ul>

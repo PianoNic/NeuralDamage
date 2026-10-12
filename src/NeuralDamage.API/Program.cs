@@ -13,6 +13,7 @@ using NeuralDamage.Infrastructure.Extensions;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
+using NeuralDamage.Infrastructure.Services.Stickers;
 using System.Text.Json.Serialization;
 
 // Validation messages and formatting stay English whatever the host's locale.
@@ -54,7 +55,13 @@ var attachmentOptions = AttachmentOptions.FromConfiguration(builder.Configuratio
 builder.Services.AddSingleton(attachmentOptions);
 builder.Services.AddSingleton<IAttachmentStorage>(new FileSystemAttachmentStorage(
     Path.GetFullPath(attachmentOptions.Path, builder.Environment.ContentRootPath)));
-builder.Services.AddSingleton<IImageDescriber, ImageDescriber>();
+builder.Services.AddSingleton<ImageDescriber>();
+builder.Services.AddSingleton<IImageDescriber>(sp => sp.GetRequiredService<ImageDescriber>());
+builder.Services.AddSingleton(sp => new StickerDescribeQueue(
+    sp.GetRequiredService<ImageDescriber>().DescribeStickerAsync,
+    sp.GetRequiredService<ILogger<StickerDescribeQueue>>()));
+builder.Services.AddSingleton<IStickerDescribeQueue>(sp => sp.GetRequiredService<StickerDescribeQueue>());
+builder.Services.AddHostedService<StickerDescribeService>();
 builder.Services.AddHostedService<UnsentAttachmentSweeper>();
 
 // Rate limits

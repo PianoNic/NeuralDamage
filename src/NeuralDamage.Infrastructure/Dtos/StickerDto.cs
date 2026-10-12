@@ -32,3 +32,19 @@ public record MessageStickerDto(
     int? Height,
     bool Animated,
     string? Description);
+
+/// <summary>One page of the library, newest first.</summary>
+/// <param name="Total">How many stickers match the search, across all pages.</param>
+public record StickerPageDto(List<StickerDto> Items, int Total);
+
+/// <summary>The library at a glance.</summary>
+/// <param name="Count">How many stickers it holds.</param>
+/// <param name="Describing">How many still wait for, or are getting, their description.</param>
+/// <param name="CanImport">Whether the caller is an admin, who may import many at once.</param>
+public record StickerLibraryStatusDto(int Count, int Describing, bool CanImport);
+
+/// <summary>What one import request did with its files.</summary>
+/// <param name="Duplicates">Files skipped because the library already has the very same image.</param>
+public record StickerImportResultDto(int Added, int Duplicates, List<StickerImportFailureDto> Failed);
+
+public record StickerImportFailureDto(string FileName, string Error);

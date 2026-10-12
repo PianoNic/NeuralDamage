@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using NeuralDamage.Infrastructure.Services.Attachments;
@@ -35,6 +36,9 @@ public static partial class StickerRules
         return slug.Length == 0 ? null : slug;
     }
 
+    /// <summary>The file's SHA-256 in lowercase hex: byte-identical stickers have the same.</summary>
+    public static string Hash(ReadOnlySpan<byte> data) => Convert.ToHexStringLower(SHA256.HashData(data));
+
     public static bool IsValidName(string name) => name.Length <= MaxNameLength && NamePattern().IsMatch(name);
 
     /// <summary>The sniffed image, refused unless it is a PNG, WebP or GIF; with whether it moves.</summary>
@@ -50,6 +54,82 @@ public static partial class StickerRules
             _ => false,
         };
         return (image, animated);
+    }
+
+    /// <summary>
+    /// Makes an animated WebP or GIF loop forever, as stickers do in WhatsApp:
+    /// some files say "play once", and browsers honour that. A byte patch of the
+    /// loop count, no re-encoding; anything else comes back as it was.
+    /// </summary>
+    public static byte[] LoopForever(byte[] data)
+    {
+        if (ImageInspector.Inspect(data) is not { } image)
+            return data;
+        return image.ContentType switch
+        {
+            "image/webp" => LoopForeverWebP(data),
+            "image/gif" => LoopForeverGif(data),
+            _ => data,
+        };
+    }
+
+    /// <summary>The ANIM chunk holds a 4-byte background colour, then the uint16 LE loop count.</summary>
+    private static byte[] LoopForeverWebP(byte[] data)
+    {
+        var i = 12;
+        while (i + 8 <= data.Length)
+        {
+            var size = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(i + 4));
+            if (data.AsSpan(i, 4).SequenceEqual("ANIM"u8))
+            {
+                if (size < 6 || i + 14 > data.Length)
+                    return data;
+                if (BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(i + 12)) == 0)
+                    return data;
+                var patched = (byte[])data.Clone();
+                BinaryPrimitives.WriteUInt16LittleEndian(patched.AsSpan(i + 12), 0);
+                return patched;
+            }
+            if (size > int.MaxValue - 9)
+                return data;
+            i += 8 + (int)size + (int)(size & 1);
+        }
+        return data;
+    }
+
+    /// <summary>
+    /// Sets the NETSCAPE2.0 application extension's uint16 LE loop count to 0,
+    /// or inserts one after the global colour table when there is none.
+    /// </summary>
+    private static byte[] LoopForeverGif(byte[] data)
+    {
+        if (data.Length < 13 || GifFrames(data) < 2)
+            return data;
+        var afterColours = 13;
+        if ((data[10] & 0x80) != 0)
+            afterColours += 3 * (1 << ((data[10] & 0x07) + 1));
+        if (afterColours > data.Length)
+            return data;
+
+        var i = afterColours;
+        while (i < data.Length && data[i] == 0x21)
+        {
+            if (i + 14 <= data.Length && data[i + 1] == 0xFF && data[i + 2] == 0x0B && data.AsSpan(i + 3, 11).SequenceEqual("NETSCAPE2.0"u8))
+            {
+                var sub = i + 14;
+                if (sub + 4 > data.Length || data[sub] < 3 || data[sub + 1] != 0x01)
+                    return data;
+                if (BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(sub + 2)) == 0)
+                    return data;
+                var patched = (byte[])data.Clone();
+                BinaryPrimitives.WriteUInt16LittleEndian(patched.AsSpan(sub + 2), 0);
+                return patched;
+            }
+            i = SkipSubBlocks(data, i + 2);
+        }
+
+        byte[] loop = [0x21, 0xFF, 0x0B, .. "NETSCAPE2.0"u8, 0x03, 0x01, 0x00, 0x00, 0x00];
+        return [.. data.AsSpan(0, afterColours), .. loop, .. data.AsSpan(afterColours)];
     }
 
     /// <summary>Counts image descriptors, walking the blocks; stops at two, which is all it needs.</summary>

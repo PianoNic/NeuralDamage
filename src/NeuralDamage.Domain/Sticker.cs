@@ -25,6 +25,13 @@ public class Sticker : BaseEntity
     public int? Height { get; init; }
     public bool Animated { get; init; }
 
+    /// <summary>
+    /// The SHA-256 of the file, lowercase hex, so an import skips a sticker the
+    /// library already has. Null only on stickers from before it was kept, until
+    /// the describe service fills it in at the next start.
+    /// </summary>
+    public string? Sha256 { get; set; }
+
     /// <summary>How often it was sent; the most used go into the bots' prompt first.</summary>
     public int UseCount { get; set; }
 

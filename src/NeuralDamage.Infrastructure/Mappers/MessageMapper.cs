@@ -41,8 +41,8 @@ public static class MessageMapper
         sticker.Height,
         sticker.Animated,
         sticker.Description,
-        // A run cut short by a restart never clears the flag; past a couple of minutes it is not describing anything.
-        sticker.Describing && sticker.Description is null && DateTime.UtcNow - sticker.UpdatedAt < TimeSpan.FromMinutes(2),
+        // Queued or under way; a run cut short by a restart is queued again at the next start.
+        sticker.Describing && sticker.Description is null,
         sticker.UseCount,
         sticker.UploaderUserId,
         sticker.UploaderUser?.DisplayName ?? "Unknown",
