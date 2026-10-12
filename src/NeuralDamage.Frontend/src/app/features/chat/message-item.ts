@@ -10,7 +10,7 @@ import { Message, ReactionGroupDto } from '../../core/models';
 import { formatTime } from '../../shared/dates';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { isAttachmentUrl, MessageImages } from './attachments';
-import { markMentions } from './mentions';
+import { markMentions, MentionTarget } from './mentions';
 import { replyLabel } from './reply-label';
 import { StickerImage } from '../stickers/sticker-image';
 
@@ -100,6 +100,9 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
               [class.bg-primary]="own()"
               [class.text-primary-foreground]="own()"
               [class.bg-muted]="!own()"
+              (click)="onBodyEvent($event)"
+              (keydown.enter)="onBodyEvent($event)"
+              (keydown.space)="onBodyEvent($event)"
             >
               <pk-markdown class="prose prose-chat block" [content]="body()" [allowImage]="allowImage" />
             </div>
@@ -185,12 +188,14 @@ export class MessageItem {
   readonly highlighted = input(false);
   /** Show the one-line reference to the replied-to message (off when it is the message right above). */
   readonly showReply = input(true);
-  /** Every member's name, to mark their @mentions. */
-  readonly memberNames = input<readonly string[]>([]);
+  /** Every member's name and nickname, to mark their @mentions. */
+  readonly mentionTargets = input<readonly MentionTarget[]>([]);
 
   readonly reply = output<Message>();
   readonly react = output<string>();
   readonly jumpTo = output<string>();
+  /** An @mention of a member was clicked: show their card next to it. */
+  readonly openMention = output<{ memberId: string; anchor: HTMLElement }>();
 
   protected readonly quickReactions = QUICK_REACTIONS;
   protected readonly allowImage = isAttachmentUrl;
@@ -201,8 +206,17 @@ export class MessageItem {
   );
   protected readonly isBot = computed(() => this.message().senderType === 'bot');
   protected readonly body = computed(() =>
-    markMentions(this.message().content, this.memberNames()),
+    markMentions(this.message().content, this.mentionTargets()),
   );
+
+  /** Clicks and Enter/Space on a mention in the rendered markdown, which has no bindings of its own. */
+  protected onBodyEvent(event: Event): void {
+    const mention = (event.target as Element | null)?.closest?.<HTMLElement>('.mention[data-member-id]');
+    const memberId = mention?.dataset['memberId'];
+    if (!mention || !memberId) return;
+    event.preventDefault();
+    this.openMention.emit({ memberId, anchor: mention });
+  }
 
   protected readonly sentAt = computed(() => {
     const date = new Date(this.message().createdAt);

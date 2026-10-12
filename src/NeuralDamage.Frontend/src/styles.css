@@ -110,10 +110,23 @@
     & p {
       margin-block: 0.25em;
     }
+    /* A member's @mention: tinted like the chip in the composer, and opens their card. */
     & .mention {
       font-weight: 500;
-      text-decoration: underline;
-      text-underline-offset: 2px;
+      border-radius: 0.3em;
+      padding-inline: 0.2em;
+      background-color: color-mix(in oklab, currentColor 14%, transparent);
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+      cursor: pointer;
+      transition: background-color 120ms;
+      &:hover {
+        background-color: color-mix(in oklab, currentColor 24%, transparent);
+      }
+      &:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 1px;
+      }
     }
   }
 }

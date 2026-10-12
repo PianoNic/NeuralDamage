@@ -1,4 +1,5 @@
 import {
+  afterRenderEffect,
   Component,
   computed,
   effect,
@@ -35,7 +36,6 @@ import { HlmPopoverImports } from '@spartan-ng/helm/popover';
 import { HlmSheetImports } from '@spartan-ng/helm/sheet';
 import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
 import { firstValueFrom } from 'rxjs';
-import { BotsService } from '../../api/api/bots.service';
 import { ChatBotsService } from '../../api/api/chatBots.service';
 import { ChatMembersService } from '../../api/api/chatMembers.service';
 import { UserService } from '../../api/api/user.service';
@@ -43,6 +43,7 @@ import { describeApiError } from '../../core/http-errors';
 import { mediaQuery } from '../../core/media-query';
 import { BotDto, ChatMember, UserDto } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
+import { BotDetails } from '../bots/bot-details';
 import { BotDialog } from '../bots/bot-dialog';
 import { BotDirectory } from '../bots/bot-directory';
 import { hasModelProblem, modelProblemLabel } from '../bots/bot-meta';
@@ -200,6 +201,7 @@ const PROFILE_HEIGHT = 340;
                 <ul class="-mx-1 flex flex-col gap-0.5">
                   @for (member of group.members; track member.id) {
                     <li
+                      [attr.data-member-id]="member.id"
                       class="group/row hover:bg-muted/60 flex items-center gap-0.5 rounded-lg pe-1"
                       [class.bg-muted]="profileId() === member.id"
                     >
@@ -360,7 +362,7 @@ const PROFILE_HEIGHT = 340;
 })
 export class PeopleSheet implements OnDestroy {
   private readonly directory = inject(BotDirectory);
-  private readonly botsApi = inject(BotsService);
+  private readonly botDetails = inject(BotDetails);
   private readonly chatBotsApi = inject(ChatBotsService);
   private readonly membersApi = inject(ChatMembersService);
   private readonly usersApi = inject(UserService);
@@ -385,9 +387,11 @@ export class PeopleSheet implements OnDestroy {
     'hover:bg-muted focus-visible:ring-ring/50 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-2';
 
   /** Bot details (personality, stats, creator) by bot id; members only carry a summary. */
-  protected readonly details = signal<ReadonlyMap<string, BotDto>>(new Map());
+  protected readonly details = this.botDetails.byId;
   protected readonly profileId = signal<string | null>(null);
   protected readonly profileTop = signal(0);
+  /** A card opened from outside the sheet, waiting for its row to render so it can sit beside it. */
+  private readonly placing = signal<string | null>(null);
 
   /** Which section's add popover is open: public bots and a new bot, or people to invite. */
   protected readonly addOpen = signal<AddKind | null>(null);
@@ -432,7 +436,7 @@ export class PeopleSheet implements OnDestroy {
     effect(() => {
       if (!this.open()) return;
       const ids = this.bots().map((m) => m.botId!);
-      untracked(() => void this.loadDetails(ids.filter((id) => !this.details().has(id))));
+      untracked(() => void this.botDetails.loadMissing(ids));
     });
     effect(() => {
       if (this.open()) void this.directory.load();
@@ -447,12 +451,19 @@ export class PeopleSheet implements OnDestroy {
       if (!open || !chatId) return;
       this.inviteTimer = setTimeout(() => void this.loadInvitable(chatId, search), 200);
     });
-    // Another chat: forget this one's cards.
+    afterRenderEffect(() => {
+      const id = this.placing();
+      const panel = this.panel()?.nativeElement;
+      const row = id && panel?.querySelector<HTMLElement>(`[data-member-id="${CSS.escape(id)}"]`);
+      if (!row) return;
+      this.placeProfile(row);
+      untracked(() => this.placing.set(null));
+    });
+    // Another chat: close this one's card.
     effect(() => {
       this.chatId();
       untracked(() => {
         this.profileId.set(null);
-        this.details.set(new Map());
       });
     });
   }
@@ -510,14 +521,25 @@ export class PeopleSheet implements OnDestroy {
       this.profileId.set(null);
       return;
     }
-    const panel = this.panel()?.nativeElement.getBoundingClientRect();
-    const row = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const top = panel ? row.top - panel.top : 0;
-    this.profileTop.set(Math.max(12, Math.min(top, window.innerHeight - PROFILE_HEIGHT - 12)));
+    this.placeProfile(event.currentTarget as HTMLElement);
     this.profileId.set(member.id);
     // Always refetch: the card shows live stats (replies today), and the cached copy is
     // from whenever the sheet first opened. The cached one shows until the fresh one lands.
     if (member.botId) void this.loadDetails([member.botId]);
+  }
+
+  /** Opens a member's card as a click on their row does, once the sheet has rendered the row. */
+  showProfile(member: ChatMember): void {
+    this.profileId.set(member.id);
+    this.placing.set(member.id);
+    if (member.botId) void this.loadDetails([member.botId]);
+  }
+
+  /** Puts the card beside the row it belongs to, pushed up when the row is near the bottom. */
+  private placeProfile(row: HTMLElement): void {
+    const panel = this.panel()?.nativeElement.getBoundingClientRect();
+    const top = panel ? row.getBoundingClientRect().top - panel.top : 0;
+    this.profileTop.set(Math.max(12, Math.min(top, window.innerHeight - PROFILE_HEIGHT - 12)));
   }
 
   protected mentionMember(member: ChatMember): void {
@@ -525,7 +547,7 @@ export class PeopleSheet implements OnDestroy {
     this.profileId.set(null);
   }
 
-  protected async toggleMute(member: ChatMember): Promise<void> {
+  async toggleMute(member: ChatMember): Promise<void> {
     if (!member.botId) return;
     const muted = !member.isMuted;
     this.patchMember.emit({ id: member.id, changes: { isMuted: muted } });
@@ -608,16 +630,8 @@ export class PeopleSheet implements OnDestroy {
     }
   }
 
-  private async loadDetails(ids: readonly string[]): Promise<void> {
-    if (!ids.length) return;
-    const loaded = await Promise.all(
-      ids.map((id) => firstValueFrom(this.botsApi.apiBotsBotIdGet(id)).catch(() => null)),
-    );
-    this.details.update((map) => {
-      const next = new Map(map);
-      for (const bot of loaded) if (bot) next.set(bot.id, bot);
-      return next;
-    });
+  private loadDetails(ids: readonly string[]): Promise<void> {
+    return this.botDetails.load(ids);
   }
 
   private async loadInvitable(chatId: string, search: string): Promise<void> {
