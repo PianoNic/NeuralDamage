@@ -39,6 +39,29 @@ public class ValidationBehaviorTests
     }
 
     [Test]
+    [Arguments(null, "Give it a short description.")]
+    [Arguments("   ", "Give it a short description.")]
+    [Arguments("TOO_LONG", "The short description can be at most 140 characters.")]
+    public async Task NewBot_NeedsAShortDescriptionThatFits(string? description, string message)
+    {
+        var command = new CreateBotCommand("Rex", "m/rex", "You are Rex.", description == "TOO_LONG" ? new string('x', 141) : description, 0.7, null, Guid.NewGuid());
+
+        var result = await new CreateBotValidator().ValidateAsync(command);
+
+        await Assert.That(result.Errors.Select(e => e.ErrorMessage)).IsEquivalentTo([message]);
+    }
+
+    [Test]
+    public async Task NewBot_AcceptsAShortDescriptionOfTheMaximumLength_MeasuredTrimmed()
+    {
+        var command = new CreateBotCommand("Rex", "m/rex", "You are Rex.", "  " + new string('x', 140) + "  ", 0.7, null, Guid.NewGuid());
+
+        var result = await new CreateBotValidator().ValidateAsync(command);
+
+        await Assert.That(result.IsValid).IsTrue();
+    }
+
+    [Test]
     public async Task RenamingFromTheMenu_AcceptsANameOfTheMaximumLength()
     {
         var result = await new UpdateChatValidator().ValidateAsync(new UpdateChatCommand(Guid.NewGuid(), new string('x', 256), Guid.NewGuid()));

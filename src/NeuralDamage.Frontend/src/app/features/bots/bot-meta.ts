@@ -78,15 +78,37 @@ export function clampTemperature(temperature: number): number {
   return Math.min(Math.max(temperature, 0), MAX_TEMPERATURE);
 }
 
+/** The most a short description may hold, as the server enforces it. */
+export const MAX_SHORT_DESCRIPTION = 140;
+
 export interface BotFormValue {
   name: string;
   aliases: string;
+  /** The short description: one line saying who the bot is (the API's `personality`). */
   personality: string;
   visibility: Visibility;
   modelId: string;
   temperature: number;
-  /** Optional instructions that replace the default "You are <name>."; blank keeps the default. */
+  /** The character: the full instructions for how the bot talks and thinks (the API's `systemPrompt`). */
   systemPrompt?: string;
+}
+
+/**
+ * The character and short description to edit for a bot. Bots from before the short description
+ * existed kept their whole character in `personality` and left `systemPrompt` empty; the server
+ * still reads those as "You are <name>." plus the personality, so the form shows exactly that as the
+ * character, and keeps the personality as the description only when it fits on one line.
+ */
+export function characterFields(bot: {
+  name: string;
+  systemPrompt?: string | null;
+  personality?: string | null;
+}): { character: string; description: string } {
+  const character = bot.systemPrompt?.trim() ?? '';
+  const personality = bot.personality?.trim() ?? '';
+  if (character || !personality) return { character, description: personality };
+  const fits = personality.length <= MAX_SHORT_DESCRIPTION && !personality.includes('\n');
+  return { character: `You are ${bot.name}.\n${personality}`, description: fits ? personality : '' };
 }
 
 /**
@@ -98,7 +120,7 @@ export function toCreateRequest(value: BotFormValue, chatId: string | null | und
   return {
     name: value.name.trim(),
     modelId: value.modelId,
-    // Usually blank: the persona lives in the personality and the server falls back to "You are <name>."
+    // Blank falls back to "You are <name>." on the server.
     systemPrompt: value.systemPrompt?.trim() ?? '',
     personality: value.personality.trim() || null,
     aliases: normalizeAliases(value.aliases) || null,

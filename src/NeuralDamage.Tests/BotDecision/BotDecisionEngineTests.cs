@@ -528,6 +528,43 @@ public class BotDecisionEngineTests
     }
 
     [Test]
+    [Arguments("Cynical film critic.", "Hates blockbusters. Loves arguing.", "Cynical film critic. Hates blockbusters. Loves arguing.")]
+    [Arguments(null, "Hates blockbusters. Loves arguing.", "Hates blockbusters. Loves arguing.")]
+    [Arguments("", "Hates blockbusters.", "Hates blockbusters.")]
+    [Arguments("Cynical film critic.", "", "You are GPT.\nCynical film critic.")]
+    [Arguments(null, "", "You are GPT.")]
+    public async Task Persona_IsTheShortDescription_ThenTheCharacter(string? description, string character, string expected)
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Quiet, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 1);
+        h.Bots[0].Personality = description;
+        h.Bots[0].SystemPrompt = character;
+        await h.Db.SaveChangesAsync();
+        var message = await h.SayAsync("anyone seen the new dune movie?");
+
+        await DecideAsync(h, jev, message);
+
+        var (state, _) = jev.Calls.Single();
+        await Assert.That(state.Bots.Values.Single().Persona).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task Persona_KeepsOnlyTheStartOfALongCharacter()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Quiet, 0.9));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 1);
+        h.Bots[0].Personality = "Cynical film critic.";
+        h.Bots[0].SystemPrompt = new string('x', 2000);
+        await h.Db.SaveChangesAsync();
+        var message = await h.SayAsync("anyone seen the new dune movie?");
+
+        await DecideAsync(h, jev, message);
+
+        var (state, _) = jev.Calls.Single();
+        await Assert.That(state.Bots.Values.Single().Persona).IsEqualTo("Cynical film critic. " + new string('x', 500) + "...");
+    }
+
+    [Test]
     public async Task ABotMentioningABot_IsUnchanged()
     {
         var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.9)) { Health = _ => 0 };
