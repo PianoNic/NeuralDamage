@@ -27,7 +27,9 @@ import { BotsService } from '../../api/api/bots.service';
 import { describeApiError } from '../../core/http-errors';
 import { BotDto } from '../../core/models';
 import {
+  clampTemperature,
   hasModelProblem,
+  MAX_TEMPERATURE,
   modelDisplayName,
   normalizeAliases,
   priceTierMarks,
@@ -247,7 +249,7 @@ const DEFAULT_TEMPERATURE = 0.8;
                 class="flex-1"
                 aria-labelledby="bot-temperature-label"
                 [min]="0"
-                [max]="2"
+                [max]="maxTemperature"
                 [step]="0.1"
                 [value]="[temperature()]"
                 (valueChange)="temperature.set($event[0])"
@@ -332,6 +334,7 @@ export class BotDialog {
   protected readonly visibility = signal<Visibility>('public');
   protected readonly modelId = signal<string | null>(null);
   protected readonly temperature = signal(DEFAULT_TEMPERATURE);
+  protected readonly maxTemperature = MAX_TEMPERATURE;
   protected readonly systemPrompt = signal('');
   protected readonly advancedOpen = signal(false);
   protected readonly saving = signal(false);
@@ -369,7 +372,7 @@ export class BotDialog {
         this.personality.set(bot?.personality ?? '');
         this.visibility.set(bot && !bot.isPublic ? 'private' : 'public');
         this.modelId.set(bot?.modelId ?? this.catalog.defaultId());
-        this.temperature.set(bot?.temperature ?? DEFAULT_TEMPERATURE);
+        this.temperature.set(clampTemperature(bot?.temperature ?? DEFAULT_TEMPERATURE));
         this.systemPrompt.set(bot?.systemPrompt ?? '');
         // A bot that already has its own prompt shows it; otherwise the section stays tucked away.
         this.advancedOpen.set(!!bot?.systemPrompt?.trim());

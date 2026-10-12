@@ -20,7 +20,7 @@ public class CustomProviderTests
         """;
 
     private const string OpenRouterModels = """
-        {"data":[{"id":"deepseek/deepseek-chat","name":"DeepSeek: V3","context_length":64000,"pricing":{"prompt":"0.0000002","completion":"0.0000008"},"supported_parameters":["reasoning"]}]}
+        {"data":[{"id":"deepseek/deepseek-chat","name":"DeepSeek: V3","context_length":64000,"pricing":{"prompt":"0.0000002","completion":"0.0000008"},"supported_parameters":["reasoning","temperature"]}]}
         """;
 
     private sealed record Seen(string Url, string? Authorization, string? Body);
@@ -164,6 +164,7 @@ public class CustomProviderTests
         await Assert.That(body.RootElement.GetProperty("model").GetString()).IsEqualTo("deepseek/deepseek-chat");
         await Assert.That(body.RootElement.GetProperty("provider").GetProperty("zdr").GetBoolean()).IsTrue();
         await Assert.That(body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString()).IsEqualTo("none");
+        await Assert.That(body.RootElement.GetProperty("temperature").GetDouble()).IsEqualTo(0.7).Within(1e-6);
     }
 
     [Test]

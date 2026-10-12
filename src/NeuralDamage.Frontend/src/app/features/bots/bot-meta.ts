@@ -70,6 +70,14 @@ export function visibilityOptions(chatId: string | null | undefined): Visibility
   return chatId ? ['public', 'private'] : ['public'];
 }
 
+/** Above this replies turn to gibberish; the server refuses more and clamps older bots. */
+export const MAX_TEMPERATURE = 1.5;
+
+/** A bot saved before the cap opens at the cap, so saving it again passes validation. */
+export function clampTemperature(temperature: number): number {
+  return Math.min(Math.max(temperature, 0), MAX_TEMPERATURE);
+}
+
 export interface BotFormValue {
   name: string;
   aliases: string;
