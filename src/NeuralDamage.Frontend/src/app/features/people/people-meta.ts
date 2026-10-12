@@ -63,3 +63,14 @@ export function canRemoveMember(
   if (member.userId === currentUserId) return true;
   return members.some((m) => m.userId === currentUserId && m.role === 'Owner');
 }
+
+/** The line under a member's name: a bot's short description, "You", or when a person joined. */
+export function memberSubtitle(
+  member: { memberType: string; userId: string | null; joinedAt: string },
+  bot: { personality?: string | null } | null | undefined,
+  currentUserId: string | null,
+): string {
+  if (member.memberType === 'bot') return bot?.personality?.split('\n')[0] || 'Bot';
+  if (member.userId && member.userId === currentUserId) return 'You';
+  return joinedLabel(member.joinedAt);
+}

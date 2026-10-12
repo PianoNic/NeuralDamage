@@ -39,6 +39,7 @@ import { toastApiError } from '../../core/http-errors';
 import { ChatMember, Message } from '../../core/models';
 import { AppConfig } from '../../core/app-config';
 import { imageProblem } from './attachments';
+import { findMentions, mentionAround } from './mentions';
 import { StickerPicker } from '../stickers/sticker-picker';
 import { StickerDto } from '../../core/models';
 
@@ -48,8 +49,11 @@ export const MAX_MESSAGE_LENGTH = 4000;
 /** The counter shows from here, so the limit is no surprise. */
 const COUNTER_FROM = MAX_MESSAGE_LENGTH - 500;
 
-/** Matches a trailing "@word" that the caret is still sitting inside. */
-const TRAILING_MENTION = /(^|\s)@(\w*)$/;
+/**
+ * A trailing "@query" still being typed. The query may hold spaces, for names like "Maggus Rühl",
+ * so it runs to the end of the line; what it matches decides whether the list stays open.
+ */
+const TRAILING_MENTION = /(^|\s)@([^@\n]*)$/u;
 
 /** A command still being typed: "/" and no space yet. */
 const PARTIAL_COMMAND = /^\/(\S*)$/;
@@ -238,6 +242,17 @@ export interface Suggestion {
       }
 
       <label class="sr-only" [for]="textareaId">{{ placeholder() }}</label>
+      <!--
+        Mentions are chips: the textarea keeps the plain "@Name" text (so typing, IME, undo, paste and
+        mobile keyboards stay native), and this copy of it behind, laid out identically, tints them.
+      -->
+      <div class="relative">
+        <div
+          #mirror
+          aria-hidden="true"
+          data-testid="composer-mirror"
+          class="pointer-events-none absolute inset-0 overflow-hidden px-1 py-1 text-sm leading-normal wrap-break-word whitespace-pre-wrap text-transparent"
+        >@for (part of parts(); track $index) {<span [class]="part.mention ? chipClass : ''" [attr.data-mention]="part.mention || null">{{ part.text }}</span>}</div>
       <textarea
         #textarea
         rows="1"
@@ -251,11 +266,18 @@ export interface Suggestion {
         [attr.aria-activedescendant]="suggestions().length > 0 ? listId + '-' + activeIndex() : null"
         [attr.aria-invalid]="tooLong() || null"
         [attr.aria-describedby]="showCounter() ? counterId : null"
-        class="placeholder:text-muted-foreground max-h-50 min-h-7 w-full resize-none bg-transparent px-1 py-1 text-sm leading-normal outline-none"
-        (input)="onValueChange($any($event.target).value)"
+        class="placeholder:text-muted-foreground relative block max-h-50 min-h-7 w-full resize-none bg-transparent px-1 py-1 text-sm leading-normal outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        (input)="onInput($event)"
         (keydown)="onKeyDown($event)"
         (paste)="onPaste($event)"
+        (scroll)="syncMirror()"
+        (pointerdown)="pointing = true"
+        (pointerup)="pointing = false; snapSelection(true)"
+        (keyup)="snapSelection()"
+        (compositionstart)="composing = true"
+        (compositionend)="composing = false"
       ></textarea>
+      </div>
 
       <div class="flex items-center gap-0.5">
         <input
@@ -382,8 +404,11 @@ export class Composer {
   private readonly injector = inject(Injector);
   private readonly attachmentsApi = inject(AttachmentsService);
   private readonly textarea = viewChild.required<ElementRef<HTMLTextAreaElement>>('textarea');
+  private readonly mirror = viewChild.required<ElementRef<HTMLElement>>('mirror');
 
   readonly members = input.required<ChatMember[]>();
+  /** Every name that mentions someone (display names and bots' nicknames); defaults to the display names. */
+  readonly mentionNames = input<readonly string[] | null>(null);
   readonly replyingTo = input<Message | null>(null);
   readonly currentUserId = input<string | null>(null);
   readonly placeholder = input('Message');
@@ -409,6 +434,31 @@ export class Composer {
   readonly images = signal<PendingImage[]>([]);
   protected readonly dragging = signal(false);
   private nextImageKey = 0;
+
+  /** Tints a mention in the copy behind the textarea; the padding is taken back so nothing moves. */
+  protected readonly chipClass = 'bg-primary/14 -mx-[0.15em] rounded-[0.3em] px-[0.15em] box-decoration-clone';
+
+  private readonly names = computed(() => this.mentionNames() ?? this.members().map((m) => m.displayName));
+  /** The chips: every "@Name" of a member, exactly as the server will read it. */
+  readonly mentions = computed(() => findMentions(this.content(), this.names()));
+  /** The text cut at the chips, for the copy behind the textarea. The last part keeps a final newline's line. */
+  protected readonly parts = computed(() => {
+    const text = this.content();
+    const parts: { text: string; mention: boolean }[] = [];
+    let at = 0;
+    for (const m of this.mentions()) {
+      if (m.start > at) parts.push({ text: text.slice(at, m.start), mention: false });
+      parts.push({ text: text.slice(m.start, m.end), mention: true });
+      at = m.end;
+    }
+    parts.push({ text: text.slice(at) + '\u200b', mention: false });
+    return parts;
+  });
+
+  /** Set while a pointer is selecting, or an IME is composing: the caret is theirs until they finish. */
+  protected pointing = false;
+  protected composing = false;
+  private lastSelection = { start: 0, end: 0 };
 
   protected readonly tooLong = computed(() => this.content().length > MAX_MESSAGE_LENGTH);
   protected readonly showCounter = computed(() => this.content().length > COUNTER_FROM);
@@ -465,14 +515,19 @@ export class Composer {
     const mention = TRAILING_MENTION.exec(text);
     if (mention) {
       const query = mention[2].toLowerCase();
+      // A query with a space only goes on matching a name that starts with it ("@Maggus R").
+      const matches = /\s/.test(query)
+        ? (name: string) => name.startsWith(query)
+        : (name: string) => name.includes(query);
+      const before = text.slice(0, mention.index + mention[1].length);
       return this.others()
-        .filter((m) => m.displayName?.toLowerCase().includes(query))
+        .filter((m) => m.displayName && matches(m.displayName.toLowerCase()))
         .map((m) => ({
           key: m.id,
           kind: 'member' as const,
           label: m.displayName,
           member: m,
-          result: text.replace(TRAILING_MENTION, `$1@${m.displayName} `),
+          result: `${before}@${m.displayName} `,
         }));
     }
 
@@ -505,7 +560,57 @@ export class Composer {
       const el = this.textarea().nativeElement;
       el.style.height = 'auto';
       el.style.height = `${el.scrollHeight}px`;
+      this.syncMirror();
     });
+
+    // The caret never rests inside a chip: arrows, Home/End and taps all land on its edges.
+    const onSelectionChange = () => this.snapSelection();
+    document.addEventListener('selectionchange', onSelectionChange);
+    inject(DestroyRef).onDestroy(() => document.removeEventListener('selectionchange', onSelectionChange));
+  }
+
+  protected onInput(event: Event): void {
+    const el = event.target as HTMLTextAreaElement;
+    const inputType = (event as InputEvent).inputType ?? '';
+    // A deletion that took only part of a chip (a phone keyboard's backspace skips keydown) takes it all.
+    if (inputType.startsWith('delete')) {
+      const whole = wholeMentionDeletion(this.content(), el.value, this.names());
+      if (whole) {
+        el.value = whole.value;
+        el.setSelectionRange(whole.caret, whole.caret);
+      }
+    }
+    this.onValueChange(el.value);
+  }
+
+  /** Keeps the copy behind the textarea scrolled with it. */
+  protected syncMirror(): void {
+    this.mirror().nativeElement.scrollTop = this.textarea().nativeElement.scrollTop;
+  }
+
+  /**
+   * Moves a caret or selection edge that fell inside a chip to the chip's edge: on in the direction
+   * it was moving, so arrows and word jumps skip the chip, or the nearer edge for a click or tap.
+   */
+  snapSelection(nearest = false): void {
+    const el = this.textarea().nativeElement;
+    const { selectionStart: start, selectionEnd: end } = el;
+    if (this.pointing || this.composing || document.activeElement !== el) {
+      this.lastSelection = { start, end };
+      return;
+    }
+    const mentions = findMentions(el.value, this.names());
+    const snap = (at: number, from: number) => {
+      const m = mentionAround(mentions, at);
+      if (!m) return at;
+      if (!nearest && from <= m.start) return m.end;
+      if (!nearest && from >= m.end) return m.start;
+      return at - m.start < m.end - at ? m.start : m.end;
+    };
+    const newStart = snap(start, this.lastSelection.start);
+    const newEnd = start === end ? newStart : snap(end, this.lastSelection.end);
+    this.lastSelection = { start: newStart, end: newEnd };
+    if (newStart !== start || newEnd !== end) el.setSelectionRange(newStart, newEnd, el.selectionDirection);
   }
 
   onValueChange(value: string): void {
@@ -619,8 +724,9 @@ export class Composer {
   }
 
   pick(suggestion: Suggestion): void {
-    this.content.set(suggestion.result);
-    this.focusInput();
+    this.replaceAll(suggestion.result);
+    // A picked name stays picked: "@Rex " must not reopen the list for "Rex Jr".
+    if (suggestion.kind === 'member') this.dismissedAt.set(suggestion.result);
   }
 
   focus(): void {
@@ -631,28 +737,60 @@ export class Composer {
   insertMention(name: string): void {
     const text = this.content();
     const mention = `@${name} `;
-    this.content.set(text && !/\s$/.test(text) ? `${text} ${mention}` : `${text}${mention}`);
-    this.dismissedAt.set(this.content());
-    this.focusInput();
+    const next = text && !/\s$/.test(text) ? `${text} ${mention}` : `${text}${mention}`;
+    this.replaceAll(next);
+    this.dismissedAt.set(next);
   }
 
   protected insertTrigger(trigger: '/' | '@'): void {
     const text = this.content();
-    if (trigger === '/') this.content.set(text.startsWith('/') ? text : '/');
-    else this.content.set(text && !/\s$/.test(text) ? `${text} @` : `${text}@`);
+    if (trigger === '/') this.replaceAll(text.startsWith('/') ? text : '/');
+    else this.replaceAll(text && !/\s$/.test(text) ? `${text} @` : `${text}@`);
     this.dismissedAt.set(null);
-    this.focusInput();
   }
 
   protected insertEmoji(emoji: string): void {
     const el = this.textarea().nativeElement;
-    const text = this.content();
-    const at = el.selectionStart ?? text.length;
-    this.content.set(text.slice(0, at) + emoji + text.slice(el.selectionEnd ?? at));
-    this.focusInput(at + emoji.length);
+    const at = el.selectionStart ?? el.value.length;
+    this.replaceRange(at, el.selectionEnd ?? at, emoji);
+  }
+
+  /** Turns the text into `next`, editing only from where it differs, and puts the caret at the end. */
+  private replaceAll(next: string): void {
+    const text = this.textarea().nativeElement.value;
+    let start = 0;
+    while (start < text.length && start < next.length && text[start] === next[start]) start++;
+    this.replaceRange(start, text.length, next.slice(start));
+  }
+
+  /**
+   * Replaces `start`..`end` with `text` as typing would, so Ctrl+Z takes it back, and leaves the caret
+   * after it. Where the browser cannot (no execCommand), it sets the value instead.
+   */
+  private replaceRange(start: number, end: number, text: string): void {
+    const el = this.textarea().nativeElement;
+    const expected = el.value.slice(0, start) + text + el.value.slice(end);
+    el.focus();
+    el.setSelectionRange(start, end);
+    let typed = false;
+    try {
+      typed = !!text && typeof document.execCommand === 'function' && document.execCommand('insertText', false, text);
+    } catch {
+      typed = false;
+    }
+    if (!typed || el.value !== expected) {
+      el.value = expected;
+      this.onValueChange(expected);
+    }
+    const caret = start + text.length;
+    el.setSelectionRange(caret, caret);
+    this.lastSelection = { start: caret, end: caret };
+    this.focusInput(caret);
   }
 
   protected onKeyDown(event: KeyboardEvent): void {
+    if (!event.isComposing && this.stepOverChip(event)) return;
+
     const suggestions = this.suggestions();
 
     if (suggestions.length > 0) {
@@ -698,6 +836,47 @@ export class Composer {
     }
   }
 
+  /**
+   * Backspace and Delete next to a chip select all of it, so the browser's own (undoable) deletion
+   * takes it whole, and a selection that cuts into a chip grows to cover it. Left and Right step over
+   * a chip in one press. Returns whether the key was handled here.
+   */
+  private stepOverChip(event: KeyboardEvent): boolean {
+    const el = this.textarea().nativeElement;
+    const { selectionStart: start, selectionEnd: end } = el;
+    const mentions = findMentions(el.value, this.names());
+    if (!mentions.length) return false;
+
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      let from = start;
+      let to = end;
+      if (start === end) {
+        const back = event.key === 'Backspace';
+        const chip = mentions.find((m) => (back ? m.end : m.start) === start) ?? mentionAround(mentions, start);
+        if (!chip) return false;
+        [from, to] = [chip.start, chip.end];
+      } else {
+        from = mentionAround(mentions, start)?.start ?? start;
+        to = mentionAround(mentions, end)?.end ?? end;
+      }
+      if (from !== start || to !== end) el.setSelectionRange(from, to);
+      return false;
+    }
+
+    const plain = !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
+    if (plain && start === end && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      const left = event.key === 'ArrowLeft';
+      const chip = mentions.find((m) => (left ? m.end : m.start) === start);
+      if (!chip) return false;
+      event.preventDefault();
+      const at = left ? chip.start : chip.end;
+      el.setSelectionRange(at, at);
+      this.lastSelection = { start: at, end: at };
+      return true;
+    }
+    return false;
+  }
+
   /** A click on the box's padding focuses the text, like a click inside it. */
   protected focusFromChrome(event: MouseEvent): void {
     if (event.target === event.currentTarget) this.focusInput();
@@ -715,6 +894,31 @@ export class Composer {
       { injector: this.injector },
     );
   }
+}
+
+/**
+ * After a deletion turned `before` into `after`: if it took part of a chip, the text with the whole
+ * chip gone and where the caret goes; null when every chip was left whole or removed whole.
+ */
+export function wholeMentionDeletion(
+  before: string,
+  after: string,
+  names: readonly string[],
+): { value: string; caret: number } | null {
+  if (after.length >= before.length) return null;
+  let start = 0;
+  while (start < after.length && before[start] === after[start]) start++;
+  let tail = 0;
+  while (tail < after.length - start && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  let from = start;
+  let to = before.length - tail;
+  const cut = findMentions(before, names).filter((m) => m.start < to && m.end > from);
+  if (!cut.some((m) => m.start < from || m.end > to)) return null;
+  for (const m of cut) {
+    from = Math.min(from, m.start);
+    to = Math.max(to, m.end);
+  }
+  return { value: before.slice(0, from) + before.slice(to), caret: from };
 }
 
 function createPreview(file: File): string {

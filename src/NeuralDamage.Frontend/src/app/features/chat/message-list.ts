@@ -18,6 +18,7 @@ import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { Message } from '../../core/models';
 import { SystemMessage } from '../../core/signalr/hub-events';
 import { formatDayLabel } from '../../shared/dates';
+import { MentionTarget } from './mentions';
 import { MessageItem } from './message-item';
 
 /** Start fetching older messages this close to the top, in px. */
@@ -138,11 +139,12 @@ function senderOf(message: Message): string {
                   [first]="item.first"
                   [showReply]="item.showReply"
                   [currentUserId]="currentUserId()"
-                  [memberNames]="memberNames()"
+                  [mentionTargets]="mentionTargets()"
                   [highlighted]="highlightedId() === item.message.id"
                   (reply)="replyTo.emit($event)"
                   (react)="react.emit({ messageId: item.message.id, emoji: $event })"
                   (jumpTo)="jumpTo($event)"
+                  (openMention)="openMention.emit($event)"
                 />
               }
               @case ('system') {
@@ -173,13 +175,14 @@ export class MessageList implements OnDestroy {
   readonly messages = input.required<Message[]>();
   readonly systemMessages = input<SystemMessage[]>([]);
   readonly currentUserId = input<string | null>(null);
-  readonly memberNames = input<readonly string[]>([]);
+  readonly mentionTargets = input<readonly MentionTarget[]>([]);
   readonly hasMore = input(false);
   readonly loadingOlder = input(false);
 
   readonly replyTo = output<Message>();
   readonly react = output<{ messageId: string; emoji: string }>();
   readonly loadOlder = output<void>();
+  readonly openMention = output<{ memberId: string; anchor: HTMLElement }>();
   /** Files dropped anywhere on the list, for the composer to attach. */
   readonly filesDropped = output<File[]>();
 

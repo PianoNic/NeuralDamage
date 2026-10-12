@@ -254,3 +254,173 @@ describe('Composer images', () => {
     expect(component.images()).toEqual([]);
   });
 });
+
+describe('Composer mention chips', () => {
+  async function setup() {
+    await TestBed.configureTestingModule({
+      imports: [Composer],
+      providers: [{ provide: AttachmentsService, useValue: {} }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Composer);
+    fixture.componentRef.setInput('members', [
+      member('u1', 'Alice', 'user'),
+      member('me', 'Nic', 'user'),
+      member('u2', 'Maggus Rühl', 'user'),
+      member('b1', 'Gemini', 'bot'),
+      member('b2', 'Grok', 'bot'),
+    ]);
+    fixture.componentRef.setInput('currentUserId', 'me');
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    const textarea = host.querySelector('textarea')!;
+    const component = fixture.componentInstance;
+    const sent: string[] = [];
+    component.send.subscribe((m) => sent.push(m.content));
+
+    /** Types (or pastes) text the way the browser reports it: the new value, then an input event. */
+    const type = async (value: string, inputType = 'insertText') => {
+      textarea.value = value;
+      textarea.dispatchEvent(new InputEvent('input', { inputType }));
+      await fixture.whenStable();
+    };
+    const press = async (key: string, init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+      textarea.dispatchEvent(event);
+      await fixture.whenStable();
+      return event;
+    };
+    const select = (start: number, end = start) => {
+      textarea.focus();
+      textarea.setSelectionRange(start, end);
+    };
+    const chips = () =>
+      [...host.querySelectorAll('[data-testid=composer-mirror] [data-mention]')].map((c) => c.textContent);
+    return { fixture, component, textarea, sent, type, press, select, chips };
+  }
+
+  it('turns a picked member into a chip and sends the plain @Name text', async () => {
+    const { component, textarea, sent, type, press, chips } = await setup();
+    await type('hey @Ge');
+    await press('Tab');
+    expect(component.content()).toBe('hey @Gemini ');
+    expect(chips()).toEqual(['@Gemini']);
+    // The caret sits after the chip and its space, ready to type on.
+    expect(textarea.selectionStart).toBe('hey @Gemini '.length);
+
+    await type('hey @Gemini what now?');
+    await press('Enter');
+    expect(sent).toEqual(['hey @Gemini what now?']);
+  });
+
+  it('keeps the list open through a name with a space and an umlaut', async () => {
+    const { component, type, press, chips } = await setup();
+    await type('@Maggus R');
+    expect(component.suggestions().map((s) => s.label)).toEqual(['Maggus Rühl']);
+    await type('@Maggus Rü');
+    expect(component.suggestions().map((s) => s.label)).toEqual(['Maggus Rühl']);
+    await press('Enter');
+    expect(component.content()).toBe('@Maggus Rühl ');
+    expect(chips()).toEqual(['@Maggus Rühl']);
+  });
+
+  it('makes a chip of an exact name typed or pasted after @, and of two in a row', async () => {
+    const { type, chips } = await setup();
+    await type('@alice', 'insertFromPaste');
+    expect(chips()).toEqual(['@alice']);
+    await type('@Alice @Grok ');
+    expect(chips()).toEqual(['@Alice', '@Grok']);
+    // Not a name: "@Alicex" is no mention, to the server either.
+    await type('@Alicex');
+    expect(chips()).toEqual([]);
+  });
+
+  it('does not reopen the list for a longer name once one is picked', async () => {
+    const { fixture, component, type, press } = await setup();
+    fixture.componentRef.setInput('members', [member('r1', 'Rex', 'bot'), member('r2', 'Rex Jr', 'bot')]);
+    await type('@Re');
+    await press('Enter');
+    expect(component.content()).toBe('@Rex ');
+    expect(component.suggestions()).toEqual([]);
+  });
+
+  it('selects a whole chip on Backspace after it and Delete before it', async () => {
+    const { textarea, press, select, type } = await setup();
+    await type('@Alice @Maggus Rühl hi');
+    select(6);
+    await press('Backspace');
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([0, 6]);
+
+    select(7);
+    await press('Delete');
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([7, 19]);
+
+    // Plain text is left to the browser.
+    select(22);
+    const event = await press('Backspace');
+    expect([textarea.selectionStart, textarea.selectionEnd, event.defaultPrevented]).toEqual([22, 22, false]);
+  });
+
+  it('grows a selection that cuts into chips to cover them', async () => {
+    const { textarea, press, select, type } = await setup();
+    await type('@Alice and @Grok');
+    select(3, 13);
+    await press('Backspace');
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([0, 16]);
+  });
+
+  it('removes all of a chip when a phone keyboard deletes one letter of it', async () => {
+    const { component, textarea, type } = await setup();
+    await type('hi @Alice ok');
+    await type('hi @Alic ok', 'deleteContentBackward');
+    expect(component.content()).toBe('hi  ok');
+    expect(textarea.selectionStart).toBe(3);
+    // Undo puts the text back, and with it the chip.
+    await type('hi @Alice ok', 'historyUndo');
+    expect(component.mentions().map((m) => m.name)).toEqual(['Alice']);
+  });
+
+  it('steps over a chip with the arrow keys and moves a caret out of one', async () => {
+    const { component, textarea, press, select, type } = await setup();
+    await type('x @Maggus Rühl y');
+    select(14);
+    expect((await press('ArrowLeft')).defaultPrevented).toBe(true);
+    expect(textarea.selectionStart).toBe(2);
+    expect((await press('ArrowRight')).defaultPrevented).toBe(true);
+    expect(textarea.selectionStart).toBe(14);
+
+    // A click lands on the nearer edge.
+    select(4);
+    component.snapSelection(true);
+    expect(textarea.selectionStart).toBe(2);
+    select(12);
+    component.snapSelection(true);
+    expect(textarea.selectionStart).toBe(14);
+  });
+
+  it('chips nicknames too', async () => {
+    const { fixture, type, chips } = await setup();
+    fixture.componentRef.setInput('mentionNames', ['Gemini', 'gem']);
+    await type('@gem hi');
+    expect(chips()).toEqual(['@gem']);
+  });
+
+  it('appends a mention from the People panel as a chip', async () => {
+    const { fixture, component, chips, type } = await setup();
+    await type('hello');
+    component.insertMention('Maggus Rühl');
+    await fixture.whenStable();
+    expect(component.content()).toBe('hello @Maggus Rühl ');
+    expect(chips()).toEqual(['@Maggus Rühl']);
+    expect(component.suggestions()).toEqual([]);
+  });
+
+  it('sends on Enter but not on Shift+Enter or while composing', async () => {
+    const { sent, type, press } = await setup();
+    await type('@Alice hi');
+    await press('Enter', { shiftKey: true });
+    await press('Enter', { isComposing: true });
+    expect(sent).toEqual([]);
+    await press('Enter');
+    expect(sent).toEqual(['@Alice hi']);
+  });
+});

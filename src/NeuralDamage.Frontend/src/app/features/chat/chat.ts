@@ -33,6 +33,8 @@ import {
 } from '../../core/models';
 import { SystemMessage } from '../../core/signalr/hub-events';
 import { SignalRService } from '../../core/signalr/signalr.service';
+import { BotDetails } from '../bots/bot-details';
+import { MentionCard } from '../people/mention-card';
 import { PeopleSheet } from '../people/people-sheet';
 import { ChatHeader } from './chat-header';
 import { ChatList } from './chat-list';
@@ -44,6 +46,7 @@ import {
   toMessages,
   withDescription,
 } from './message.mapper';
+import { MentionTarget, nicknames } from './mentions';
 import { MessageList } from './message-list';
 import { Typer, TypingRow } from './typing-row';
 import { StickerLibrary } from '../stickers/sticker-library';
@@ -63,7 +66,7 @@ const TYPING_SEND_INTERVAL_MS = 3000;
 /** A chat: header, messages, who is typing, and the composer. Serves `/chat/:chatId`. */
 @Component({
   selector: 'app-chat',
-  imports: [HlmSpinner, ChatHeader, Composer, MessageList, PeopleSheet, TypingRow],
+  imports: [HlmSpinner, ChatHeader, Composer, MentionCard, MessageList, PeopleSheet, TypingRow],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <app-chat-header
@@ -80,13 +83,14 @@ const TYPING_SEND_INTERVAL_MS = 3000;
         [messages]="messages()"
         [systemMessages]="systemMessages()"
         [currentUserId]="currentUserId()"
-        [memberNames]="memberNames()"
+        [mentionTargets]="mentionTargets()"
         [hasMore]="hasMore()"
         [loadingOlder]="loadingOlder()"
         (loadOlder)="loadOlder()"
         (replyTo)="replyingTo.set($event)"
         (react)="toggleReaction($event.messageId, $event.emoji)"
         (filesDropped)="composer()?.addImages($event)"
+        (openMention)="mentionCard().show($event.memberId, $event.anchor)"
       />
     }
 
@@ -94,6 +98,7 @@ const TYPING_SEND_INTERVAL_MS = 3000;
       <app-typing-row [typers]="typers()" class="min-h-8 ps-1" />
       <app-composer
         [members]="members()"
+        [mentionNames]="mentionNames()"
         [currentUserId]="currentUserId()"
         [replyingTo]="replyingTo()"
         [placeholder]="placeholder()"
@@ -115,6 +120,14 @@ const TYPING_SEND_INTERVAL_MS = 3000;
       (patchMember)="patchMember($event.id, $event.changes)"
       (refresh)="reloadMembers()"
     />
+
+    <app-mention-card
+      [members]="members()"
+      [currentUserId]="currentUserId()"
+      (mention)="mention($event.displayName)"
+      (toggleMute)="peopleSheet().toggleMute($event)"
+      (viewProfile)="viewProfile($event)"
+    />
   `,
 })
 export class Chat implements OnDestroy {
@@ -127,12 +140,15 @@ export class Chat implements OnDestroy {
   private readonly messagesApi = inject(MessagesService);
   private readonly stickers = inject(StickerLibrary);
   private readonly reactionsApi = inject(ReactionsService);
+  private readonly botDetails = inject(BotDetails);
 
   /** Route parameter of `/chat/:chatId`. */
   readonly chatId = input.required<string>();
 
   private readonly list = viewChild(MessageList);
   private readonly composer = viewChild(Composer);
+  private readonly peopleSheet = viewChild.required(PeopleSheet);
+  private readonly mentionCard = viewChild.required(MentionCard);
 
   protected readonly chat = signal<ChatDetailDto | null>(null);
   protected readonly messages = signal<Message[]>([]);
@@ -151,7 +167,15 @@ export class Chat implements OnDestroy {
   private lastTypingSent = 0;
 
   protected readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
-  protected readonly memberNames = computed(() => this.members().map((m) => m.displayName));
+  /** Every name that @mentions a member: display names, and bots' nicknames once their details are in. */
+  protected readonly mentionTargets = computed<MentionTarget[]>(() => {
+    const bots = this.botDetails.byId();
+    return this.members().flatMap((m) => [
+      { name: m.displayName, memberId: m.id },
+      ...nicknames(m.botId ? bots.get(m.botId)?.aliases : null).map((name) => ({ name, memberId: m.id })),
+    ]);
+  });
+  protected readonly mentionNames = computed(() => this.mentionTargets().map((t) => t.name));
   protected readonly placeholder = computed(() => `Message ${this.chat()?.name ?? ''}`.trim());
 
   protected readonly typers = computed<Typer[]>(() => {
@@ -255,6 +279,12 @@ export class Chat implements OnDestroy {
       });
     });
 
+    // Bots' nicknames mention them too, and they only come with the bots' details.
+    effect(() => {
+      const ids = this.members().flatMap((m) => (m.botId ? [m.botId] : []));
+      untracked(() => void this.botDetails.loadMissing(ids));
+    });
+
     effect(() => {
       const name = this.chat()?.name;
       this.title.setTitle(name ? `${name} · Neural Damage` : 'Neural Damage');
@@ -313,6 +343,11 @@ export class Chat implements OnDestroy {
   protected mention(name: string): void {
     this.peopleOpen.set(false);
     this.composer()?.insertMention(name);
+  }
+
+  protected viewProfile(member: ChatMember): void {
+    this.peopleOpen.set(true);
+    this.peopleSheet().showProfile(member);
   }
 
   protected patchMember(id: string, changes: Partial<ChatMember>): void {

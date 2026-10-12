@@ -10,15 +10,14 @@ import {
   lucideVolumeX,
   lucideX,
 } from '@ng-icons/lucide';
-import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { BotDto, ChatMember } from '../../core/models';
-import { MemberAvatar } from '../../shared/member-avatar';
 import { hasModelProblem } from '../bots/bot-meta';
 import { ModelCatalog } from '../bots/model-catalog';
-import { joinedDate, joinedLabel, roleLabel, visibilityLabel } from './people-meta';
+import { MemberSummary } from './member-summary';
+import { joinedDate, roleLabel, visibilityLabel } from './people-meta';
 
 /** About what fits on the subtitle line of the card. */
 const SUBTITLE_CHARS = 40;
@@ -31,7 +30,7 @@ const READ_MORE_CHARS = 200;
  */
 @Component({
   selector: 'app-member-profile',
-  imports: [NgIcon, HlmBadge, HlmButton, HlmDialogImports, HlmSpinner, MemberAvatar],
+  imports: [NgIcon, HlmButton, HlmDialogImports, HlmSpinner, MemberSummary],
   providers: [
     provideIcons({
       lucideAtSign,
@@ -53,18 +52,7 @@ const READ_MORE_CHARS = 200;
   },
   template: `
     <div class="flex items-center gap-3">
-      <app-member-avatar [name]="member().displayName" [avatarUrl]="member().avatarUrl" [modelId]="member().modelId" [px]="48" />
-      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div class="flex items-center gap-1.5">
-          <span class="truncate text-base font-semibold">{{ member().displayName }}</span>
-          @if (isBot()) {
-            <span hlmBadge variant="secondary">Bot</span>
-          } @else {
-            <span hlmBadge variant="secondary">{{ role() }}</span>
-          }
-        </div>
-        <span class="text-muted-foreground truncate text-[13px]">{{ subtitle() }}</span>
-      </div>
+      <app-member-summary class="flex-1" [member]="member()" [bot]="bot()" [currentUserId]="currentUserId()" />
       <button hlmBtn variant="ghost" size="icon-sm" aria-label="Close profile" (click)="close.emit()">
         <ng-icon name="lucideX" />
       </button>
@@ -207,13 +195,6 @@ export class MemberProfile {
   protected readonly canEdit = computed(() => {
     const bot = this.bot();
     return !!bot && bot.createdById === this.currentUserId();
-  });
-
-  protected readonly subtitle = computed(() => {
-    const member = this.member();
-    if (member.memberType === 'bot') return this.bot()?.personality?.split('\n')[0] || 'Bot';
-    if (this.isSelf()) return 'You';
-    return joinedLabel(member.joinedAt);
   });
 
   /** Whether the full character is open in its own dialog. */
