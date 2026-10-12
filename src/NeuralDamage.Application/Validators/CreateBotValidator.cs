@@ -1,5 +1,6 @@
 using FluentValidation;
 using NeuralDamage.Application.Commands;
+using NeuralDamage.Domain;
 
 namespace NeuralDamage.Application.Validators;
 
@@ -9,6 +10,6 @@ public class CreateBotValidator : AbstractValidator<CreateBotCommand>
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(128);
         RuleFor(x => x.ModelId).NotEmpty().MaximumLength(256);
-        RuleFor(x => x.Temperature).InclusiveBetween(0.0, 2.0);
+        RuleFor(x => x.Temperature).InclusiveBetween(0.0, Bot.MaxTemperature);
     }
 }

@@ -64,6 +64,13 @@ public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelP
     [JsonIgnore]
     public bool AcceptsReasoning { get; init; }
 
+    /// <summary>
+    /// Whether the model takes a temperature (OpenRouter's <c>supported_parameters</c>);
+    /// one that does not, such as Claude Haiku 5.5, is sent none.
+    /// </summary>
+    [JsonIgnore]
+    public bool AcceptsTemperature { get; init; }
+
     /// <summary>Whether the model always reasons (<c>reasoning.mandatory</c>) and rejects an effort of none.</summary>
     [JsonIgnore]
     public bool ReasoningMandatory { get; init; }

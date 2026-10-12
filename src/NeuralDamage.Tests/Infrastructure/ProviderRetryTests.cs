@@ -24,6 +24,9 @@ public class ProviderRetryTests
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            // The catalogue the reply looks its model up in is not what is scripted.
+            if (request.RequestUri!.AbsolutePath.EndsWith("/models", StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadGateway));
             var call = Calls++;
             if (call >= script.Length)
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Completion, Encoding.UTF8, "application/json") });

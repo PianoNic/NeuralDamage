@@ -2,6 +2,12 @@ namespace NeuralDamage.Domain;
 
 public class Bot : BaseEntity
 {
+    /// <summary>
+    /// Above about 1.5 replies turn to gibberish (measured on DeepSeek, which
+    /// was pure noise at 2.0), and a bot then posts nonsense rather than nothing.
+    /// </summary>
+    public const double MaxTemperature = 1.5;
+
     public required string Name { get; set; }
     public required string ModelId { get; set; }
     public string SystemPrompt { get; set; } = string.Empty;

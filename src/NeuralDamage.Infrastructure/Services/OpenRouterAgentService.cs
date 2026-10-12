@@ -9,6 +9,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using NeuralDamage.Domain;
 using OpenAI;
 using OpenAI.Chat;
 using AgentChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -85,6 +86,14 @@ public partial class OpenRouterAgentService : IOpenRouterService
 
     public async Task<string> GenerateResponseAsync(string modelId, double temperature, string systemPrompt, List<ChatMessage> history, CancellationToken ct = default)
     {
+        // Clamped here rather than by each caller, so a bot saved before the
+        // cap went in is held to it too, without a migration.
+        if (temperature > Bot.MaxTemperature)
+        {
+            _logger.LogDebug("Temperature {Temperature} for {ModelId} capped at {MaxTemperature}", temperature, modelId, Bot.MaxTemperature);
+            temperature = Bot.MaxTemperature;
+        }
+
         var (provider, client, model) = Route(modelId);
         AIAgent agent = client
             .GetChatClient(model)
@@ -103,17 +112,35 @@ public partial class OpenRouterAgentService : IOpenRouterService
                 [new TextContent(m.Content), .. m.Images.Select(i => new DataContent(i.Data, i.ContentType))]))
             .ToList();
 
-        // A custom provider gets the plain OpenAI request: the extras below are
-        // OpenRouter's own (reasoning, session, cache markers, routing).
+        // A custom provider gets the plain OpenAI request, the extras below
+        // being OpenRouter's own (reasoning, session, cache markers, routing),
+        // plus the chat template's thinking switch: self-hosted models such as
+        // Qwen3 think by default, and DeepSeek does when asked. Both spellings
+        // go, since templates name it either way and ignore what they lack.
         if (provider is not null)
-            return await RunAsync(agent, messages, new ChatClientAgentRunOptions(
-                new ChatOptions { Temperature = (float)temperature, MaxOutputTokens = _maxOutputTokens }), modelId, provider, ct);
+            return await RunAsync(agent, messages, new ChatClientAgentRunOptions(new ChatOptions
+            {
+                Temperature = (float)temperature,
+                MaxOutputTokens = _maxOutputTokens,
+                RawRepresentationFactory = _ =>
+                {
+#pragma warning disable SCME0001
+                    var raw = new ChatCompletionOptions();
+                    raw.Patch.Set("$.chat_template_kwargs.thinking"u8, false);
+                    raw.Patch.Set("$.chat_template_kwargs.enable_thinking"u8, false);
+#pragma warning restore SCME0001
+                    return raw;
+                },
+            }), modelId, provider, ct);
 
-        var effort = await ReasoningEffortAsync(modelId, ct);
+        var listed = await CatalogueModelAsync(modelId, ct);
+        var effort = !_policy.DisableReasoning ? "low" : listed?.AcceptsReasoning == true ? "none" : null;
 
         var options = new ChatClientAgentRunOptions(new ChatOptions
         {
-            Temperature = (float)temperature,
+            // Some models take no temperature (Claude Haiku 5.5 insists on
+            // exactly 1), so a model listed without the parameter is sent none.
+            Temperature = listed is { AcceptsTemperature: false } ? null : (float)temperature,
             MaxOutputTokens = _maxOutputTokens,
             // ChatOptions.AdditionalProperties does not reach the wire through
             // this client - verified against a local listener, which saw only
@@ -125,6 +152,8 @@ public partial class OpenRouterAgentService : IOpenRouterService
                 var raw = new ChatCompletionOptions();
                 if (effort is not null)
                     raw.Patch.Set("$.reasoning.effort"u8, effort);
+                else
+                    raw.Patch.Set("$.reasoning.enabled"u8, false);
                 raw.Patch.Set("$.session_id"u8, SessionId(modelId, systemPrompt));
                 if (breakpoints.Length > 0)
                     raw.Patch.Set("$.messages"u8, MessagesWithCacheBreakpoint(systemPrompt, history, breakpoints));
@@ -236,32 +265,32 @@ public partial class OpenRouterAgentService : IOpenRouterService
     }
 
     /// <summary>
-    /// Bots are chat participants, not problem solvers: reasoning only makes a
-    /// reply slower and dearer. So under OpenRouter:DisableReasoning a model that
-    /// takes the reasoning parameter is told "none" and any other gets nothing
-    /// (models that always reason reject "none", and the policy keeps them out).
+    /// The model's catalogue entry, or null when it is not listed or the
+    /// catalogue cannot be read.
     /// </summary>
     /// <remarks>
+    /// Bots are chat participants, not problem solvers: reasoning only makes a
+    /// reply slower and dearer. So under OpenRouter:DisableReasoning every
+    /// request turns it off: a model that takes the reasoning parameter is
+    /// told effort "none", and any other, or any model the catalogue does not
+    /// describe, <c>reasoning.enabled: false</c>. Models that always reason
+    /// reject both, and the policy keeps them out.
+    /// <para>
     /// With reasoning allowed, the effort is capped at low: reasoning models
     /// expand to fill the budget they are given, and unhinted one model spent
     /// every token reasoning and returned nothing. The provider's own
     /// reasoning.max_tokens is not reliably honoured - it overran a 120 cap to
     /// 400 in testing - so effort plus headroom is what works.
+    /// </para>
     /// </remarks>
-    private async Task<string?> ReasoningEffortAsync(string modelId, CancellationToken ct)
+    private async Task<OpenRouterModel?> CatalogueModelAsync(string modelId, CancellationToken ct)
     {
-        if (!_policy.DisableReasoning)
-            return "low";
-
         try
         {
-            var model = (await ListModelsAsync(ct)).FirstOrDefault(m => m.Id == modelId);
-            return model?.AcceptsReasoning == true ? "none" : null;
+            return (await ListModelsAsync(ct)).FirstOrDefault(m => m.Id == modelId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Without the catalogue it is unknown whether the model takes the
-            // parameter, and sending it to one that does not is what can fail.
             return null;
         }
     }
@@ -533,6 +562,7 @@ public partial class OpenRouterAgentService : IOpenRouterService
                     Description = ModelMetadata.Summary(description),
                     Capabilities = ModelMetadata.Capabilities(id, name, parameters, inputs),
                     AcceptsReasoning = parameters.Contains("reasoning"),
+                    AcceptsTemperature = parameters.Contains("temperature"),
                     ReasoningMandatory = item.TryGetProperty("reasoning", out var reasoning)
                         && reasoning.ValueKind == JsonValueKind.Object
                         && reasoning.TryGetProperty("mandatory", out var mandatory)

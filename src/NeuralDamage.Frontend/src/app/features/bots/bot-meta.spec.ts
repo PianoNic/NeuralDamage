@@ -1,9 +1,11 @@
 import {
   BotFormValue,
   capabilityIcons,
+  clampTemperature,
   formatPrice,
   formatPricing,
   hasModelProblem,
+  MAX_TEMPERATURE,
   normalizeAliases,
   priceTierMarks,
   toCreateRequest,
@@ -126,5 +128,17 @@ describe('visibility rules', () => {
   it('tidies nicknames', () => {
     expect(normalizeAliases(' a , ,b ')).toBe('a, b');
     expect(normalizeAliases('')).toBe('');
+  });
+});
+
+describe('temperature', () => {
+  it('tops out at 1.5', () => {
+    expect(MAX_TEMPERATURE).toBe(1.5);
+  });
+
+  it('clamps a bot saved above the cap', () => {
+    expect(clampTemperature(2)).toBe(1.5);
+    expect(clampTemperature(0.8)).toBe(0.8);
+    expect(clampTemperature(-1)).toBe(0);
   });
 });
