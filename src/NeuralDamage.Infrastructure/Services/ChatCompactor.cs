@@ -23,6 +23,22 @@ public interface IChatCompactor
     /// </summary>
     /// <returns>The background run, for tests; callers do not wait for it.</returns>
     Task Schedule(Guid chatId, DateTime before);
+
+    /// <summary>
+    /// /compact: folds everything but the newest <see cref="HistoryOptions.CompactKeep"/>
+    /// messages into the summary now, under the same per-chat lock as
+    /// <see cref="Schedule"/>. Throws when the model fails, changing nothing.
+    /// </summary>
+    /// <returns>How many messages were folded: 0 when there was nothing to fold, null when the chat is already being compacted.</returns>
+    Task<int?> CompactNowAsync(Guid chatId, CancellationToken ct = default);
+
+    /// <summary>
+    /// /summarize: writes a recap of the chat from its summary and the recent
+    /// messages, in the background, and sends it to <paramref name="userId"/>
+    /// alone, or tells them it failed. The recap is never stored.
+    /// </summary>
+    /// <returns>The background run, for tests; callers do not wait for it.</returns>
+    Task Summarize(Guid chatId, Guid userId);
 }
 
 public class ChatCompactor(
@@ -62,24 +78,102 @@ public class ChatCompactor(
         });
     }
 
-    /// <summary>
-    /// The fold itself. Throws when the model fails, and then changes nothing:
-    /// the old summary and where it ends stay as they were.
-    /// </summary>
-    public async Task CompactAsync(Guid chatId, DateTime before, CancellationToken ct = default)
+    public async Task<int?> CompactNowAsync(Guid chatId, CancellationToken ct = default)
+    {
+        if (!_running.TryAdd(chatId, 0))
+            return null;
+        try
+        {
+            DateTime before;
+            int count;
+            using (var scope = scopes.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
+                var from = await db.Chats.Where(c => c.Id == chatId).Select(c => c.SummarizedBefore).FirstOrDefaultAsync(ct);
+                var unsummarised = db.Messages.Where(m => m.ChatId == chatId);
+                if (from is { } start)
+                    unsummarised = unsummarised.Where(m => m.CreatedAt >= start);
+
+                // Everything sent before the oldest message kept is folded.
+                var oldestKept = await unsummarised.OrderByDescending(m => m.CreatedAt)
+                    .Skip(Math.Max(1, _options.CompactKeep) - 1)
+                    .Select(m => (DateTime?)m.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (oldestKept is null)
+                    return 0;
+                before = oldestKept.Value;
+                count = await unsummarised.CountAsync(m => m.CreatedAt < before, ct);
+                if (count == 0)
+                    return 0;
+            }
+
+            return await CompactAsync(chatId, before, ct) ? count : 0;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Compacting chat {ChatId} on request failed; the old summary stays", chatId);
+            throw;
+        }
+        finally
+        {
+            _running.TryRemove(chatId, out _);
+        }
+    }
+
+    public Task Summarize(Guid chatId, Guid userId) => Task.Run(async () =>
     {
         using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
-        var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
+        string text;
+        try
+        {
+            text = await RecapAsync(scope.ServiceProvider, chatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Summarizing chat {ChatId} failed", chatId);
+            text = "Couldn't summarize the chat: the summary model did not answer. Try again in a moment.";
+        }
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<IChatNotificationService>().NotifyUserSystemMessage(chatId, userId, text);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Sending the recap of chat {ChatId} failed", chatId);
+        }
+    });
 
-        var chat = await db.Chats.FirstOrDefaultAsync(c => c.Id == chatId, ct);
-        if (chat is null || chat.SummarizedBefore >= before)
-            return;
-        var from = chat.SummarizedBefore;
+    /// <summary>The recap: the stored summary and the messages after it, retold for someone catching up.</summary>
+    private async Task<string> RecapAsync(IServiceProvider services, Guid chatId)
+    {
+        var db = services.GetRequiredService<NeuralDamageDbContext>();
+        var openRouter = services.GetRequiredService<IOpenRouterService>();
 
-        var query = db.Messages.Where(m => m.ChatId == chatId && m.CreatedAt < before);
-        if (from is { } start)
+        var chat = await db.Chats.AsNoTracking().Where(c => c.Id == chatId)
+            .Select(c => new SummarySeen(c.Summary, c.SummarizedBefore))
+            .FirstOrDefaultAsync() ?? new SummarySeen(null, null);
+        var query = db.Messages.Where(m => m.ChatId == chatId);
+        if (chat.Before is { } start)
             query = query.Where(m => m.CreatedAt >= start);
+        var lines = await NewestLinesAsync(query, CancellationToken.None);
+        if (lines.Count == 0 && string.IsNullOrWhiteSpace(chat.Text))
+            return "Nothing to summarize yet.";
+
+        var earlier = string.IsNullOrWhiteSpace(chat.Text) ? "(none)" : chat.Text;
+        var recent = lines.Count == 0 ? "(none)" : string.Join("\n", lines);
+        var recap = Clean(await openRouter.GenerateResponseAsync(Model(), Temperature, RecapPrompt,
+            [new ChatMessage("user", $"Summary of the earlier chat:\n{earlier}\n\nThe messages after it:\n{recent}")]));
+        if (recap.Length == 0)
+            throw new InvalidOperationException("The summary model returned an empty recap.");
+        return "Summary of the chat so far:\n" + recap;
+    }
+
+    /// <summary>
+    /// The newest messages of <paramref name="query"/> that fit <see cref="HistoryOptions.MaxFoldChars"/>,
+    /// as "[Name]: text" lines, oldest first.
+    /// </summary>
+    private async Task<List<string>> NewestLinesAsync(IQueryable<Message> query, CancellationToken ct)
+    {
         var newest = await query
             .OrderByDescending(m => m.CreatedAt)
             .Take(Math.Max(1, _options.MaxFoldChars / 20))
@@ -100,6 +194,29 @@ public class ChatCompactor(
             chars += line.Length + 1;
         }
         lines.Reverse();
+        return lines;
+    }
+
+    /// <summary>
+    /// The fold itself. Throws when the model fails, and then changes nothing:
+    /// the old summary and where it ends stay as they were.
+    /// </summary>
+    /// <returns>Whether the summary was saved: not when the chat moved on (cleared, or compacted from elsewhere) meanwhile.</returns>
+    public async Task<bool> CompactAsync(Guid chatId, DateTime before, CancellationToken ct = default)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
+        var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
+
+        var chat = await db.Chats.FirstOrDefaultAsync(c => c.Id == chatId, ct);
+        if (chat is null || chat.SummarizedBefore >= before)
+            return false;
+        var from = chat.SummarizedBefore;
+
+        var query = db.Messages.Where(m => m.ChatId == chatId && m.CreatedAt < before);
+        if (from is { } start)
+            query = query.Where(m => m.CreatedAt >= start);
+        var lines = await NewestLinesAsync(query, ct);
 
         var summary = chat.Summary;
         if (lines.Count > 0)
@@ -124,12 +241,13 @@ public class ChatCompactor(
         var current = await db.Chats.AsNoTracking().Where(c => c.Id == chatId).Select(c => new { c.SummarizedBefore }).FirstOrDefaultAsync(ct);
         if (current is null || current.SummarizedBefore != from
             || !await db.Messages.AnyAsync(m => m.ChatId == chatId && m.CreatedAt < before, ct))
-            return;
+            return false;
 
         chat.Summary = summary;
         chat.SummarizedBefore = before;
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Folded {Count} messages into the summary of chat {ChatId} ({Length} characters)", lines.Count, chatId, summary?.Length ?? 0);
+        return true;
     }
 
     /// <summary><c>History:SummaryModel</c>, then <c>App:DefaultModel</c>, then the cheap model images are described with.</summary>
@@ -160,6 +278,16 @@ public class ChatCompactor(
         Write it in the language most of the chat is in.
         Stay under {maxChars} characters: merge, and drop what matters least, oldest small talk first.
         Reply with the summary only.
+        """;
+
+    public const string RecapPrompt = """
+        Someone in a group chat between people and AI characters ("bots") was away and wants to catch up.
+        You get the summary of the earlier chat and the messages after it. Write them a short recap of the chat so far:
+        who is in it and who said what, what is going on right now, arguments and questions still open, running jokes.
+
+        Most space for what is going on now. Name people and bots by name. Plain sentences, no headings, no markdown, no lists.
+        Write it in the language most of the chat is in. Stay under 1200 characters.
+        Reply with the recap only.
         """;
 
     public static string ShortenPrompt(int maxChars) => $"""

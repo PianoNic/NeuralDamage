@@ -5,6 +5,7 @@ using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain;
+using NeuralDamage.Domain.Enums;
 
 namespace NeuralDamage.Application.Commands;
 
@@ -18,9 +19,11 @@ public record SlashCommand(string Name, string Argument)
         ("/mute BotName", "Stop a bot from replying or reacting"),
         ("/unmute BotName", "Let a muted bot talk again"),
         ("/clear", "Clear all messages in this chat"),
+        ("/compact", "Fold older messages into the bots' memory, so their prompt stays small"),
         ("/kick BotName", "Remove a bot from the chat"),
         ("/rename New Name", "Rename the chat"),
         ("/bots", "List the bots in this chat"),
+        ("/summarize", "Get a recap of the chat so far, just for you"),
         ("/help", "Show available commands"),
     ];
 
@@ -55,7 +58,8 @@ public class RunSlashCommandHandler(
     ISender sender,
     IChatNotificationService notifications,
     IChatBotState botState,
-    IBotResponseOrchestrator botOrchestrator) : ICommandHandler<RunSlashCommand, Result>
+    IBotResponseOrchestrator botOrchestrator,
+    IChatCompactor compactor) : ICommandHandler<RunSlashCommand, Result>
 {
     public async ValueTask<Result> Handle(RunSlashCommand request, CancellationToken cancellationToken)
     {
@@ -123,6 +127,38 @@ public class RunSlashCommandHandler(
                 await notifications.NotifyBotResponseCancelled(chatId);
                 return $"{userName} cleared the chat.";
             }
+
+            case "/compact":
+            {
+                var isOwner = await db.ChatMembers.AnyAsync(cm => cm.ChatId == chatId && cm.UserId == userId && cm.Role == ChatMemberRole.Owner, ct);
+                if (!isOwner)
+                    return Mistake("Only the chat owner can compact the chat.");
+
+                int? folded;
+                try
+                {
+                    folded = await compactor.CompactNowAsync(chatId, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    return Mistake("Couldn't compact the chat: the summary model did not answer. Nothing was changed, try again in a moment.");
+                }
+                if (folded is null)
+                    return Mistake("The chat is being compacted already. Try again in a moment.");
+                if (folded == 0)
+                    return Mistake("Nothing to compact: everything but the latest messages is in the bots' memory already.");
+
+                // Every bot's history so far overlaps the new summary: each
+                // starts over where the summary ends.
+                botState.ForgetHistory(chatId);
+                return $"{userName} compacted the chat: {folded} {(folded == 1 ? "message" : "messages")} folded into memory.";
+            }
+
+            case "/summarize":
+                // The model takes a while, so the recap follows on its own.
+                await notifications.NotifyUserSystemMessage(chatId, userId, "Summarizing…");
+                _ = compactor.Summarize(chatId, userId);
+                return null;
 
             case "/kick":
             {

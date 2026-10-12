@@ -256,9 +256,14 @@ public class BotResponseOrchestrator(
             // budget.
             var budget = HistoryBudget.For(await ContextLengthAsync(openRouter, bot, ct), _history);
             var query = db.Messages.Where(m => m.ChatId == chatId && m.CreatedAt <= round.Start);
+            // A bot with no history start yet (a restart, or /compact just
+            // folded the chat) starts where the summary ends, so nothing is
+            // both summarised and sent. Once set, the start only moves when
+            // its own window does, and another bot's compaction leaves it be.
             var historyStart = botState.HistoryStart(chatId, bot.Id);
-            if (historyStart is { } since)
-                query = query.Where(m => m.CreatedAt >= since);
+            var since = historyStart ?? await db.Chats.Where(c => c.Id == chatId).Select(c => c.SummarizedBefore).FirstOrDefaultAsync(ct);
+            if (since is { } from)
+                query = query.Where(m => m.CreatedAt >= from);
             var recentMessages = await query
                 .OrderByDescending(m => m.CreatedAt)
                 .Take(budget.Messages * 2)

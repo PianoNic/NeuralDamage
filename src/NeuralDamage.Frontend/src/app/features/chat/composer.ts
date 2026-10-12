@@ -63,9 +63,11 @@ export const SLASH_COMMANDS = [
   { command: '/mute', description: 'Keep a bot quiet in this chat', arg: '<bot>' },
   { command: '/unmute', description: 'Let a muted bot talk again', arg: '<bot>' },
   { command: '/clear', description: 'Clear all messages in this chat', arg: null },
+  { command: '/compact', description: "Fold older messages into the bots' memory", arg: null },
   { command: '/kick', description: 'Remove a bot from this chat', arg: '<bot>' },
   { command: '/rename', description: 'Rename this chat', arg: '<name>' },
   { command: '/bots', description: 'List the bots in this chat', arg: null },
+  { command: '/summarize', description: 'Get a recap of the chat, just for you', arg: null },
   { command: '/help', description: 'Show available commands', arg: null },
 ] as const;
 

@@ -263,7 +263,7 @@ public class ChatScopedBotTests
         var sender = Substitute.For<ISender>();
         sender.Send(Arg.Any<KickBotCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => new KickBotHandler(w.Db, notifications).Handle(call.Arg<KickBotCommand>(), call.Arg<CancellationToken>()));
-        return new RunSlashCommandHandler(w.Db, sender, notifications, botState, Substitute.For<IBotResponseOrchestrator>());
+        return new RunSlashCommandHandler(w.Db, sender, notifications, botState, Substitute.For<IBotResponseOrchestrator>(), Substitute.For<IChatCompactor>());
     }
 
     [Test]

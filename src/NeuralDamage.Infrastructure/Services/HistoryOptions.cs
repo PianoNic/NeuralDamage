@@ -32,6 +32,9 @@ public class HistoryOptions
 
     /// <summary>The model that writes the summary; empty means <c>App:DefaultModel</c>.</summary>
     public string? SummaryModel { get; set; }
+
+    /// <summary>How many of the newest messages /compact leaves out of the summary; at least one.</summary>
+    public int CompactKeep { get; set; } = 10;
 }
 
 /// <summary>How much raw history a bot reads, in characters and messages.</summary>
