@@ -14,6 +14,7 @@ using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Stickers;
+using NeuralDamage.Infrastructure.Services.BotPictures;
 using System.Text.Json.Serialization;
 
 // Validation messages and formatting stay English whatever the host's locale.
@@ -63,6 +64,11 @@ builder.Services.AddSingleton(sp => new StickerDescribeQueue(
 builder.Services.AddSingleton<IStickerDescribeQueue>(sp => sp.GetRequiredService<StickerDescribeQueue>());
 builder.Services.AddHostedService<StickerDescribeService>();
 builder.Services.AddHostedService<UnsentAttachmentSweeper>();
+
+// Picture suggestions for new bots, from Wikimedia. Redirects are followed by hand, only to allowed hosts.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IBotPictureFinder, BotPictureFinder>(client => client.Timeout = TimeSpan.FromSeconds(6))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
 // Rate limits
 builder.Services.AddChatRateLimits(builder.Configuration);

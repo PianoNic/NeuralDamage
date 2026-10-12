@@ -26,6 +26,7 @@ model/attachmentLimitsDto.ts
 model/botAvatarDto.ts
 model/botCreatorDto.ts
 model/botDto.ts
+model/botPictureSuggestionDto.ts
 model/botSummaryDto.ts
 model/chatDetailDto.ts
 model/chatDto.ts

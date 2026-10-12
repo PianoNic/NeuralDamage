@@ -11,7 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCamera, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
+import { lucideCamera, lucideChevronLeft, lucideChevronRight, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
@@ -24,6 +24,7 @@ import { HlmTextarea } from '@spartan-ng/helm/textarea';
 import { firstValueFrom } from 'rxjs';
 import { BotsService } from '../../api/api/bots.service';
 import { describeApiError } from '../../core/http-errors';
+import { BotPictureSuggestionDto } from '../../api/model/botPictureSuggestionDto';
 import { BotDto } from '../../core/models';
 import {
   characterFields,
@@ -40,11 +41,23 @@ import {
 } from './bot-meta';
 import { ModelBrowser } from './model-browser';
 import { ModelCatalog } from './model-catalog';
-import { cropAvatar } from '../../shared/crop-avatar';
+import { AVATAR_SIZE, cropAvatar } from '../../shared/crop-avatar';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { providerIconUrl } from '../../shared/provider-icon';
 
 const DEFAULT_TEMPERATURE = 0.8;
+
+/** How long the name has to stay as it is before a picture is looked up for it. */
+export const PICTURE_LOOKUP_DELAY = 600;
+
+/** Pictures offered for the bot's name, shown in the picture slot until one is used or they are refused. */
+interface PictureOffer {
+  name: string;
+  items: BotPictureSuggestionDto[];
+  index: number;
+  /** The current suggestion's bytes, fetched through the API, and an object URL for them. */
+  image: { blob: Blob; preview: string } | null;
+}
 
 /**
  * New bot / Edit bot: the model browser on the left, the bot on the right. Opened from a chat
@@ -67,7 +80,7 @@ const DEFAULT_TEMPERATURE = 0.8;
     MemberAvatar,
     ModelBrowser,
   ],
-  providers: [provideIcons({ lucideCamera, lucideTriangleAlert, lucideX })],
+  providers: [provideIcons({ lucideCamera, lucideChevronLeft, lucideChevronRight, lucideTriangleAlert, lucideX })],
   template: `
     <hlm-dialog [state]="open() ? 'open' : 'closed'" (closed)="closed.emit()">
       <hlm-dialog-content
@@ -105,19 +118,27 @@ const DEFAULT_TEMPERATURE = 0.8;
           }
 
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              class="focus-visible:ring-ring/50 group relative shrink-0 rounded-full outline-none focus-visible:ring-2"
-              aria-label="Choose a picture"
-              (click)="picker.click()"
-            >
-              <app-member-avatar [name]="name().trim() || '?'" [avatarUrl]="shownAvatar()" [modelId]="modelId()" [px]="56" />
-              <span
-                class="bg-foreground/50 text-background absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+            @if (suggestion(); as offer) {
+              <img
+                class="ring-primary/40 ring-offset-background size-14 shrink-0 rounded-full object-cover object-top ring-2 ring-offset-2"
+                [src]="offer.preview"
+                [alt]="'Suggested picture: ' + offer.title"
+              />
+            } @else {
+              <button
+                type="button"
+                class="focus-visible:ring-ring/50 group relative shrink-0 rounded-full outline-none focus-visible:ring-2"
+                aria-label="Choose a picture"
+                (click)="picker.click()"
               >
-                <ng-icon name="lucideCamera" size="18" />
-              </span>
-            </button>
+                <app-member-avatar [name]="name().trim() || '?'" [avatarUrl]="shownAvatar()" [modelId]="modelId()" [px]="56" />
+                <span
+                  class="bg-foreground/50 text-background absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                >
+                  <ng-icon name="lucideCamera" size="18" />
+                </span>
+              </button>
+            }
             <input
               #picker
               type="file"
@@ -125,22 +146,53 @@ const DEFAULT_TEMPERATURE = 0.8;
               accept="image/png,image/jpeg,image/webp,image/gif"
               (change)="pickAvatar(picker)"
             />
-            <div class="flex min-w-0 flex-col gap-0.5">
-              <span class="text-sm font-medium">Picture</span>
-              <span class="text-muted-foreground text-xs">
-                @if (shownAvatar()) {
-                  <button type="button" class="hover:text-foreground underline-offset-2 hover:underline" (click)="picker.click()">
-                    Change
-                  </button>
-                  ·
-                  <button type="button" class="hover:text-foreground underline-offset-2 hover:underline" (click)="removeAvatar()">
-                    Remove
-                  </button>
-                } @else {
-                  Optional. Without one it shows the model's icon.
-                }
-              </span>
-            </div>
+            @if (suggestion(); as offer) {
+              <div class="flex min-w-0 flex-1 flex-col gap-1" role="group" aria-label="Suggested picture">
+                <span class="flex min-w-0 items-center gap-1 text-sm font-medium">
+                  <span class="truncate">Suggested picture</span>
+                  @if (offer.count > 1) {
+                    <span class="ms-auto flex shrink-0 items-center">
+                      <button hlmBtn type="button" variant="ghost" size="icon-xs" aria-label="Previous suggestion" (click)="cycleSuggestion(-1)">
+                        <ng-icon name="lucideChevronLeft" />
+                      </button>
+                      <span class="text-muted-foreground text-xs tabular-nums">{{ offer.index + 1 }}/{{ offer.count }}</span>
+                      <button hlmBtn type="button" variant="ghost" size="icon-xs" aria-label="Next suggestion" (click)="cycleSuggestion(1)">
+                        <ng-icon name="lucideChevronRight" />
+                      </button>
+                    </span>
+                  }
+                </span>
+                <a
+                  class="text-muted-foreground hover:text-foreground truncate text-xs underline-offset-2 hover:underline"
+                  [href]="offer.sourceUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ offer.title }} · {{ offer.site }}
+                </a>
+                <span class="flex gap-1.5">
+                  <button hlmBtn type="button" size="xs" (click)="acceptSuggestion()">Use this picture</button>
+                  <button hlmBtn type="button" variant="ghost" size="xs" (click)="refuseSuggestion()">No thanks</button>
+                </span>
+              </div>
+            } @else {
+              <div class="flex min-w-0 flex-col gap-0.5">
+                <span class="text-sm font-medium">Picture</span>
+                <span class="text-muted-foreground text-xs">
+                  @if (shownAvatar()) {
+                    <button type="button" class="hover:text-foreground underline-offset-2 hover:underline" (click)="picker.click()">
+                      Change
+                    </button>
+                    ·
+                    <button type="button" class="hover:text-foreground underline-offset-2 hover:underline" (click)="removeAvatar()">
+                      Remove
+                    </button>
+                  } @else {
+                    Optional. Without one it shows the model's icon.
+                  }
+                </span>
+              </div>
+            }
           </div>
 
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -353,6 +405,24 @@ export class BotDialog {
   protected readonly shownAvatar = computed(
     () => this.newAvatar()?.preview ?? (this.avatarRemoved() ? null : (this.bot()?.avatarUrl ?? null)),
   );
+  /** Pictures found for the current name; nothing is applied until one is used. */
+  private readonly offer = signal<PictureOffer | null>(null);
+  /** Names the user said "No thanks" to, so the same suggestions don't come back. */
+  private readonly refused = signal<ReadonlySet<string>>(new Set());
+  private lookupTimer?: ReturnType<typeof setTimeout>;
+  protected readonly suggestion = computed(() => {
+    const offer = this.offer();
+    const item = offer?.items[offer.index];
+    if (!offer || !item || !offer.image || this.shownAvatar() || offer.name !== this.name().trim()) return null;
+    return {
+      index: offer.index,
+      count: offer.items.length,
+      title: item.title,
+      sourceUrl: item.sourceUrl,
+      site: item.sourceUrl.includes('commons.wikimedia.org') ? 'Wikimedia Commons' : 'Wikipedia',
+      preview: offer.image.preview,
+    };
+  });
 
   protected readonly nameInvalid = computed(() => this.nameTouched() && !this.name().trim());
   /** An old bot's long description may stay as it is, so it can still be saved; a new one must fit. */
@@ -406,14 +476,28 @@ export class BotDialog {
         this.saving.set(false);
         this.setNewAvatar(null);
         this.avatarRemoved.set(false);
+        this.setOffer(null);
+        this.refused.set(new Set());
       });
+    });
+    // Once the name settles, look up a picture for it, as long as the bot has none.
+    effect(() => {
+      const name = this.name().trim();
+      const wanted = this.open() && !!name && !this.shownAvatar() && !this.refused().has(name);
+      clearTimeout(this.lookupTimer);
+      if (!wanted || untracked(() => this.offer()?.name) === name) return;
+      this.lookupTimer = setTimeout(() => void this.lookUpPicture(name), PICTURE_LOOKUP_DELAY);
     });
     // The catalog may still be loading when a new bot is opened: start it on the default once it arrives.
     effect(() => {
       const defaultId = this.catalog.defaultId();
       if (defaultId && this.open() && !untracked(() => this.bot() || this.modelId())) this.modelId.set(defaultId);
     });
-    inject(DestroyRef).onDestroy(() => this.setNewAvatar(null));
+    inject(DestroyRef).onDestroy(() => {
+      clearTimeout(this.lookupTimer);
+      this.setNewAvatar(null);
+      this.setOffer(null);
+    });
     effect(() => {
       const browser = this.browser();
       if (browser && this.open() && untracked(() => this.focusModel())) browser.focusSearch();
@@ -445,6 +529,84 @@ export class BotDialog {
     } catch {
       this.error.set('That picture could not be read. Try a PNG, JPEG, WebP or GIF.');
     }
+  }
+
+  protected async acceptSuggestion(): Promise<void> {
+    const image = this.offer()?.image;
+    if (!image) return;
+    this.error.set(null);
+    try {
+      // Portraits put the head at the top, so the square is taken from there.
+      const blob = await cropAvatar(image.blob, AVATAR_SIZE, 'top');
+      this.setNewAvatar({ blob, preview: URL.createObjectURL(blob) });
+      this.avatarRemoved.set(false);
+      this.setOffer(null);
+    } catch {
+      this.error.set('That picture could not be used. Choose one yourself instead.');
+    }
+  }
+
+  protected refuseSuggestion(): void {
+    const name = this.offer()?.name;
+    if (name) this.refused.update((names) => new Set(names).add(name));
+    this.setOffer(null);
+  }
+
+  protected async cycleSuggestion(step: number): Promise<void> {
+    const offer = this.offer();
+    if (!offer || offer.items.length < 2) return;
+    const index = (offer.index + step + offer.items.length) % offer.items.length;
+    const image = await this.loadSuggestion(offer.name, offer.items[index].index);
+    // The name may have changed, or another arrow been pressed, while it loaded.
+    if (this.offer() !== offer) {
+      if (image) URL.revokeObjectURL(image.preview);
+      return;
+    }
+    if (!image) {
+      // That one cannot be fetched: drop it and stay on the current one.
+      const items = offer.items.filter((_, i) => i !== index);
+      this.offer.set({ ...offer, items, index: index < offer.index ? offer.index - 1 : offer.index });
+      return;
+    }
+    this.setOffer({ ...offer, index, image });
+  }
+
+  private async lookUpPicture(name: string): Promise<void> {
+    let items: BotPictureSuggestionDto[];
+    try {
+      items = await firstValueFrom(this.api.apiBotsPictureSuggestionsGet(name));
+    } catch {
+      return; // A failed lookup just offers nothing.
+    }
+    // Try them in order until one loads.
+    for (let i = 0; i < items.length; i++) {
+      if (this.name().trim() !== name) return;
+      const image = await this.loadSuggestion(name, items[i].index);
+      if (this.name().trim() !== name) {
+        if (image) URL.revokeObjectURL(image.preview);
+        return;
+      }
+      if (image) {
+        this.setOffer({ name, items: items.slice(i), index: 0, image });
+        return;
+      }
+    }
+    if (this.name().trim() === name) this.setOffer({ name, items: [], index: 0, image: null });
+  }
+
+  private async loadSuggestion(name: string, index: number): Promise<{ blob: Blob; preview: string } | null> {
+    try {
+      const blob = await firstValueFrom(this.api.apiBotsPictureSuggestionsIndexGet(index, name));
+      return { blob, preview: URL.createObjectURL(blob) };
+    } catch {
+      return null;
+    }
+  }
+
+  private setOffer(next: PictureOffer | null): void {
+    const previous = this.offer()?.image;
+    if (previous && previous !== next?.image) URL.revokeObjectURL(previous.preview);
+    this.offer.set(next);
   }
 
   protected removeAvatar(): void {
