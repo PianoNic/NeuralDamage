@@ -42,6 +42,15 @@ public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelP
     /// <summary>1 (cheap) to 3 (expensive), relative to the configured price caps.</summary>
     public int PriceTier { get; init; }
 
+    /// <summary>
+    /// The model runs on a custom provider (<c>Providers:&lt;Name&gt;</c>), which
+    /// <see cref="Provider"/> then names, rather than on OpenRouter.
+    /// </summary>
+    public bool IsCustom { get; init; }
+
+    /// <summary>The model a new bot starts on (<c>App:DefaultModel</c>, or the first custom model).</summary>
+    public bool IsDefault { get; init; }
+
     /// <summary>Whether the model takes OpenRouter's <c>reasoning</c> parameter, so its effort can be set.</summary>
     [JsonIgnore]
     public bool AcceptsReasoning { get; init; }

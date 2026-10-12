@@ -1,5 +1,6 @@
 using NeuralDamage.Application.Queries;
 using NeuralDamage.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 
 namespace NeuralDamage.Tests.Services;
@@ -113,7 +114,7 @@ public class ModelMetadataTests
     {
         var openRouter = Substitute.For<IOpenRouterService>();
         openRouter.ListModelsAsync(Arg.Any<CancellationToken>()).Returns([new OpenRouterModel("a/cheap", "Cheap", 8000, new ModelPricing(0.05m, 0.10m))]);
-        var handler = new ListOpenRouterModelsHandler(openRouter, new ModelPolicy(0.25m, 0.60m));
+        var handler = new ListOpenRouterModelsHandler(openRouter, new ModelPolicy(0.25m, 0.60m), new ConfigurationBuilder().Build());
 
         var model = (await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None)).Value!.Single();
 

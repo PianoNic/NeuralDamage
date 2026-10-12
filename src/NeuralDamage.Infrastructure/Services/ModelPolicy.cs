@@ -35,9 +35,13 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
     /// whenever a price cap is set. <paramref name="reasoningMandatory"/> is
     /// whether the model always reasons, which only matters under
     /// <see cref="DisableReasoning"/>: such a model rejects the request to stop.
+    /// A custom provider's model (<c>&lt;Name&gt;:&lt;model&gt;</c>) is never refused:
+    /// the rules are OpenRouter's, and whoever configured the provider chose it.
     /// </summary>
     public string? Refusal(string modelId, ModelPricing? pricing, IReadOnlySet<string> zdrModelIds, bool reasoningMandatory = false)
     {
+        if (CustomProvider.IsCustomModelId(modelId))
+            return null;
         if (ExcludeBatchModels && modelId.EndsWith(":batch", StringComparison.Ordinal))
             return $"Model '{modelId}' is a batch variant, which cannot answer in a live chat.";
         if (ZdrOnly && !zdrModelIds.Contains(modelId))
@@ -66,10 +70,15 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
     /// <summary>
     /// Why the model is refused, or null when it is allowed. A model missing
     /// from OpenRouter's catalogue has no price, so it is refused whenever a
-    /// price cap is set.
+    /// price cap is set. A custom provider's model only has to be offered.
     /// </summary>
     public async Task<string?> CheckModelAsync(IOpenRouterService openRouter, string modelId, CancellationToken ct = default)
     {
+        if (CustomProvider.Split(modelId) is { } custom)
+            return (await openRouter.ListModelsAsync(ct) ?? []).Any(m => m.Id == modelId)
+                ? null
+                : $"Model '{modelId}' is not offered by provider '{custom.Provider}'.";
+
         var zdr = await ZdrIdsAsync(openRouter, ct);
         var model = IsPriceUnlimited && !DisableReasoning
             ? null
@@ -121,7 +130,9 @@ public record ModelPolicy(decimal MaxPromptPrice, decimal MaxCompletionPrice, bo
     public ModelStatus Status(string modelId, IReadOnlyDictionary<string, OpenRouterModel> catalogue, IReadOnlySet<string> zdrModelIds)
     {
         if (!catalogue.TryGetValue(modelId, out var model))
-            return new ModelStatus(ModelStatus.Missing, $"Model '{modelId}' is no longer offered on OpenRouter.");
+            return new ModelStatus(ModelStatus.Missing, CustomProvider.Split(modelId) is { } custom
+                ? $"Model '{modelId}' is no longer offered by provider '{custom.Provider}'."
+                : $"Model '{modelId}' is no longer offered on OpenRouter.");
         return Refusal(modelId, model.Pricing, zdrModelIds, model.ReasoningMandatory) is { } refusal
             ? new ModelStatus(ModelStatus.NotAllowed, refusal)
             : ModelStatus.Ok;

@@ -368,7 +368,7 @@ export class BotDialog {
         this.aliases.set(bot?.aliases ?? '');
         this.personality.set(bot?.personality ?? '');
         this.visibility.set(bot && !bot.isPublic ? 'private' : 'public');
-        this.modelId.set(bot?.modelId ?? null);
+        this.modelId.set(bot?.modelId ?? this.catalog.defaultId());
         this.temperature.set(bot?.temperature ?? DEFAULT_TEMPERATURE);
         this.systemPrompt.set(bot?.systemPrompt ?? '');
         // A bot that already has its own prompt shows it; otherwise the section stays tucked away.
@@ -379,6 +379,11 @@ export class BotDialog {
         this.setNewAvatar(null);
         this.avatarRemoved.set(false);
       });
+    });
+    // The catalog may still be loading when a new bot is opened: start it on the default once it arrives.
+    effect(() => {
+      const defaultId = this.catalog.defaultId();
+      if (defaultId && this.open() && !untracked(() => this.bot() || this.modelId())) this.modelId.set(defaultId);
     });
     inject(DestroyRef).onDestroy(() => this.setNewAvatar(null));
     effect(() => {

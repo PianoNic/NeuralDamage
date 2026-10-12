@@ -66,6 +66,19 @@ The web app reads the sign-in settings from `GET /api/app` at startup, so none o
 
 Out of the box, bots can only use cheap models whose providers keep no data. A model that fails any of these rules (over a price cap, without a fixed price such as `openrouter/auto`, without a zero-data-retention endpoint, a batch variant, or a model that always reasons while `DisableReasoning` is on) is hidden from the model picker and refused when a bot is created or switched to it. Every reply request also sends the caps as OpenRouter's `provider.max_price` and, with `ZdrOnly`, `provider.zdr`, so a request is never routed to a provider that charges more or retains data.
 
+### Custom providers
+
+Bots can also run on any OpenAI-compatible endpoint next to OpenRouter, for example a gateway that hosts DeepSeek for free. Each provider gets a name of your choice, and its models are addressed as `<Name>:<model>`, e.g. `gateway:sgl/deepseek`. Several providers can be configured side by side.
+
+| Variable | Default | Description |
+|---|---|---|
+| `Providers__<Name>__BaseUrl` | required | The endpoint's OpenAI-compatible base URL, e.g. `https://gateway.example.com/v1`. |
+| `Providers__<Name>__ApiKey` | none | Sent as the bearer token. Leave it out for an endpoint that takes no key. |
+| `Providers__<Name>__Models` | everything `/models` lists | Comma-separated list of the models to offer, e.g. `sgl/deepseek`. Set it when the endpoint also lists embedding, reranking or speech models. Without it, the provider's `/models` is read once an hour; a provider that cannot be reached is left out of the picker (with a warning in the log) and tried again after five minutes. |
+| `App__DefaultModel` | the first custom model | The model a new bot starts on, e.g. `gateway:sgl/deepseek` or an OpenRouter id. Without it and without a custom provider, the picker starts empty. |
+
+Custom models show in the model picker under the provider's name and as free. The OpenRouter policy above (price caps, ZDR, batch, reasoning) does not apply to them: whoever configured the provider chose it. Replies go to the provider with only the messages, temperature and token budget, none of OpenRouter's extra fields. Nothing says whether a custom model can see, so its bots get image descriptions like any text-only bot. A bot whose custom model is no longer offered is flagged like one whose OpenRouter model disappeared. Jev and the image describer stay on OpenRouter.
+
 ### Images
 
 People can attach PNG, JPEG, WebP and GIF images to a message. Bots on a model that can see get the picture itself. For every other bot, a describer model writes a description of each image once, right after upload, and those bots (and the ranking below) read that instead.
