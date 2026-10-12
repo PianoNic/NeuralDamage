@@ -37,6 +37,13 @@ public interface IChatBotState
     /// </summary>
     SummarySeen? HistorySummary(Guid chatId, Guid botId);
     void SetHistorySummary(Guid chatId, Guid botId, SummarySeen summary);
+
+    /// <summary>
+    /// Drops every bot's history start and summary in the chat, after /compact
+    /// moved the summary past them: the next reply starts its history where
+    /// the summary ends and takes up the new summary.
+    /// </summary>
+    void ForgetHistory(Guid chatId);
 }
 
 /// <summary>A <see cref="NeuralDamage.Domain.Chat.Summary"/> as read, with where it ends.</summary>

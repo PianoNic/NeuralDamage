@@ -76,6 +76,14 @@ describe('Composer', () => {
     expect(component.suggestions().map((s) => s.key)).toEqual(['/mute']);
   });
 
+  it('offers /compact and /summarize', async () => {
+    const { component, type } = await setup();
+    await type('/c');
+    expect(component.suggestions().map((s) => s.key)).toEqual(['/clear', '/compact']);
+    await type('/su');
+    expect(component.suggestions().map((s) => s.result)).toEqual(['/summarize']);
+  });
+
   it('completes bot names after a command that takes one', async () => {
     const { component, type } = await setup();
     await type('/kick g');

@@ -98,6 +98,8 @@ Images are only served to members of their chat.
 
 A bot reads the latest stretch of the chat word for word: a share of its model's context, at least 12,000 characters (about 50 messages). When the chat outgrows that, the oldest quarter drops out at once, and in the background the default model folds what dropped into a running summary of the chat: who said what, facts people shared about themselves, running jokes, nicknames and open arguments. Every bot reads that summary before the messages, as its memory of the earlier chat. It only changes when a chunk drops, so the prompt cache keeps working in between. When it grows past its cap, it is compacted again. If writing it fails, the old summary stays and the next drop tries again. Clearing the chat clears it too.
 
+The chat owner can also fold the chat on purpose with `/compact`: everything but the newest few messages goes into the summary at once, so the bots' prompt is small from the next reply on. The messages stay visible. Anyone can ask for `/summarize`, a short recap of the chat so far that only they see; the bots never do.
+
 | Variable | Default | Description |
 |---|---|---|
 | `History__ContextShare` | `0.25` | Share of the model's context the raw history may fill. |
@@ -105,7 +107,8 @@ A bot reads the latest stretch of the chat word for word: a share of its model's
 | `History__MinChars` | `12000` | Lower bound on the raw history, in characters. |
 | `History__SummaryMaxChars` | `4000` | Longest summary before it is compacted again. |
 | `History__MaxFoldChars` | `60000` | Most characters of dropped messages folded in at once, newest first. |
-| `History__SummaryModel` | `App__DefaultModel` | The model that writes the summary. Without either, `google/gemini-2.5-flash-lite`. |
+| `History__SummaryModel` | `App__DefaultModel` | The model that writes the summary and the `/summarize` recap. Without either, `google/gemini-2.5-flash-lite`. |
+| `History__CompactKeep` | `10` | Newest messages `/compact` leaves out of the summary. |
 
 ### Rate limits
 

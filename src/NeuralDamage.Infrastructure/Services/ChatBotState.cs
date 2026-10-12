@@ -59,6 +59,14 @@ public class ChatBotState : IChatBotState
         _historySummaries.TryGetValue((chatId, botId), out var summary) ? summary : null;
     public void SetHistorySummary(Guid chatId, Guid botId, SummarySeen summary) => _historySummaries[(chatId, botId)] = summary;
 
+    public void ForgetHistory(Guid chatId)
+    {
+        foreach (var key in _historyStarts.Keys.Where(k => k.ChatId == chatId))
+            _historyStarts.TryRemove(key, out _);
+        foreach (var key in _historySummaries.Keys.Where(k => k.ChatId == chatId))
+            _historySummaries.TryRemove(key, out _);
+    }
+
     private bool Contains(Guid chatId, Guid? botId) =>
         botId is { } id ? _muted.ContainsKey((chatId, id)) : _stopped.ContainsKey(chatId);
 

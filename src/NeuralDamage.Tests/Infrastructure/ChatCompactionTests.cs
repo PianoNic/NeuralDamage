@@ -252,8 +252,10 @@ public class ChatCompactionTests
     [Test]
     public async Task StartOfTheHistory_IsUnchangedBetweenTrims_EvenWhenAnotherBotCompacts()
     {
-        var (h, calls) = await LongChatAsync("Alice has a cat called Mochi.", DateTime.UtcNow);
+        var (h, calls) = await LongChatAsync(null, null);
         using var _ = h;
+        // The summary ends at msg100, inside the window.
+        await SetSummaryAsync(h, "Alice has a cat called Mochi.", (await h.Db.Messages.SingleAsync(m => m.Content.StartsWith("msg100"))).CreatedAt);
 
         var first = await h.SayAsync("what do you think?", at: DateTime.UtcNow);
         await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, first.Id);
@@ -419,6 +421,195 @@ public class ChatCompactionTests
 
         await Assert.That(h.OpenRouter.ReceivedCalls().Count()).IsEqualTo(1);
         await Assert.That((await StoredAsync(h)).Summary).IsEqualTo("Alice moved to Bern.");
+    }
+
+    // ---- /compact ----
+
+    private static ChatCompactor NewCompactor(OrchestratorHarness h, HistoryOptions? options = null) =>
+        new(h.Provider.GetRequiredService<IServiceScopeFactory>(),
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:DefaultModel"] = "gw:sgl/deepseek" }).Build(),
+            NullLogger<ChatCompactor>.Instance, Microsoft.Extensions.Options.Options.Create(options ?? new HistoryOptions()));
+
+    [Test]
+    public async Task CompactNow_FoldsAllButTheLastFew_AndMovesTheSummaryOn()
+    {
+        using var h = await OrchestratorHarness.CreateAsync();
+        var start = DateTime.UtcNow.AddHours(-2);
+        var messages = new List<Message>();
+        for (var i = 0; i < 8; i++)
+            messages.Add(await h.SayAsync($"msg{i}", at: start.AddMinutes(i)));
+        h.Reply("Alice said eight things.");
+
+        var folded = await NewCompactor(h, new HistoryOptions { CompactKeep = 3 }).CompactNowAsync(h.Chat.Id);
+
+        await Assert.That(folded).IsEqualTo(5);
+        var chat = await StoredAsync(h);
+        await Assert.That(chat.Summary).IsEqualTo("Alice said eight things.");
+        await Assert.That(chat.SummarizedBefore).IsEqualTo(messages[5].CreatedAt);
+        var input = ((List<ChatMessage>)h.OpenRouter.ReceivedCalls().Single().GetArguments()[3]!).Single().Content;
+        await Assert.That(input).Contains("[Alice]: msg4");
+        await Assert.That(input).DoesNotContain("msg5");
+    }
+
+    [Test]
+    public async Task CompactNow_OnlyFoldsWhatIsNotSummarisedYet()
+    {
+        var (h, _, before) = await CompactorAsync();
+        using var _h = h;
+        h.Reply("Alice has a cat called Mochi and lives in Bern.");
+
+        // Three messages after the summary; keeping one folds two.
+        var folded = await NewCompactor(h, new HistoryOptions { CompactKeep = 1 }).CompactNowAsync(h.Chat.Id);
+
+        await Assert.That(folded).IsEqualTo(2);
+        await Assert.That((await StoredAsync(h)).SummarizedBefore).IsEqualTo(before);
+    }
+
+    [Test]
+    public async Task CompactNow_NothingToFold_CallsNoModel()
+    {
+        using var h = await OrchestratorHarness.CreateAsync();
+        for (var i = 0; i < 10; i++)
+            await h.SayAsync($"msg{i}", at: DateTime.UtcNow.AddMinutes(i - 20));
+
+        var folded = await NewCompactor(h).CompactNowAsync(h.Chat.Id);
+
+        await Assert.That(folded).IsEqualTo(0);
+        await Assert.That(h.OpenRouter.ReceivedCalls()).IsEmpty();
+        await Assert.That((await StoredAsync(h)).SummarizedBefore).IsNull();
+    }
+
+    [Test]
+    public async Task CompactNow_WaitsForNoOne_WhileTheChatIsBeingCompacted()
+    {
+        var (h, compactor, before) = await CompactorAsync(new HistoryOptions { CompactKeep = 1 });
+        using var _ = h;
+        var gate = new TaskCompletionSource<string>();
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(gate.Task);
+
+        var running = compactor.Schedule(h.Chat.Id, before);
+        var now = await compactor.CompactNowAsync(h.Chat.Id);
+        gate.SetResult("Alice moved to Bern.");
+        await running;
+
+        await Assert.That(now).IsNull();
+        await Assert.That(h.OpenRouter.ReceivedCalls().Count()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task CompactNow_ModelFails_Throws_AndChangesNothing()
+    {
+        var (h, compactor, before) = await CompactorAsync(new HistoryOptions { CompactKeep = 1 });
+        using var _ = h;
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ThrowsAsyncForAnyArgs(new HttpRequestException("down"));
+
+        await Assert.That(async () => await compactor.CompactNowAsync(h.Chat.Id)).Throws<HttpRequestException>();
+
+        await Assert.That((await StoredAsync(h)).SummarizedBefore).IsEqualTo(before.AddMinutes(-10));
+        // The lock is let go: the next try runs.
+        h.Reply("Alice moved to Bern.");
+        await Assert.That(await compactor.CompactNowAsync(h.Chat.Id)).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task AfterCompactNow_TheNextPromptStartsWhereTheSummaryEnds()
+    {
+        using var h = await OrchestratorHarness.CreateAsync();
+        h.Respond(h.Bots[0]);
+        var calls = new List<List<ChatMessage>>();
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(ci =>
+        {
+            var history = ci.ArgAt<List<ChatMessage>>(3);
+            calls.Add(history);
+            // The summary model gets one turn; a bot gets the history and the note.
+            return Task.FromResult(history.Count == 1 ? "Alice said a lot of things." : $"reply {calls.Count}");
+        });
+        var start = DateTime.UtcNow.AddHours(-3);
+        for (var i = 0; i < 30; i++)
+            await h.SayAsync($"msg{i:D2}", at: start.AddMinutes(i));
+
+        var first = await h.SayAsync("what do you think?", at: start.AddMinutes(31));
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, first.Id);
+        var before = calls[^1];
+
+        var folded = await NewCompactor(h).CompactNowAsync(h.Chat.Id);
+        h.BotState.ForgetHistory(h.Chat.Id);
+        var second = await h.SayAsync("and now?", at: DateTime.UtcNow.AddSeconds(1));
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, second.Id);
+        var after = calls[^1];
+
+        var summarizedBefore = (await StoredAsync(h)).SummarizedBefore!.Value;
+        var oldestKept = await h.Db.Messages.AsNoTracking().SingleAsync(m => m.CreatedAt == summarizedBefore);
+        await Assert.That(folded > 0).IsTrue();
+        await Assert.That(after[0].Content).IsEqualTo("(Earlier in this chat: Alice said a lot of things.)");
+        await Assert.That(after[1].Content).Contains(oldestKept.Content);
+        await Assert.That(after.Any(m => m.Content.Contains("msg00"))).IsFalse();
+        await Assert.That(after.Count < before.Count).IsTrue();
+    }
+
+    [Test]
+    public async Task FreshHistory_StartsNoEarlierThanTheSummary()
+    {
+        var (h, calls) = await LongChatAsync("Alice has a cat called Mochi.", null);
+        using var _ = h;
+        var cut = await h.Db.Messages.AsNoTracking().OrderByDescending(m => m.CreatedAt).Skip(5).Select(m => m.CreatedAt).FirstAsync();
+        await SetSummaryAsync(h, "Alice has a cat called Mochi.", cut);
+
+        var message = await h.SayAsync("what do you think?", at: DateTime.UtcNow);
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
+
+        // The summary, the six messages from where it ends, this one and the note.
+        await Assert.That(calls.Single().Count).IsEqualTo(1 + 6 + 1 + 1);
+        await Assert.That(h.BotState.HistoryStart(h.Chat.Id, h.Bots[0].Id)).IsEqualTo(cut);
+    }
+
+    // ---- /summarize ----
+
+    [Test]
+    public async Task Summarize_SendsTheRecapToTheCallerOnly_AndStoresNothing()
+    {
+        var (h, compactor, before) = await CompactorAsync();
+        using var _ = h;
+        h.Reply("Alice has a cat, moved to Bern and goes by Ali.");
+        var messages = await h.Db.Messages.CountAsync();
+
+        await compactor.Summarize(h.Chat.Id, h.User.Id);
+
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.Chat.Id, h.User.Id, "Summary of the chat so far:\nAlice has a cat, moved to Bern and goes by Ali.");
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
+        var call = h.OpenRouter.ReceivedCalls().Single().GetArguments();
+        await Assert.That((string)call[0]!).IsEqualTo("gw:sgl/deepseek");
+        var input = ((List<ChatMessage>)call[3]!).Single().Content;
+        await Assert.That(input).Contains("Alice has a cat called Mochi.");
+        await Assert.That(input).Contains("[Alice]: still in the window");
+        await Assert.That(input).DoesNotContain("already summarised");
+        var chat = await StoredAsync(h);
+        await Assert.That(chat.Summary).IsEqualTo("Alice has a cat called Mochi.");
+        await Assert.That(chat.SummarizedBefore).IsEqualTo(before.AddMinutes(-10));
+        await Assert.That(await h.Db.Messages.CountAsync()).IsEqualTo(messages);
+    }
+
+    [Test]
+    public async Task Summarize_ModelFails_TellsTheCaller()
+    {
+        var (h, compactor, _) = await CompactorAsync();
+        using var _h = h;
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ThrowsAsyncForAnyArgs(new HttpRequestException("down"));
+
+        await compactor.Summarize(h.Chat.Id, h.User.Id);
+
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.Chat.Id, h.User.Id, Arg.Is<string>(s => s.StartsWith("Couldn't summarize the chat")));
+    }
+
+    [Test]
+    public async Task Summarize_EmptyChat_SaysSo_WithoutAModel()
+    {
+        using var h = await OrchestratorHarness.CreateAsync();
+
+        await NewCompactor(h).Summarize(h.Chat.Id, h.User.Id);
+
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.Chat.Id, h.User.Id, "Nothing to summarize yet.");
+        await Assert.That(h.OpenRouter.ReceivedCalls()).IsEmpty();
     }
 
     [Test]

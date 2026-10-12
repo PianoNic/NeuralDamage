@@ -46,7 +46,8 @@ public class RunSlashCommandHandlerTests
         IBotResponseOrchestrator Orchestrator,
         Guid ChatId,
         Guid UserId,
-        Bot Bot);
+        Bot Bot,
+        IChatCompactor Compactor);
 
     private static async Task<Harness> BuildAsync()
     {
@@ -65,8 +66,9 @@ public class RunSlashCommandHandlerTests
         var notifications = Substitute.For<IChatNotificationService>();
         var orchestrator = Substitute.For<IBotResponseOrchestrator>();
         var botState = new ChatBotState();
-        var handler = new RunSlashCommandHandler(db, sender, notifications, botState, orchestrator);
-        return new Harness(handler, db, sender, notifications, botState, orchestrator, chat.Id, user.Id, bot);
+        var compactor = Substitute.For<IChatCompactor>();
+        var handler = new RunSlashCommandHandler(db, sender, notifications, botState, orchestrator, compactor);
+        return new Harness(handler, db, sender, notifications, botState, orchestrator, chat.Id, user.Id, bot, compactor);
     }
 
     private static async Task RunAsync(Harness h, string content)
@@ -206,6 +208,100 @@ public class RunSlashCommandHandlerTests
 
         await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, Arg.Is<string>(s =>
             SlashCommand.Help.All(c => s.Contains(c.Usage))));
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
+    }
+
+    [Test]
+    public async Task Help_ListsCompactAndSummarize()
+    {
+        await Assert.That(SlashCommand.Help.Select(c => c.Usage)).Contains("/compact");
+        await Assert.That(SlashCommand.Help.Select(c => c.Usage)).Contains("/summarize");
+    }
+
+    [Test]
+    public async Task Compact_ByAnyoneButTheOwner_IsRefused_ToTheCallerOnly()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+        var bob = new User { ExternalId = "ext-2", Email = "bob@test.com", DisplayName = "Bob" };
+        h.Db.Users.Add(bob);
+        h.Db.ChatMembers.Add(new ChatMember { ChatId = h.ChatId, UserId = bob.Id, Role = ChatMemberRole.Member });
+        await h.Db.SaveChangesAsync();
+
+        var result = await h.Handler.Handle(new RunSlashCommand(h.ChatId, bob.Id, "/compact"), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, bob.Id, "Only the chat owner can compact the chat.");
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
+        await h.Compactor.DidNotReceiveWithAnyArgs().CompactNowAsync(default, default);
+    }
+
+    [Test]
+    public async Task Compact_NothingToFold_TellsTheCallerWhy()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+        h.Compactor.CompactNowAsync(h.ChatId, Arg.Any<CancellationToken>()).Returns(0);
+
+        await RunAsync(h, "/compact");
+
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, Arg.Is<string>(s => s.StartsWith("Nothing to compact")));
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
+    }
+
+    [Test]
+    public async Task Compact_WhileAlreadyCompacting_TellsTheCaller()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+        h.Compactor.CompactNowAsync(h.ChatId, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        await RunAsync(h, "/compact");
+
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, "The chat is being compacted already. Try again in a moment.");
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
+    }
+
+    [Test]
+    public async Task Compact_ModelFails_TellsTheCaller()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+        h.Compactor.CompactNowAsync(h.ChatId, Arg.Any<CancellationToken>()).Returns<int?>(_ => throw new HttpRequestException("down"));
+
+        await RunAsync(h, "/compact");
+
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, Arg.Is<string>(s => s.StartsWith("Couldn't compact the chat")));
+        await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
+    }
+
+    [Test]
+    public async Task Compact_TellsTheChat_AndStartsEveryBotsHistoryOver()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+        h.Compactor.CompactNowAsync(h.ChatId, Arg.Any<CancellationToken>()).Returns(214);
+        h.BotState.SetHistoryStart(h.ChatId, h.Bot.Id, DateTime.UtcNow.AddDays(-1));
+        h.BotState.SetHistorySummary(h.ChatId, h.Bot.Id, new SummarySeen("old", DateTime.UtcNow.AddDays(-2)));
+
+        await RunAsync(h, "/compact");
+
+        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Alice compacted the chat: 214 messages folded into memory.");
+        await Assert.That(h.BotState.HistoryStart(h.ChatId, h.Bot.Id)).IsNull();
+        await Assert.That(h.BotState.HistorySummary(h.ChatId, h.Bot.Id)).IsNull();
+    }
+
+    [Test]
+    public async Task Summarize_GoesToTheCallerOnly_AndRunsInTheBackground()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+        h.Compactor.Summarize(h.ChatId, h.UserId).Returns(new TaskCompletionSource().Task);
+
+        await RunAsync(h, "/summarize");
+
+        await h.Notifications.Received(1).NotifyUserSystemMessage(h.ChatId, h.UserId, "Summarizing…");
+        await h.Compactor.Received(1).Summarize(h.ChatId, h.UserId);
         await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
     }
 
