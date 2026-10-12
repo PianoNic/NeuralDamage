@@ -20,6 +20,7 @@ public static partial class BotReplyFormatter
     {
         var parts = BlankLines().Split(reply)
             .Select(StripMarkdown)
+            .Select(StripDashes)
             .Select(p => RepeatedSymbol().Replace(p, "$1$1$1"))
             .Where(p => p.Length > 0)
             .ToList();
@@ -104,6 +105,19 @@ public static partial class BotReplyFormatter
         }
     }
 
+    /// <summary>
+    /// Replaces em dashes, and en dashes or bars used the same way, with a
+    /// comma: nobody texts them, and they give a bot away as a model. The prompt
+    /// asks for none, but models slip, so it is enforced here. Hyphens and
+    /// ranges ("e-mail", "2-3", "2–3") stay.
+    /// </summary>
+    public static string StripDashes(string text)
+    {
+        text = Dash().Replace(text, ", ");
+        text = CommaBeforePunctuation().Replace(text, "$1");
+        return StrayComma().Replace(text, "").Trim();
+    }
+
     /// <summary>Removes headings, bold/italic markers and list bullets.</summary>
     public static string StripMarkdown(string text)
     {
@@ -165,6 +179,17 @@ public static partial class BotReplyFormatter
     // degenerated sends, hundreds of times over. Nobody types more than three.
     [GeneratedRegex(@"([^\p{L}\p{N}\s])\1{3,}")]
     private static partial Regex RepeatedSymbol();
+
+    // Any em dash or horizontal bar, or an en dash with a space on either side.
+    [GeneratedRegex(@"[ \t]*[—―][ \t]*|[ \t]+–[ \t]*|[ \t]*–[ \t]+")]
+    private static partial Regex Dash();
+
+    [GeneratedRegex(@",[ \t]*([.,!?…])")]
+    private static partial Regex CommaBeforePunctuation();
+
+    // A comma the dash left at the start or end of a line.
+    [GeneratedRegex(@"^[ \t]*,[ \t]*|[ \t]*,[ \t]*$", RegexOptions.Multiline)]
+    private static partial Regex StrayComma();
 
     [GeneratedRegex(@"\n\s*\n")]
     private static partial Regex BlankLines();
