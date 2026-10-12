@@ -55,6 +55,7 @@ public static class BotPromptBuilder
 
             Always (these win over who you are, above):
             - Write in the language of the message you're answering, even when your character, these rules or the rest of the chat are in another one. For a dialect such as Swiss German, answer in the dialect or its standard language.
+            - When the note from the chat app says which language the people here write, answer other bots in that language, never in the other bot's.
             - When someone asks you to speak a language, keep speaking it to them until they ask for another.
             - One language per message. A word from your character's own language now and then is fine, half sentences in another language are not.
             - No stage directions. Never narrate what you do, feel or look like, in parentheses, asterisks or otherwise: no "(sighs)", no "*leans back*", no "(smiles, tired but true)". Only write what the character would actually type into a chat.
@@ -74,12 +75,20 @@ public static class BotPromptBuilder
     /// out of it. Saying who they are in the last line pulls them back, and
     /// costs no cache, as this line is never cached anyway.
     /// </remarks>
-    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null, BotClock? clock = null, Bot? bot = null)
+    /// <param name="language">
+    /// What the people in the chat write (<see cref="ChatLanguage.OfPeople"/>).
+    /// When it is known, the bot answers in it rather than in the language of
+    /// whatever it is answering, which may be another bot's message.
+    /// </param>
+    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null, BotClock? clock = null, Bot? bot = null, PeopleLanguage language = PeopleLanguage.Unknown)
     {
         var when = (clock ?? BotClock.Default).Describe(now ?? DateTimeOffset.UtcNow);
         var who = bot is null ? "" : $" {Reminder(bot)}";
+        var answerIn = language == PeopleLanguage.Unknown
+            ? "Answer in the language of the message you're answering."
+            : $"The people here write {language}. Answer in {language} unless a person asks you for another language or writes to you in one.";
         var extra = string.IsNullOrWhiteSpace(instruction) ? "" : $" {instruction.Trim()}";
-        return new ChatMessage(ChatMessage.Note, $"(It is {when}.{who} Don't bring up the time or day unless it matters. Answer in the language of the message you're answering.{extra})");
+        return new ChatMessage(ChatMessage.Note, $"(It is {when}.{who} Don't bring up the time or day unless it matters. {answerIn}{extra})");
     }
 
     /// <summary>"You are Rex: a grumpy pirate who hates landlubbers. Stay fully in character."</summary>
