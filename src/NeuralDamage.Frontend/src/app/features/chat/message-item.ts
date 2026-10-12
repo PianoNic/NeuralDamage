@@ -12,6 +12,7 @@ import { MemberAvatar } from '../../shared/member-avatar';
 import { isAttachmentUrl, MessageImages } from './attachments';
 import { markMentions } from './mentions';
 import { replyLabel } from './reply-label';
+import { StickerImage } from '../stickers/sticker-image';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as const;
 
@@ -30,6 +31,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
     HlmTooltipImports,
     MemberAvatar,
     MessageImages,
+    StickerImage,
   ],
   providers: [provideIcons({ lucideReply, lucideSmilePlus })],
   host: {
@@ -79,6 +81,16 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
 
       <div class="flex max-w-full items-center gap-1" [class.flex-row-reverse]="own()">
         <div class="flex max-w-[min(36rem,calc(100vw-7rem))] flex-col gap-1" [class.items-end]="own()" [class.items-start]="!own()">
+          @if (message().sticker; as sticker) {
+            <!-- A sticker stands on its own, large and without a bubble, as in WhatsApp. -->
+            <app-sticker-image
+              data-testid="sticker"
+              [url]="sticker.url"
+              [alt]="sticker.description || 'Sticker: ' + sticker.name"
+              [px]="160"
+              [title]="sticker.description || sticker.name"
+            />
+          }
           @if (message().attachments.length) {
             <app-message-images [attachments]="message().attachments" [senderName]="message().senderName" />
           }

@@ -258,6 +258,7 @@ public class BotDecisionEngine(
             .Include(m => m.SenderUser)
             .Include(m => m.SenderBot)
             .Include(m => m.Attachments)
+            .Include(m => m.Sticker)
             .AsNoTracking()
             .ToListAsync(ct);
         recent.Reverse();

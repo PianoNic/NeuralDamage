@@ -2,7 +2,7 @@ namespace NeuralDamage.Infrastructure.Services.Attachments;
 
 /// <summary>
 /// Where uploaded files live. One folder per chat, so a chat's files go with
-/// it, and one folder for bots' profile pictures.
+/// it, one folder for bots' profile pictures and one for the stickers.
 /// </summary>
 public interface IAttachmentStorage
 {
@@ -23,6 +23,11 @@ public interface IAttachmentStorage
     Task<byte[]?> ReadBotAvatarAsync(Guid botId, CancellationToken ct = default);
 
     void DeleteBotAvatar(Guid botId);
+
+    /// <summary>Stores a sticker of the shared library.</summary>
+    Task SaveStickerAsync(Guid stickerId, byte[] data, CancellationToken ct = default);
+
+    Task<byte[]?> ReadStickerAsync(Guid stickerId, CancellationToken ct = default);
 }
 
 public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
@@ -80,6 +85,19 @@ public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
             File.Delete(path);
     }
 
+    public async Task SaveStickerAsync(Guid stickerId, byte[] data, CancellationToken ct = default)
+    {
+        var path = StickerPathOf(stickerId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, data, ct);
+    }
+
+    public async Task<byte[]?> ReadStickerAsync(Guid stickerId, CancellationToken ct = default)
+    {
+        var path = StickerPathOf(stickerId);
+        return File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
+    }
+
     // Both parts are GUIDs, so nothing from the request can steer the path.
     private string PathOf(Guid chatId, Guid attachmentId) =>
         Path.Combine(root, chatId.ToString("N"), attachmentId.ToString("N"));
@@ -87,4 +105,8 @@ public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
     // "bots" can never be a chat's folder, which is always 32 hex digits.
     private string AvatarPathOf(Guid botId) =>
         Path.Combine(root, "bots", botId.ToString("N"));
+
+    // Like "bots", "stickers" can never be a chat's folder.
+    private string StickerPathOf(Guid stickerId) =>
+        Path.Combine(root, "stickers", stickerId.ToString("N"));
 }

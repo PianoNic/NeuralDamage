@@ -8,6 +8,7 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
+using NeuralDamage.Infrastructure.Services.Stickers;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Domain;
 
@@ -55,6 +56,7 @@ public class BotResponseOrchestrator(
                 .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
                 .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
                 .Include(m => m.Attachments)
+                .Include(m => m.Sticker)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == messageId, cts.Token);
 
@@ -102,7 +104,8 @@ public class BotResponseOrchestrator(
             var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").Order(StringComparer.Ordinal).ToList();
             var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
             var canSee = await VisionModelsAsync(openRouter, cts.Token);
-            var round = new Round(chatId, message, roundStart, participantNames, chatName);
+            var stickers = await StickerCatalog.LoadAsync(db, cts.Token);
+            var round = new Round(chatId, message, roundStart, participantNames, chatName, stickers);
 
             // Every replying bot starts at once, each with its own read delay,
             // typing, generation and post. Each works in a scope of its own:
@@ -142,7 +145,7 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>What every bot replying to one message shares.</summary>
-    private sealed record Round(Guid ChatId, Message Message, DateTime Start, List<string> ParticipantNames, string? ChatName)
+    private sealed record Round(Guid ChatId, Message Message, DateTime Start, List<string> ParticipantNames, string? ChatName, StickerCatalog Stickers)
     {
         private readonly Lock _gate = new();
 
@@ -270,6 +273,7 @@ public class BotResponseOrchestrator(
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
                 .Include(m => m.Attachments)
+                .Include(m => m.Sticker)
                 .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
                 .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
                 .ToListAsync(ct);
@@ -284,7 +288,7 @@ public class BotResponseOrchestrator(
             }
 
             var summary = await SummaryAsync(db, chatId, bot.Id, window.Count > 0 ? window[0].CreatedAt : null, historyStart, ct);
-            var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, round.ParticipantNames, round.ChatName);
+            var systemPrompt = BotPromptBuilder.WithStickers(BotPromptBuilder.BuildSystemPrompt(bot, round.ParticipantNames, round.ChatName), round.Stickers.ForPrompt);
             var pictures = images is null ? null : await LoadImagesAsync(images, window, message.Id, ct);
             var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures, summary, budget);
 
@@ -305,7 +309,7 @@ public class BotResponseOrchestrator(
             // as well as their parts: a reply split into a few messages is
             // never a near-duplicate of any one of them on its own.
             var ownRecent = OwnRecentReplies(recentMessages, bot.Id);
-            var parts = ToParts(responseText, bot.Name);
+            var parts = ToParts(responseText, bot.Name, round.Stickers);
             if (parts.Count == 0)
             {
                 // Only a stage direction or punctuation: nothing worth posting.
@@ -318,7 +322,7 @@ public class BotResponseOrchestrator(
                 var retry = await GenerateAsync(openRouter, bot, systemPrompt,
                     [.. history, BotPromptBuilder.BuildNote(instruction: $"You were about to say \"{responseText}\", which repeats something you already said. Say something different.", clock: _clock, bot: bot, language: language)],
                     ct);
-                parts = string.IsNullOrWhiteSpace(retry) ? [] : ToParts(retry, bot.Name);
+                parts = string.IsNullOrWhiteSpace(retry) ? [] : ToParts(retry, bot.Name, round.Stickers);
                 if (parts.Count == 0 || Repeats(parts, ownRecent))
                 {
                     logger.LogInformation("Bot {BotName} repeated itself again; dropping the reply", bot.Name);
@@ -333,7 +337,7 @@ public class BotResponseOrchestrator(
                 // Keep typing for about as long as a person would need for this
                 // part. Generating the first one already took a while, and that
                 // counts: a slow model does not then also type slowly.
-                var remaining = _options.TypingTime(parts[i].Length) - (i == 0 ? sinceTypingStarted.Elapsed : TimeSpan.Zero);
+                var remaining = _options.TypingTime(parts[i].Text.Length) - (i == 0 ? sinceTypingStarted.Elapsed : TimeSpan.Zero);
                 if (remaining > TimeSpan.Zero)
                     await Task.Delay(remaining, ct);
 
@@ -351,16 +355,20 @@ public class BotResponseOrchestrator(
                 {
                     ChatId = chatId,
                     SenderBotId = bot.Id,
-                    Content = parts[i],
+                    Content = parts[i].Text,
+                    StickerId = parts[i].Sticker?.Id,
                     ReplyToId = i == 0 ? message.Id : null
                 };
                 db.Messages.Add(botMessage);
+                if (parts[i].Sticker is { } sticker && await db.Stickers.FirstOrDefaultAsync(s => s.Id == sticker.Id, ct) is { } used)
+                    used.UseCount++;
                 await db.SaveChangesAsync(ct);
                 sent.Add(botMessage);
 
                 // Broadcast
                 var loaded = await db.Messages
                     .Include(m => m.SenderBot)
+                    .Include(m => m.Sticker)
                     .Include(m => m.Reactions).ThenInclude(r => r.User)
                     .Include(m => m.Reactions).ThenInclude(r => r.Bot)
                     .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
@@ -610,17 +618,24 @@ public class BotResponseOrchestrator(
     /// <summary>
     /// Cleans a model's reply into the messages that would be posted: its own
     /// name prefix, any lines written for other people and any invented
-    /// "[image from ...]" lines go, then it is split, and parts that are only a
-    /// stage direction or punctuation are dropped.
+    /// "[image from ...]" lines go, then it is split, each "[sticker: name]"
+    /// becomes a sticker message (or nothing, for a name the library does not
+    /// have), and parts that are only a stage direction or punctuation are dropped.
     /// </summary>
-    private List<string> ToParts(string reply, string botName) =>
-        BotReplyFormatter.Split(BotReplyFormatter.StripImageLines(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName))), _options.MaxReplyParts)
-            .Where(p => !BotReplyFormatter.IsFiller(p))
+    private List<ReplyPart> ToParts(string reply, string botName, StickerCatalog stickers) =>
+        BotReplyFormatter.ExtractStickers(
+                BotReplyFormatter.Split(BotReplyFormatter.StripImageLines(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName))), _options.MaxReplyParts),
+                stickers.Find)
+            .Where(p => p.Sticker is not null || !BotReplyFormatter.IsFiller(p.Text))
             .ToList();
 
-    private static bool Repeats(List<string> parts, List<string> ownRecent) =>
-        BotReplyFormatter.IsNearDuplicate(string.Join("\n", parts), ownRecent)
-        || parts.Any(p => BotReplyFormatter.IsNearDuplicate(p, ownRecent));
+    /// <summary>Only the text counts: sending a sticker again is not saying the same thing twice.</summary>
+    private static bool Repeats(List<ReplyPart> parts, List<string> ownRecent)
+    {
+        var texts = parts.Where(p => p.Sticker is null).Select(p => p.Text).ToList();
+        return BotReplyFormatter.IsNearDuplicate(string.Join("\n", texts), ownRecent)
+            || texts.Any(p => BotReplyFormatter.IsNearDuplicate(p, ownRecent));
+    }
 
     /// <summary>
     /// The bot's last few messages, plus its last few replies put back

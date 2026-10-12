@@ -23,6 +23,7 @@ import {
   lucideSlash,
   lucideReply,
   lucideSmile,
+  lucideSticker,
   lucideX,
 } from '@ng-icons/lucide';
 import { MemberAvatar } from '../../shared/member-avatar';
@@ -38,6 +39,8 @@ import { toastApiError } from '../../core/http-errors';
 import { ChatMember, Message } from '../../core/models';
 import { AppConfig } from '../../core/app-config';
 import { imageProblem } from './attachments';
+import { StickerPicker } from '../stickers/sticker-picker';
+import { StickerDto } from '../../core/models';
 
 /** The server's limit on a message body (SendMessageValidator). */
 export const MAX_MESSAGE_LENGTH = 4000;
@@ -113,6 +116,7 @@ export interface Suggestion {
     HlmPopoverImports,
     HlmSpinner,
     HlmTooltipImports,
+    StickerPicker,
   ],
   providers: [
     provideIcons({
@@ -122,6 +126,7 @@ export interface Suggestion {
       lucideSlash,
       lucideReply,
       lucideSmile,
+      lucideSticker,
       lucideX,
     }),
   ],
@@ -217,7 +222,7 @@ export interface Suggestion {
           <span class="min-w-0 flex-1 truncate">
             <span class="text-muted-foreground">Replying to </span>
             <span class="font-medium">{{ reply.senderName }}</span>
-            <span class="text-muted-foreground">: {{ reply.content || 'Image' }}</span>
+            <span class="text-muted-foreground">: {{ reply.content || (reply.sticker ? 'Sticker' : 'Image') }}</span>
           </span>
           <button
             hlmBtn
@@ -324,6 +329,23 @@ export interface Suggestion {
             </div>
           </hlm-popover-content>
         </hlm-popover>
+        <hlm-popover align="start" [sideOffset]="8">
+          <button
+            hlmPopoverTrigger
+            hlmBtn
+            variant="ghost"
+            size="icon-sm"
+            type="button"
+            aria-label="Send a sticker"
+            hlmTooltip="Stickers"
+            [disabled]="!chatId()"
+          >
+            <ng-icon name="lucideSticker" />
+          </button>
+          <hlm-popover-content *hlmPopoverPortal="let ctx" class="w-auto p-2">
+            <app-sticker-picker (pick)="sendSticker.emit($event); ctx.close()" />
+          </hlm-popover-content>
+        </hlm-popover>
 
         <span class="flex-1"></span>
 
@@ -369,6 +391,8 @@ export class Composer {
   readonly chatId = input<string | null>(null);
 
   readonly send = output<OutgoingMessage>();
+  /** A sticker picked in the picker; it goes out at once, as a message of its own. */
+  readonly sendSticker = output<StickerDto>();
   readonly typing = output<void>();
   readonly cancelReply = output<void>();
 

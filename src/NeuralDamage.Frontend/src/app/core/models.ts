@@ -18,13 +18,15 @@ export type {
   ChatDto,
   ChatMemberDto,
   MessageDto,
+  MessageStickerDto,
   OpenRouterModel,
   ReactionGroupDto,
   ReplyInfoDto,
+  StickerDto,
   UserDto,
 } from '../api';
 
-import type { AttachmentDto, ReactionGroupDto, ReplyInfoDto } from '../api';
+import type { AttachmentDto, MessageStickerDto, ReactionGroupDto, ReplyInfoDto } from '../api';
 
 /**
  * A message as the templates render it. The wire nests sender identity under
@@ -47,6 +49,8 @@ export interface Message {
   replyTo: ReplyInfoDto | null;
   /** Images on the message; their `url` is relative to the API and needs the token. */
   attachments: AttachmentDto[];
+  /** A sticker message carries the sticker and no text. */
+  sticker: MessageStickerDto | null;
   createdAt: string;
 }
 

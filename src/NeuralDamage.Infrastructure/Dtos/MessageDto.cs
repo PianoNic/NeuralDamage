@@ -13,4 +13,5 @@ public record MessageDto(
     BotSummaryDto? SenderBot,
     List<ReactionGroupDto> Reactions,
     ReplyInfoDto? ReplyTo,
-    List<AttachmentDto> Attachments);
+    List<AttachmentDto> Attachments,
+    MessageStickerDto? Sticker = null);

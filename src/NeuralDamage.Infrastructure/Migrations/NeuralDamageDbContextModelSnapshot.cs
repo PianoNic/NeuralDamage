@@ -280,6 +280,9 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<Guid?>("SenderUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("StickerId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -290,6 +293,8 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.HasIndex("SenderBotId");
 
                     b.HasIndex("SenderUserId");
+
+                    b.HasIndex("StickerId");
 
                     b.HasIndex("ChatId", "CreatedAt");
 
@@ -337,6 +342,67 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasFilter("\"UserId\" IS NOT NULL");
 
                     b.ToTable("Reactions");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.Sticker", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Animated")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Describing")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UploaderUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("UseCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasFilter("\"DeletedAt\" IS NULL");
+
+                    b.HasIndex("UploaderUserId");
+
+                    b.ToTable("Stickers");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.User", b =>
@@ -501,6 +567,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasForeignKey("SenderUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("NeuralDamage.Domain.Sticker", "Sticker")
+                        .WithMany()
+                        .HasForeignKey("StickerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Chat");
 
                     b.Navigation("ReplyTo");
@@ -508,6 +579,8 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("SenderBot");
 
                     b.Navigation("SenderUser");
+
+                    b.Navigation("Sticker");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.Reaction", b =>
@@ -533,6 +606,17 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("Message");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.Sticker", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.User", "UploaderUser")
+                        .WithMany()
+                        .HasForeignKey("UploaderUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("UploaderUser");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.Bot", b =>
