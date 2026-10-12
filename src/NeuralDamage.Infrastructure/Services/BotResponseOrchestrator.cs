@@ -18,10 +18,12 @@ public class BotResponseOrchestrator(
     IChatBotState botState,
     ILogger<BotResponseOrchestrator> logger,
     IOptions<BotBehaviorOptions>? options = null,
-    BotClock? clock = null) : IBotResponseOrchestrator
+    BotClock? clock = null,
+    IOptions<HistoryOptions>? history = null) : IBotResponseOrchestrator
 {
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeTasks = new();
     private readonly BotBehaviorOptions _options = options?.Value ?? new();
+    private readonly HistoryOptions _history = history?.Value ?? new();
     private readonly BotClock _clock = clock ?? BotClock.Default;
 
     public async Task ProcessMessageAsync(Guid chatId, Guid messageId, int depth = 0, CancellationToken ct = default)
@@ -110,6 +112,11 @@ public class BotResponseOrchestrator(
 
             // Each reply is a new message and gets its own single Jev call,
             // which is how bots answer each other - up to the hop limit.
+            // A bot's window dropped a chunk: fold it into the summary, in the
+            // background, so the round never waits on it.
+            if (round.CompactBefore is { } before)
+                _ = scope.ServiceProvider.GetService<IChatCompactor>()?.Schedule(chatId, before);
+
             var chained = replies.Where(r => r.Count > 0).Select(r => r[^1]).OrderBy(m => m.CreatedAt).ToList();
             await ChainAsync(scope.ServiceProvider, chatId, chained, depth + 1, cts.Token);
         }
@@ -135,7 +142,20 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>What every bot replying to one message shares.</summary>
-    private sealed record Round(Guid ChatId, Message Message, DateTime Start, List<string> ParticipantNames, string? ChatName);
+    private sealed record Round(Guid ChatId, Message Message, DateTime Start, List<string> ParticipantNames, string? ChatName)
+    {
+        private readonly Lock _gate = new();
+
+        /// <summary>The latest start of a window that dropped messages this round; everything before it gets summarised.</summary>
+        public DateTime? CompactBefore { get; private set; }
+
+        public void Compact(DateTime before)
+        {
+            lock (_gate)
+                if (CompactBefore is null || before > CompactBefore)
+                    CompactBefore = before;
+        }
+    }
 
     /// <summary>
     /// One bot's reply, in its own scope: read, type, generate, post. A failure
@@ -234,12 +254,14 @@ public class BotResponseOrchestrator(
             // history started, so the prompt begins the same way and hits the
             // provider's cache; the window only moves on once it outgrows the
             // budget.
+            var budget = HistoryBudget.For(await ContextLengthAsync(openRouter, bot, ct), _history);
             var query = db.Messages.Where(m => m.ChatId == chatId && m.CreatedAt <= round.Start);
-            if (botState.HistoryStart(chatId, bot.Id) is { } historyStart)
-                query = query.Where(m => m.CreatedAt >= historyStart);
+            var historyStart = botState.HistoryStart(chatId, bot.Id);
+            if (historyStart is { } since)
+                query = query.Where(m => m.CreatedAt >= since);
             var recentMessages = await query
                 .OrderByDescending(m => m.CreatedAt)
-                .Take(BotPromptBuilder.MaxHistoryMessages * 2)
+                .Take(budget.Messages * 2)
                 .Include(m => m.SenderUser)
                 .Include(m => m.SenderBot)
                 .Include(m => m.Attachments)
@@ -248,13 +270,18 @@ public class BotResponseOrchestrator(
                 .ToListAsync(ct);
             recentMessages.Reverse();
 
-            var window = BotPromptBuilder.TrimHistory(recentMessages, message.Id);
+            var window = BotPromptBuilder.TrimHistory(recentMessages, message.Id, budget);
             if (window.Count > 0)
+            {
                 botState.SetHistoryStart(chatId, bot.Id, window[0].CreatedAt);
+                if (window.Count < recentMessages.Count)
+                    round.Compact(window[0].CreatedAt);
+            }
 
+            var summary = await SummaryAsync(db, chatId, bot.Id, window.Count > 0 ? window[0].CreatedAt : null, historyStart, ct);
             var systemPrompt = BotPromptBuilder.BuildSystemPrompt(bot, round.ParticipantNames, round.ChatName);
             var pictures = images is null ? null : await LoadImagesAsync(images, window, message.Id, ct);
-            var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures);
+            var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures, summary, budget);
 
             var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote(clock: _clock)], ct);
             if (string.IsNullOrWhiteSpace(responseText))
@@ -344,6 +371,45 @@ public class BotResponseOrchestrator(
             await typingCts.CancelAsync();
             await typing;
         }
+    }
+
+    /// <summary>The model's context, or null (the smallest budget) when it cannot be told.</summary>
+    private async Task<int?> ContextLengthAsync(IOpenRouterService openRouter, Bot bot, CancellationToken ct)
+    {
+        try
+        {
+            return await openRouter.ContextLengthAsync(bot.ModelId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Context of {ModelId} unknown; {BotName} gets the smallest history", bot.ModelId, bot.Name);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The chat summary this bot's history starts with. It is the one the bot
+    /// saw last time, so the start of its prompt stays the same and keeps
+    /// hitting the cache, and is read again only when that one is stale: the
+    /// bot's window moved, or the summary it has does not reach the window yet
+    /// and a newer one does. So after a chunk drops the bot takes up the new
+    /// summary once it is written, and another bot's compaction leaves it be.
+    /// </summary>
+    private async Task<string?> SummaryAsync(NeuralDamageDbContext db, Guid chatId, Guid botId, DateTime? windowStart, DateTime? previousStart, CancellationToken ct)
+    {
+        var seen = botState.HistorySummary(chatId, botId);
+        if (seen is not null && windowStart == previousStart && seen.Before >= windowStart)
+            return seen.Text;
+
+        var stored = await db.Chats.Where(c => c.Id == chatId)
+            .Select(c => new SummarySeen(c.Summary, c.SummarizedBefore))
+            .FirstOrDefaultAsync(ct) ?? new SummarySeen(null, null);
+        if (seen is null || windowStart != previousStart || stored.Before != seen.Before)
+        {
+            seen = stored;
+            botState.SetHistorySummary(chatId, botId, seen);
+        }
+        return seen.Text;
     }
 
     /// <summary>

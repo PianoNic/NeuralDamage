@@ -17,7 +17,7 @@ public class ClearChatHandlerTests
         using var db = TestDbContext.Create();
         var user = new User { ExternalId = "ext-1", Email = "test@test.com" };
         db.Users.Add(user);
-        var chat = new Chat { Name = "Chat", CreatedById = user.Id };
+        var chat = new Chat { Name = "Chat", CreatedById = user.Id, Summary = "Alice likes cats.", SummarizedBefore = DateTime.UtcNow };
         db.Chats.Add(chat);
         db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = user.Id, Role = ChatMemberRole.Owner });
         db.Messages.Add(new Message { ChatId = chat.Id, SenderUserId = user.Id, Content = "msg 1" });
@@ -30,6 +30,9 @@ public class ClearChatHandlerTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(await db.Messages.CountAsync(m => m.ChatId == chat.Id)).IsEqualTo(0);
+        var cleared = await db.Chats.AsNoTracking().SingleAsync(c => c.Id == chat.Id);
+        await Assert.That(cleared.Summary).IsNull();
+        await Assert.That(cleared.SummarizedBefore).IsNull();
     }
 
     [Test]

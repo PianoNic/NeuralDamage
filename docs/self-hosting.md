@@ -75,6 +75,7 @@ Bots can also run on any OpenAI-compatible endpoint next to OpenRouter, for exam
 | `Providers__<Name>__BaseUrl` | required | The endpoint's OpenAI-compatible base URL, e.g. `https://gateway.example.com/v1`. |
 | `Providers__<Name>__ApiKey` | none | Sent as the bearer token. Leave it out for an endpoint that takes no key. |
 | `Providers__<Name>__Models` | everything `/models` lists | Comma-separated list of the models to offer, e.g. `sgl/deepseek`. Set it when the endpoint also lists embedding, reranking or speech models. Without it, the provider's `/models` is read once an hour; a provider that cannot be reached is left out of the picker (with a warning in the log) and tried again after five minutes. |
+| `Providers__<Name>__ContextLength` | see below | The context of the provider's models, in tokens. Without it, the `context_length` or `max_model_len` its `/models` gives is used, and failing that the app asks the model once (a request too long for it, with one token of output) and reads the limit from the refusal. When that says nothing, 32k is assumed. |
 | `App__DefaultModel` | the first custom model | The model a new bot starts on, e.g. `gateway:sgl/deepseek` or an OpenRouter id. Without it and without a custom provider, the picker starts empty. |
 
 Custom models show in the model picker under the provider's name and as free. The OpenRouter policy above (price caps, ZDR, batch, reasoning) does not apply to them: whoever configured the provider chose it. Replies go to the provider with only the messages, temperature and token budget, none of OpenRouter's extra fields. Nothing says whether a custom model can see, so its bots get image descriptions like any text-only bot. A bot whose custom model is no longer offered is flagged like one whose OpenRouter model disappeared. Jev and the image describer stay on OpenRouter.
@@ -92,6 +93,19 @@ People can attach PNG, JPEG, WebP and GIF images to a message. Bots on a model t
 | `Attachments__DescriptionWaitSeconds` | `20` | How long a reply waits for a description that is still being written, before text-only bots answer with just "[image from alice]". |
 
 Images are only served to members of their chat.
+
+### Long chats
+
+A bot reads the latest stretch of the chat word for word: a share of its model's context, at least 12,000 characters (about 50 messages). When the chat outgrows that, the oldest quarter drops out at once, and in the background the default model folds what dropped into a running summary of the chat: who said what, facts people shared about themselves, running jokes, nicknames and open arguments. Every bot reads that summary before the messages, as its memory of the earlier chat. It only changes when a chunk drops, so the prompt cache keeps working in between. When it grows past its cap, it is compacted again. If writing it fails, the old summary stays and the next drop tries again. Clearing the chat clears it too.
+
+| Variable | Default | Description |
+|---|---|---|
+| `History__ContextShare` | `0.25` | Share of the model's context the raw history may fill. |
+| `History__MaxTokens` | `32000` | Upper cap on the raw history, in tokens (about 4 characters each), so a model with a huge context is not sent huge prompts. |
+| `History__MinChars` | `12000` | Lower bound on the raw history, in characters. |
+| `History__SummaryMaxChars` | `4000` | Longest summary before it is compacted again. |
+| `History__MaxFoldChars` | `60000` | Most characters of dropped messages folded in at once, newest first. |
+| `History__SummaryModel` | `App__DefaultModel` | The model that writes the summary. Without either, `google/gemini-2.5-flash-lite`. |
 
 ### Rate limits
 

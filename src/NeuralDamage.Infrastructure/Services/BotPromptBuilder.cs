@@ -4,9 +4,6 @@ namespace NeuralDamage.Infrastructure.Services;
 
 public static class BotPromptBuilder
 {
-    /// <summary>The most messages the history holds.</summary>
-    public const int MaxHistoryMessages = 50;
-    private const int MaxHistoryChars = 12_000;
     private const int MaxMessageChars = 1_500;
 
     /// <summary>Once over budget, the history is cut to this share of it, so it has room to grow again.</summary>
@@ -52,6 +49,7 @@ public static class BotPromptBuilder
             - No markdown: no headings, bold, bullet points or numbered lists. To send separate thoughts, leave a blank line between them - each becomes its own message.
             - Other people's messages appear as [Name]: text. Yours have no prefix, so never write a name prefix yourself. You are only {bot.Name}. Never speak for anyone else.
             - The last line, in parentheses, is a note from the chat app, not a message: never answer or mention it.
+            - The first line may also be a note from the chat app, "(Earlier in this chat: ...)": your memory of the chat before the messages you can see. Use it as you would your own memory, and never mention it, quote it or say that there is a summary.
             - Pictures people send reach you either as the picture itself or as [image from Name: what it shows]. Talk about them as if you had seen them, and never mention a description.
             - To address another bot, use @TheirName.
             - Don't echo what someone just said.
@@ -89,14 +87,15 @@ public static class BotPromptBuilder
     /// answered is always kept, even when it alone would blow the budget - a
     /// bot that cannot see what it is replying to answers something stale.
     /// </summary>
-    public static List<Message> TrimHistory(List<Message> messages, Guid? triggerMessageId = null)
+    public static List<Message> TrimHistory(List<Message> messages, Guid? triggerMessageId = null, HistoryBudget? budget = null)
     {
+        budget ??= HistoryBudget.Default;
         var triggerId = triggerMessageId ?? messages.LastOrDefault()?.Id;
         var window = messages.ToList();
-        if (Fits(window, triggerId, 1.0))
+        if (Fits(window, triggerId, budget, 1.0))
             return window;
 
-        while (!Fits(window, triggerId, TrimmedShare))
+        while (!Fits(window, triggerId, budget, TrimmedShare))
         {
             var drop = window.Where(m => m.Id != triggerId).Take(Math.Max(1, window.Count / 4)).ToHashSet();
             if (drop.Count == 0)
@@ -110,19 +109,20 @@ public static class BotPromptBuilder
     /// Measured with every message carrying a name header, which is at least
     /// as long as what <see cref="BuildHistory"/> sends, whichever bot it is for.
     /// </summary>
-    private static bool Fits(List<Message> window, Guid? triggerId, double share)
+    private static bool Fits(List<Message> window, Guid? triggerId, HistoryBudget budget, double share)
     {
-        if (window.Count > MaxHistoryMessages * share)
+        if (window.Count > budget.Messages * share)
             return false;
         var chars = 0;
         for (var i = 0; i < window.Count; i++)
             chars += Format(window[i], i > 0 ? window[i - 1] : null, window[i].Id == triggerId, ownTurn: false).Length;
-        return chars <= MaxHistoryChars * share;
+        return chars <= budget.Chars * share;
     }
 
     /// <summary>
     /// Formats chronological <paramref name="messages"/> for the model, after
-    /// cutting them down with <see cref="TrimHistory"/>.
+    /// cutting them down with <see cref="TrimHistory"/>, behind the chat's
+    /// <paramref name="summary"/> of what came before them.
     /// </summary>
     /// <remarks>
     /// The bot's own turns carry no "[Name]:" prefix: prefixing them taught the
@@ -136,11 +136,17 @@ public static class BotPromptBuilder
     /// attachment id. Every other attachment is written out as its description,
     /// which is all a text-only model ever gets.
     /// </param>
-    public static List<ChatMessage> BuildHistory(List<Message> messages, Guid currentBotId, Guid? triggerMessageId = null, IReadOnlyDictionary<Guid, ImagePart>? images = null)
+    /// <param name="summary">
+    /// What happened before the window (<see cref="Chat.Summary"/>). It goes
+    /// first, so it only moves the prompt's start when it changes, which is
+    /// when a chunk drops out of the window anyway.
+    /// </param>
+    public static List<ChatMessage> BuildHistory(List<Message> messages, Guid currentBotId, Guid? triggerMessageId = null, IReadOnlyDictionary<Guid, ImagePart>? images = null, string? summary = null, HistoryBudget? budget = null)
     {
         var triggerId = triggerMessageId ?? messages.LastOrDefault()?.Id;
-        var window = TrimHistory(messages, triggerId);
-        return window
+        var window = TrimHistory(messages, triggerId, budget);
+        ChatMessage[] earlier = string.IsNullOrWhiteSpace(summary) ? [] : [SummaryNote(summary)];
+        return earlier.Concat(window
             .Select((msg, i) =>
             {
                 var isOwn = msg.SenderBotId == currentBotId;
@@ -152,9 +158,12 @@ public static class BotPromptBuilder
                         ? []
                         : Ordered(msg).Where(a => images.ContainsKey(a.Id)).Select(a => images[a.Id]).ToList(),
                 };
-            })
+            }))
             .ToList();
     }
+
+    /// <summary>The summary as the first turn: a user turn, so it is part of the cached start of the prompt.</summary>
+    public static ChatMessage SummaryNote(string summary) => new("user", $"(Earlier in this chat: {summary.Trim()})");
 
     /// <summary>Descriptions are long; past this they are cut, like long messages.</summary>
     private const int MaxDescriptionChars = 800;

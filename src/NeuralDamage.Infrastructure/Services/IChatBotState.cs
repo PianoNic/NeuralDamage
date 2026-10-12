@@ -29,4 +29,15 @@ public interface IChatBotState
     /// </summary>
     DateTime? HistoryStart(Guid chatId, Guid botId);
     void SetHistoryStart(Guid chatId, Guid botId, DateTime start);
+
+    /// <summary>
+    /// The chat summary the bot's last history started with. The bot keeps it
+    /// until its own window moves, so another bot's compaction does not change
+    /// the start of its prompt and miss the cache.
+    /// </summary>
+    SummarySeen? HistorySummary(Guid chatId, Guid botId);
+    void SetHistorySummary(Guid chatId, Guid botId, SummarySeen summary);
 }
+
+/// <summary>A <see cref="NeuralDamage.Domain.Chat.Summary"/> as read, with where it ends.</summary>
+public record SummarySeen(string? Text, DateTime? Before);
