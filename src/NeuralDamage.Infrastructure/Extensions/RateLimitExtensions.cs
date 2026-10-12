@@ -20,12 +20,15 @@ public static class RateLimitExtensions
     public const string Messages = "Messages";
     public const string Uploads = "Uploads";
     public const string BotCreation = "BotCreation";
+    public const string PictureSuggestions = "PictureSuggestions";
 
     private static readonly Dictionary<string, (int PermitLimit, int WindowSeconds, string Text)> Defaults = new()
     {
         [Messages] = (20, 60, "You're sending messages too fast. Wait a moment and try again."),
         [Uploads] = (20, 60, "You're uploading images too fast. Wait a moment and try again."),
         [BotCreation] = (10, 600, "You're creating bots too fast. Wait a few minutes and try again."),
+        // Each name typed is one lookup plus a picture or two, all fetched from Wikimedia.
+        [PictureSuggestions] = (30, 60, "Too many picture lookups. Wait a moment and try again."),
     };
 
     public static IServiceCollection AddChatRateLimits(this IServiceCollection services, IConfiguration configuration)

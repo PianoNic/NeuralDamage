@@ -5,6 +5,7 @@ export * from './attachmentLimitsDto';
 export * from './botAvatarDto';
 export * from './botCreatorDto';
 export * from './botDto';
+export * from './botPictureSuggestionDto';
 export * from './botSummaryDto';
 export * from './chatDetailDto';
 export * from './chatDto';

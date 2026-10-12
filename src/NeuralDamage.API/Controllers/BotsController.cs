@@ -43,6 +43,34 @@ public class BotsController(ISender sender, IUserService userService, Attachment
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    /// <summary>Up to three pictures a bot with this name could have, from Wikipedia and Wikimedia Commons.</summary>
+    [HttpGet("picture-suggestions")]
+    [EnableRateLimiting(RateLimitExtensions.PictureSuggestions)]
+    [ProducesResponseType<List<BotPictureSuggestionDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<List<BotPictureSuggestionDto>>> GetPictureSuggestions([FromQuery] string name, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetBotPictureSuggestionsQuery(name), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    /// <summary>One suggested picture, by the name it was suggested for and its index. Fetched by the server from Wikimedia only.</summary>
+    [HttpGet("picture-suggestions/{index:int}")]
+    [EnableRateLimiting(RateLimitExtensions.PictureSuggestions)]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK, "image/png", "image/jpeg", "image/webp", "image/gif")]
+    [ProducesResponseType<string>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> GetPictureSuggestion(int index, [FromQuery] string name, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetBotPictureSuggestionImageQuery(name, index), ct);
+        if (result.IsFailure)
+            return NotFound(result.Error);
+
+        Response.Headers.CacheControl = "private, max-age=600";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
     [HttpGet("{botId:guid}")]
     [ProducesResponseType<BotDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<BotDto>> Get(Guid botId, CancellationToken ct)
