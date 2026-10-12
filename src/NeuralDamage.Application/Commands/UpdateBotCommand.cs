@@ -1,5 +1,6 @@
 using Mediator;
 using Microsoft.EntityFrameworkCore;
+using NeuralDamage.Application.Validators;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure;
@@ -26,6 +27,12 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             && await modelPolicy.CheckModelAsync(openRouter, request.ModelId, cancellationToken) is { } refusal)
             return Result.Failure(refusal);
 
+        // The short description may stay empty, and an old, long one may stay
+        // as it is, so that bots from before it existed can still be saved.
+        if (request.Personality is { } description && description.Trim() != (bot.Personality ?? "").Trim()
+            && !CreateBotValidator.FitsAShortDescription(description))
+            return Result.Failure(CreateBotValidator.TooLongShortDescription);
+
         var renamed = request.Name is not null && !string.Equals(request.Name, bot.Name, StringComparison.OrdinalIgnoreCase);
         var renicknamed = request.Aliases is not null && request.Aliases != bot.Aliases;
         if (renamed || renicknamed)
@@ -45,7 +52,7 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             botState.ClearModelNotices(bot.Id);
         }
         if (request.SystemPrompt is not null) bot.SystemPrompt = request.SystemPrompt;
-        if (request.Personality is not null) bot.Personality = request.Personality;
+        if (request.Personality is not null) bot.Personality = request.Personality.Trim();
         if (request.Temperature is not null) bot.Temperature = request.Temperature.Value;
         if (request.Aliases is not null) bot.Aliases = request.Aliases;
         if (request.IsActive is not null) bot.IsActive = request.IsActive.Value;

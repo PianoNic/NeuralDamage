@@ -7,7 +7,7 @@ namespace NeuralDamage.Tests.Application;
 public class BotValidatorTests
 {
     private static CreateBotCommand Create(double temperature) =>
-        new("Mona", "deepseek/deepseek-chat", "", null, temperature, null, Guid.NewGuid());
+        new("Mona", "deepseek/deepseek-chat", "", "Dramatic art critic", temperature, null, Guid.NewGuid());
 
     private static UpdateBotCommand Update(double? temperature) =>
         new(Guid.NewGuid(), Guid.NewGuid(), null, null, null, null, temperature, null, null);

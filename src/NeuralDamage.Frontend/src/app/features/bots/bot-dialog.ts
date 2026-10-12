@@ -11,10 +11,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCamera, lucideChevronRight, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
+import { lucideCamera, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
-import { HlmCollapsibleImports } from '@spartan-ng/helm/collapsible';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInput } from '@spartan-ng/helm/input';
@@ -27,8 +26,10 @@ import { BotsService } from '../../api/api/bots.service';
 import { describeApiError } from '../../core/http-errors';
 import { BotDto } from '../../core/models';
 import {
+  characterFields,
   clampTemperature,
   hasModelProblem,
+  MAX_SHORT_DESCRIPTION,
   MAX_TEMPERATURE,
   modelDisplayName,
   normalizeAliases,
@@ -56,7 +57,6 @@ const DEFAULT_TEMPERATURE = 0.8;
     NgIcon,
     HlmAlertImports,
     HlmButton,
-    HlmCollapsibleImports,
     HlmDialogImports,
     HlmFieldImports,
     HlmInput,
@@ -67,7 +67,7 @@ const DEFAULT_TEMPERATURE = 0.8;
     MemberAvatar,
     ModelBrowser,
   ],
-  providers: [provideIcons({ lucideCamera, lucideChevronRight, lucideTriangleAlert, lucideX })],
+  providers: [provideIcons({ lucideCamera, lucideTriangleAlert, lucideX })],
   template: `
     <hlm-dialog [state]="open() ? 'open' : 'closed'" (closed)="closed.emit()">
       <hlm-dialog-content
@@ -175,18 +175,52 @@ const DEFAULT_TEMPERATURE = 0.8;
             </div>
           </div>
 
+          <div hlmField [attr.data-invalid]="descriptionInvalid() || null">
+            <div class="flex items-baseline justify-between gap-2">
+              <label hlmFieldLabel for="bot-description">Short description</label>
+              <span
+                class="text-xs tabular-nums"
+                [class.text-muted-foreground]="!descriptionTooLong()"
+                [class.text-destructive]="descriptionTooLong()"
+                aria-hidden="true"
+              >
+                {{ description().trim().length }}/{{ maxDescription }}
+              </span>
+            </div>
+            <input
+              hlmInput
+              id="bot-description"
+              name="description"
+              autocomplete="off"
+              [attr.maxlength]="descriptionLocked() ? null : maxDescription"
+              placeholder="e.g. Retired pirate captain who hates landlubbers and loves bad puns"
+              [attr.aria-invalid]="descriptionInvalid() || null"
+              [value]="description()"
+              (input)="description.set($any($event.target).value)"
+              (blur)="descriptionTouched.set(true)"
+            />
+            @if (descriptionInvalid()) {
+              <hlm-field-error forceShow>{{ descriptionError() }}</hlm-field-error>
+            } @else {
+              <p hlmFieldDescription>One line saying who it is. Shown under its name, and it decides when to speak from it.</p>
+            }
+          </div>
+
           <div hlmField>
-            <label hlmFieldLabel for="bot-personality">Personality</label>
+            <label hlmFieldLabel for="bot-character">Character</label>
             <textarea
               hlmTextarea
-              id="bot-personality"
-              name="personality"
-              rows="3"
-              class="min-h-20 resize-none"
-              placeholder="Who is it? How does it talk? What does it care about?"
-              [value]="personality()"
-              (input)="personality.set($any($event.target).value)"
+              id="bot-character"
+              name="character"
+              rows="7"
+              class="min-h-36 resize-y"
+              [placeholder]="characterPlaceholder()"
+              [value]="character()"
+              (input)="character.set($any($event.target).value)"
             ></textarea>
+            <p hlmFieldDescription>
+              Everything about how it talks and thinks. It comes first in the bot's instructions and wins over the rest.
+            </p>
           </div>
 
           <div hlmField>
@@ -258,36 +292,6 @@ const DEFAULT_TEMPERATURE = 0.8;
             </div>
           </div>
 
-          <hlm-collapsible [expanded]="advancedOpen()" (expandedChange)="advancedOpen.set($event)" class="flex flex-col gap-2">
-            <button
-              hlmCollapsibleTrigger
-              type="button"
-              class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mx-1 flex w-fit items-center gap-1 rounded-md px-1 text-sm font-medium outline-none focus-visible:ring-2"
-            >
-              <ng-icon name="lucideChevronRight" size="16" class="transition-transform" [class.rotate-90]="advancedOpen()" />
-              Advanced
-            </button>
-            <hlm-collapsible-content>
-              <div hlmField>
-                <label hlmFieldLabel for="bot-system-prompt">System prompt</label>
-                <textarea
-                  hlmTextarea
-                  id="bot-system-prompt"
-                  name="systemPrompt"
-                  rows="4"
-                  class="min-h-24 resize-y"
-                  [placeholder]="'You are ' + (name().trim() || '<name>') + '.'"
-                  [value]="systemPrompt()"
-                  (input)="systemPrompt.set($any($event.target).value)"
-                ></textarea>
-                <p hlmFieldDescription>
-                  Replaces the opening line of the bot's instructions. Leave it empty to use the default; the
-                  personality above is always included.
-                </p>
-              </div>
-            </hlm-collapsible-content>
-          </hlm-collapsible>
-
           @if (error(); as message) {
             <div hlmAlert variant="destructive" role="alert">
               <ng-icon name="lucideTriangleAlert" />
@@ -330,13 +334,16 @@ export class BotDialog {
   protected readonly name = signal('');
   protected readonly nameTouched = signal(false);
   protected readonly aliases = signal('');
-  protected readonly personality = signal('');
+  /** The short description; the API calls it `personality`. */
+  protected readonly description = signal('');
+  protected readonly descriptionTouched = signal(false);
+  /** The character; the API calls it `systemPrompt`. */
+  protected readonly character = signal('');
+  protected readonly maxDescription = MAX_SHORT_DESCRIPTION;
   protected readonly visibility = signal<Visibility>('public');
   protected readonly modelId = signal<string | null>(null);
   protected readonly temperature = signal(DEFAULT_TEMPERATURE);
   protected readonly maxTemperature = MAX_TEMPERATURE;
-  protected readonly systemPrompt = signal('');
-  protected readonly advancedOpen = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   /** A picture picked but not uploaded yet: it goes up when the bot is saved. */
@@ -348,6 +355,24 @@ export class BotDialog {
   );
 
   protected readonly nameInvalid = computed(() => this.nameTouched() && !this.name().trim());
+  /** An old bot's long description may stay as it is, so it can still be saved; a new one must fit. */
+  protected readonly descriptionLocked = computed(
+    () => this.description().trim() === (this.bot()?.personality?.trim() ?? null),
+  );
+  protected readonly descriptionTooLong = computed(() => this.description().trim().length > MAX_SHORT_DESCRIPTION);
+  /** Required for a new bot. An existing bot without one is asked for it, but can still be saved. */
+  protected readonly descriptionError = computed(() => {
+    if (this.descriptionTooLong() && !this.descriptionLocked()) return `Keep it to ${MAX_SHORT_DESCRIPTION} characters.`;
+    if (this.description().trim()) return null;
+    if (!this.bot() && this.descriptionTouched()) return 'Give it a short description.';
+    if (this.bot()) return 'Add a short description, so others know who it is.';
+    return null;
+  });
+  protected readonly descriptionInvalid = computed(() => !!this.descriptionError());
+  protected readonly characterPlaceholder = computed(() => {
+    const name = this.name().trim() || 'Rex';
+    return `You are ${name}, a retired pirate captain. You talk in short, salty sentences, call everyone "landlubber" and steer every topic back to the sea. You are proud, stubborn and secretly soft on parrots.`;
+  });
   protected readonly selectedModel = computed(() => this.catalog.find(this.modelId()));
   /** Editing a bot shows its own visibility, fixed; a new one offers what the context allows. */
   protected readonly options = computed<Visibility[]>(() => {
@@ -369,13 +394,13 @@ export class BotDialog {
       untracked(() => {
         this.name.set(bot?.name ?? '');
         this.aliases.set(bot?.aliases ?? '');
-        this.personality.set(bot?.personality ?? '');
+        const fields = bot ? characterFields(bot) : { character: '', description: '' };
+        this.description.set(fields.description);
+        this.descriptionTouched.set(false);
+        this.character.set(fields.character);
         this.visibility.set(bot && !bot.isPublic ? 'private' : 'public');
         this.modelId.set(bot?.modelId ?? this.catalog.defaultId());
         this.temperature.set(clampTemperature(bot?.temperature ?? DEFAULT_TEMPERATURE));
-        this.systemPrompt.set(bot?.systemPrompt ?? '');
-        // A bot that already has its own prompt shows it; otherwise the section stays tucked away.
-        this.advancedOpen.set(!!bot?.systemPrompt?.trim());
         this.nameTouched.set(false);
         this.error.set(null);
         this.saving.set(false);
@@ -449,8 +474,11 @@ export class BotDialog {
 
   protected async save(): Promise<void> {
     this.nameTouched.set(true);
+    this.descriptionTouched.set(true);
     const modelId = this.modelId();
     if (!this.name().trim() || !modelId || this.saving()) return;
+    if (this.descriptionTooLong() && !this.descriptionLocked()) return;
+    if (!this.bot() && !this.description().trim()) return;
 
     this.saving.set(true);
     this.error.set(null);
@@ -461,11 +489,11 @@ export class BotDialog {
           this.api.apiBotsBotIdPut(bot.id, {
             name: this.name().trim(),
             modelId,
-            personality: this.personality().trim(),
+            personality: this.description().trim(),
             aliases: normalizeAliases(this.aliases()),
             temperature: this.temperature(),
             // Always sent, so clearing the field goes back to the server default.
-            systemPrompt: this.systemPrompt().trim(),
+            systemPrompt: this.character().trim(),
           }),
         );
         await this.saveAvatar(bot.id, bot.avatarUrl);
@@ -477,11 +505,11 @@ export class BotDialog {
               {
                 name: this.name(),
                 aliases: this.aliases(),
-                personality: this.personality(),
+                personality: this.description(),
                 visibility: this.visibility(),
                 modelId,
                 temperature: this.temperature(),
-                systemPrompt: this.systemPrompt(),
+                systemPrompt: this.character(),
               },
               this.chatId(),
             ),

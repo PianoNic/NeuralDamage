@@ -1,5 +1,7 @@
 namespace NeuralDamage.Infrastructure.Dtos;
 
+/// <param name="SystemPrompt">The character: the full instructions for how the bot talks and thinks.</param>
+/// <param name="Personality">The short description: one line saying who the bot is.</param>
 /// <param name="ChatId">The chat a private bot belongs to; null for public bots.</param>
 /// <param name="ChatCount">How many chats the bot is a member of.</param>
 /// <param name="RepliesToday">Messages the bot sent since midnight UTC.</param>

@@ -13,8 +13,9 @@ public static class BotPromptBuilder
     private static readonly TimeSpan NotableGap = TimeSpan.FromMinutes(10);
 
     /// <remarks>
-    /// The persona comes first and the house rules after it, so where they
-    /// disagree the persona wins. The rules are about sounding like a person
+    /// The character comes first and the house rules after it, so where they
+    /// disagree the character wins. The short description is not in here: the
+    /// character covers it, and it goes in <see cref="BuildNote"/> instead. The rules are about sounding like a person
     /// in a chat: every bot used to get "1-3 sentences, quick direct answer",
     /// which made them all sound like the same assistant.
     /// <para>
@@ -26,14 +27,11 @@ public static class BotPromptBuilder
     public static string BuildSystemPrompt(Bot bot, List<string> participantNames, string? chatName = null)
     {
         var participants = string.Join(", ", participantNames);
-        var persona = string.IsNullOrWhiteSpace(bot.SystemPrompt)
-            ? $"You are {bot.Name}."
-            : bot.SystemPrompt.Trim();
-        var personality = string.IsNullOrWhiteSpace(bot.Personality) ? "" : $"\n{bot.Personality.Trim()}";
+        var persona = Character(bot);
         var where = string.IsNullOrWhiteSpace(chatName) ? "a group chat" : $"a group chat called \"{chatName}\"";
 
         return $"""
-            {persona}{personality}
+            {persona}
 
             You are "{bot.Name}", in {where} with: {participants}.
 
@@ -66,16 +64,78 @@ public static class BotPromptBuilder
 
     /// <summary>
     /// The line sent after the history: the day and part of day in the chat's
-    /// time zone, plus an instruction for this call only when there is one. It
-    /// goes last so that everything before it can be served from the provider's
-    /// prompt cache; without the minute it also stays the same for hours.
+    /// time zone, who the bot is, plus an instruction for this call only when
+    /// there is one. It goes last so that everything before it can be served
+    /// from the provider's prompt cache; without the minute it also stays the
+    /// same for hours.
     /// </summary>
-    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null, BotClock? clock = null)
+    /// <remarks>
+    /// In a long chat the character sits far up in the context and bots drift
+    /// out of it. Saying who they are in the last line pulls them back, and
+    /// costs no cache, as this line is never cached anyway.
+    /// </remarks>
+    public static ChatMessage BuildNote(DateTimeOffset? now = null, string? instruction = null, BotClock? clock = null, Bot? bot = null)
     {
         var when = (clock ?? BotClock.Default).Describe(now ?? DateTimeOffset.UtcNow);
+        var who = bot is null ? "" : $" {Reminder(bot)}";
         var extra = string.IsNullOrWhiteSpace(instruction) ? "" : $" {instruction.Trim()}";
-        return new ChatMessage(ChatMessage.Note, $"(It is {when}. Don't bring up the time or day unless it matters. Answer in the language of the message you're answering.{extra})");
+        return new ChatMessage(ChatMessage.Note, $"(It is {when}.{who} Don't bring up the time or day unless it matters. Answer in the language of the message you're answering.{extra})");
     }
+
+    /// <summary>"You are Rex: a grumpy pirate who hates landlubbers. Stay fully in character."</summary>
+    public static string Reminder(Bot bot)
+    {
+        var summary = Summary(bot);
+        if (summary.Length == 0)
+            return $"You are {bot.Name}. Stay fully in character.";
+        var end = summary[^1] is '.' or '!' or '?' ? "" : ".";
+        return $"You are {bot.Name}: {summary}{end} Stay fully in character.";
+    }
+
+    /// <summary>
+    /// The text that opens the system prompt: the bot's character. A bot from
+    /// before the short description existed kept its whole character in
+    /// <see cref="Bot.Personality"/> and left the system prompt empty, so that
+    /// one still gets it, behind the line it always had.
+    /// </summary>
+    public static string Character(Bot bot)
+    {
+        if (!string.IsNullOrWhiteSpace(bot.SystemPrompt))
+            return bot.SystemPrompt.Trim();
+        return string.IsNullOrWhiteSpace(bot.Personality)
+            ? $"You are {bot.Name}."
+            : $"You are {bot.Name}.\n{bot.Personality.Trim()}";
+    }
+
+    /// <summary>
+    /// Who the bot is, in one line of at most <see cref="Bot.MaxShortDescriptionLength"/>
+    /// characters: its short description, or, for a bot without one (or with
+    /// an old, long one), the first sentence of its character.
+    /// </summary>
+    public static string Summary(Bot bot)
+    {
+        var description = OneLine(bot.Personality);
+        if (description.Length is > 0 and <= Bot.MaxShortDescriptionLength)
+            return description;
+        var source = description.Length > 0 ? bot.Personality : bot.SystemPrompt;
+        return Cut(OneLine(FirstSentence(source)), Bot.MaxShortDescriptionLength);
+    }
+
+    private static string FirstSentence(string? text)
+    {
+        text = (text ?? "").Trim();
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] is '\n' or '\r')
+                return text[..i];
+            if (text[i] is '.' or '!' or '?' && (i + 1 == text.Length || char.IsWhiteSpace(text[i + 1])))
+                return text[..(i + 1)];
+        }
+        return text;
+    }
+
+    private static string OneLine(string? text) =>
+        string.Join(' ', (text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>
     /// Which of the chronological <paramref name="messages"/> the model sees.

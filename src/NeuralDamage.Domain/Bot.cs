@@ -10,7 +10,20 @@ public class Bot : BaseEntity
 
     public required string Name { get; set; }
     public required string ModelId { get; set; }
+    /// <summary>Most a short description may hold; it is one line, shown under the name.</summary>
+    public const int MaxShortDescriptionLength = 140;
+
+    /// <summary>
+    /// The character: the full instructions for how the bot talks and thinks.
+    /// It opens the bot's system prompt.
+    /// </summary>
     public string SystemPrompt { get; set; } = string.Empty;
+    /// <summary>
+    /// The short description: one line saying who the bot is. Jev decides from
+    /// it, the app shows it under the name, and the note after the history
+    /// reminds the bot of it. Bots from before it existed may have none, or a
+    /// long one that was their whole character.
+    /// </summary>
     public string? Personality { get; set; }
     public double Temperature { get; set; } = 0.7;
     public string? AvatarUrl { get; set; }

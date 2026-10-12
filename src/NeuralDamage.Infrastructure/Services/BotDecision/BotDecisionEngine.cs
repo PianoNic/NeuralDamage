@@ -293,9 +293,19 @@ public class BotDecisionEngine(
     private static string SenderName(Message m) =>
         m.SenderUser?.DisplayName is { Length: > 0 } user ? user : m.SenderBot?.Name ?? "Unknown";
 
-    private static string Persona(Bot bot) =>
-        string.Join(" ", new[] { bot.Personality, Trim(bot.SystemPrompt, MaxSystemPromptChars) }
-            .Where(s => !string.IsNullOrWhiteSpace(s)));
+    /// <summary>
+    /// The short description first, as the summary Jev decides from, then the
+    /// start of the character for context. A bot without a description gets
+    /// its character alone, and so does an old one whose whole character is
+    /// its description.
+    /// </summary>
+    private static string Persona(Bot bot)
+    {
+        var character = Trim(BotPromptBuilder.Character(bot), MaxSystemPromptChars);
+        if (string.IsNullOrWhiteSpace(bot.Personality) || string.IsNullOrWhiteSpace(bot.SystemPrompt))
+            return character;
+        return $"{BotPromptBuilder.Summary(bot)} {character}";
+    }
 
     private static string Trim(string? text, int max) =>
         text is null ? string.Empty : text.Length > max ? text[..max] + "..." : text;

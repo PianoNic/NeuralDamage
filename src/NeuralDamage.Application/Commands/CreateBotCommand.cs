@@ -40,7 +40,7 @@ public class CreateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             Name = request.Name,
             ModelId = request.ModelId,
             SystemPrompt = request.SystemPrompt,
-            Personality = request.Personality,
+            Personality = request.Personality?.Trim(),
             Temperature = request.Temperature,
             Aliases = request.Aliases,
             CreatedById = request.CreatedById,

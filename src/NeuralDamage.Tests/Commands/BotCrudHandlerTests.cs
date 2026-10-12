@@ -73,6 +73,44 @@ public class BotCrudHandlerTests
     }
 
     [Test]
+    public async Task UpdateBot_AnOldBot_SavesWithoutAShortDescription_OrWithItsOldLongOne()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+        var longOne = new string('x', 300);
+        var bot = new Bot { Name = "GPT", ModelId = "openai/gpt-4o", SystemPrompt = "Old", Personality = longOne, CreatedById = user.Id };
+        db.Bots.Add(bot);
+        await db.SaveChangesAsync();
+        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
+
+        var kept = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, "GPT v2", null, null, longOne, null, null, null), CancellationToken.None);
+        var cleared = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, null, null, "", null, null, null), CancellationToken.None);
+
+        await Assert.That(kept.IsSuccess).IsTrue();
+        await Assert.That(cleared.IsSuccess).IsTrue();
+        await Assert.That(bot.Personality).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task UpdateBot_ANewLongShortDescription_IsRefused()
+    {
+        var (db, user) = await Setup();
+        using var _ = db;
+        var bot = new Bot { Name = "GPT", ModelId = "openai/gpt-4o", SystemPrompt = "Old", Personality = "Short.", CreatedById = user.Id };
+        db.Bots.Add(bot);
+        await db.SaveChangesAsync();
+        var handler = new UpdateBotHandler(db, Substitute.For<IOpenRouterService>(), NoCap, new ChatBotState());
+
+        var result = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, null, null, new string('x', 141), null, null, null), CancellationToken.None);
+        var trimmed = await handler.Handle(new UpdateBotCommand(bot.Id, user.Id, null, null, null, "  Grumpy pirate.  ", null, null, null), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error).IsEqualTo("The short description can be at most 140 characters.");
+        await Assert.That(trimmed.IsSuccess).IsTrue();
+        await Assert.That(bot.Personality).IsEqualTo("Grumpy pirate.");
+    }
+
+    [Test]
     public async Task UpdateBot_NonCreator_Fails()
     {
         var (db, user) = await Setup();

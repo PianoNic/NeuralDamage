@@ -1,6 +1,7 @@
 import {
   BotFormValue,
   capabilityIcons,
+  characterFields,
   clampTemperature,
   formatPrice,
   formatPricing,
@@ -140,5 +141,34 @@ describe('temperature', () => {
     expect(clampTemperature(2)).toBe(1.5);
     expect(clampTemperature(0.8)).toBe(0.8);
     expect(clampTemperature(-1)).toBe(0);
+  });
+});
+
+describe('characterFields', () => {
+  it('edits the character and short description as they are', () => {
+    expect(characterFields({ name: 'Rex', systemPrompt: ' You are Rex. ', personality: ' Pirate. ' })).toEqual({
+      character: 'You are Rex.',
+      description: 'Pirate.',
+    });
+  });
+
+  it("shows an old bot's personality as its character, as the server reads it", () => {
+    expect(characterFields({ name: 'Rex', systemPrompt: '', personality: 'unhinged' })).toEqual({
+      character: 'You are Rex.\nunhinged',
+      description: 'unhinged',
+    });
+  });
+
+  it('asks an old bot with a long personality for a new short description', () => {
+    const long = 'A pirate.\nHates landlubbers.';
+    expect(characterFields({ name: 'Rex', systemPrompt: null, personality: long })).toEqual({
+      character: `You are Rex.\n${long}`,
+      description: '',
+    });
+    expect(characterFields({ name: 'Rex', personality: 'x'.repeat(141) }).description).toBe('');
+  });
+
+  it('leaves a bot with neither empty', () => {
+    expect(characterFields({ name: 'Rex' })).toEqual({ character: '', description: '' });
   });
 });

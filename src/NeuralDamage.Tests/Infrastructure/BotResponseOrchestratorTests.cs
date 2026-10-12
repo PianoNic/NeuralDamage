@@ -22,7 +22,89 @@ public class BotPromptBuilderTests
         await Assert.That(prompt).Contains("Alice");
         await Assert.That(prompt).Contains("Claude");
         await Assert.That(prompt).Contains("Be helpful");
-        await Assert.That(prompt).Contains("Friendly");
+    }
+
+    [Test]
+    public async Task BuildSystemPrompt_LeavesTheShortDescriptionOut()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", SystemPrompt = "You are Rex, a grumpy pirate.", Personality = "Grumpy pirate who hates landlubbers", CreatedById = Guid.NewGuid() };
+
+        var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"]);
+
+        await Assert.That(prompt.ReplaceLineEndings("\n")).StartsWith("You are Rex, a grumpy pirate.\n\nYou are \"Rex\"");
+        await Assert.That(prompt).DoesNotContain("landlubbers");
+    }
+
+    [Test]
+    public async Task BuildSystemPrompt_AnOldBotWithoutACharacter_KeepsItsLongPersonality()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", Personality = "A grumpy pirate.\nHates landlubbers.", CreatedById = Guid.NewGuid() };
+
+        var prompt = BotPromptBuilder.BuildSystemPrompt(bot, ["Alice"]);
+
+        await Assert.That(prompt.ReplaceLineEndings("\n")).StartsWith("You are Rex.\nA grumpy pirate.\nHates landlubbers.\n\nYou are \"Rex\"");
+    }
+
+    [Test]
+    public async Task BuildNote_RemindsTheBotWhoItIs_LastInTheContext()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", SystemPrompt = "You are Rex. Long character...", Personality = " grumpy pirate who hates landlubbers ", CreatedById = Guid.NewGuid() };
+
+        var note = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 14, 51, 0, TimeSpan.Zero), clock: new BotClock(BotClock.Resolve("Europe/Zurich")), bot: bot);
+
+        await Assert.That(note.Content).IsEqualTo(
+            "(It is Wednesday afternoon. You are Rex: grumpy pirate who hates landlubbers. Stay fully in character. Don't bring up the time or day unless it matters. Answer in the language of the message you're answering.)");
+    }
+
+    [Test]
+    public async Task BuildNote_ReminderStaysTheSameAcrossCalls_SoOnlyTheNoteChanges()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", SystemPrompt = "You are Rex.", Personality = "Grumpy pirate!", CreatedById = Guid.NewGuid() };
+        var clock = new BotClock(BotClock.Resolve("Europe/Zurich"));
+
+        var first = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 10, 0, 0, TimeSpan.Zero), clock: clock, bot: bot);
+        var later = BotPromptBuilder.BuildNote(new DateTimeOffset(2026, 9, 30, 10, 30, 0, TimeSpan.Zero), clock: clock, bot: bot);
+
+        await Assert.That(later.Content).IsEqualTo(first.Content);
+        await Assert.That(first.Content).Contains("You are Rex: Grumpy pirate! Stay fully in character.");
+    }
+
+    [Test]
+    [Arguments("You are Rex, a grumpy pirate. You hate landlubbers.", "You are Rex, a grumpy pirate.")]
+    [Arguments("  A grumpy pirate\nwho hates landlubbers", "A grumpy pirate")]
+    [Arguments("v1.2 of the pirate bot! Arr.", "v1.2 of the pirate bot!")]
+    [Arguments("", "")]
+    public async Task Summary_WithoutADescription_IsTheFirstSentenceOfTheCharacter(string character, string expected)
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", SystemPrompt = character, CreatedById = Guid.NewGuid() };
+
+        await Assert.That(BotPromptBuilder.Summary(bot)).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task Summary_CutsALongFirstSentence()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", SystemPrompt = new string('a', 300) + ". Then more.", CreatedById = Guid.NewGuid() };
+
+        var summary = BotPromptBuilder.Summary(bot);
+
+        await Assert.That(summary).IsEqualTo(new string('a', Bot.MaxShortDescriptionLength) + "...");
+    }
+
+    [Test]
+    public async Task Summary_AnOldLongPersonality_GivesItsFirstSentence()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", Personality = "A grumpy pirate. " + new string('x', 200), CreatedById = Guid.NewGuid() };
+
+        await Assert.That(BotPromptBuilder.Reminder(bot)).IsEqualTo("You are Rex: A grumpy pirate. Stay fully in character.");
+    }
+
+    [Test]
+    public async Task Reminder_WithNothingToGoOn_IsJustTheName()
+    {
+        var bot = new Bot { Name = "Rex", ModelId = "test", CreatedById = Guid.NewGuid() };
+
+        await Assert.That(BotPromptBuilder.Reminder(bot)).IsEqualTo("You are Rex. Stay fully in character.");
     }
 
     [Test]
