@@ -51,6 +51,37 @@ public class StickerPromptTests
     }
 
     [Test]
+    public async Task ABigLibrary_StillPutsOnlyFortyIntoThePrompt()
+    {
+        using var db = TestDbContext.Create();
+        db.Stickers.AddRange(Enumerable.Range(0, 5000).Select(i => Sticker($"s{i:0000}", $"sticker number {i}", uses: i % 7)));
+        await db.SaveChangesAsync();
+
+        var catalog = await StickerCatalog.LoadAsync(db);
+        var bot = new Bot { Name = "Gus", ModelId = "m", CreatedById = Guid.NewGuid() };
+        var prompt = BotPromptBuilder.WithStickers(BotPromptBuilder.BuildSystemPrompt(bot, ["Alice", "Gus"]), catalog.ForPrompt);
+
+        await Assert.That(catalog.ForPrompt.Count).IsEqualTo(40);
+        await Assert.That(prompt.Split('\n').Count(l => l.Contains(": sticker number "))).IsEqualTo(40);
+        // Every one of them can still be sent by name.
+        await Assert.That(catalog.Find("s4999")?.Name).IsEqualTo("s4999");
+    }
+
+    [Test]
+    public async Task StickerDescriber_NamesWhoItRecognises_WithoutMakingNamesUp()
+    {
+        var prompt = NeuralDamage.Infrastructure.Services.Attachments.ImageDescriber.StickerPrompt;
+
+        await Assert.That(prompt).DoesNotContain("Never guess who a person is");
+        await Assert.That(prompt).Contains("Name the person, character or meme when you recognise them");
+        await Assert.That(prompt).Contains("distracted boyfriend");
+        await Assert.That(prompt).Contains("never make up a name");
+        // The rest stays.
+        await Assert.That(prompt).Contains("Copy any visible text word for word.");
+        await Assert.That(prompt).Contains("at most 20 words");
+    }
+
+    [Test]
     public async Task SystemPrompt_ListsTheStickers_OnlyWhenThereAreAny()
     {
         var bot = new Bot { Name = "Gus", ModelId = "m", CreatedById = Guid.NewGuid() };

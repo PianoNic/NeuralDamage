@@ -12,62 +12,137 @@ using NeuralDamage.Infrastructure.Services.Stickers;
 namespace NeuralDamage.Application.Commands;
 
 /// <summary>
-/// Adds a sticker to the shared library and starts describing it. The web app
-/// scales still images down first; animated ones come as they are. The name is
-/// made from <paramref name="Name"/> (usually the file name), with a number
-/// added when it is taken.
+/// Adds a sticker to the shared library and queues it for describing. The web
+/// app scales still images down first; animated ones come as they are. The name
+/// is made from <paramref name="Name"/> (usually the file name), with a number
+/// added when it is taken. An image the library already has is refused.
 /// </summary>
 public record UploadStickerCommand(Guid UploaderUserId, string? Name, byte[] Data) : ICommand<Result<StickerDto>>;
 
-public class UploadStickerHandler(NeuralDamageDbContext db, IAttachmentStorage storage, IImageDescriber describer)
+public class UploadStickerHandler(NeuralDamageDbContext db, IAttachmentStorage storage, IStickerDescribeQueue queue)
     : ICommandHandler<UploadStickerCommand, Result<StickerDto>>
 {
     public async ValueTask<Result<StickerDto>> Handle(UploadStickerCommand request, CancellationToken cancellationToken)
     {
-        if (request.Data.Length == 0)
-            return Result.Failure<StickerDto>("The file is empty.");
-        if (request.Data.Length > StickerRules.MaxBytes)
-            return Result.Failure<StickerDto>($"Stickers can be at most {StickerRules.MaxBytes / (1024 * 1024)} MB.");
-
-        if (StickerRules.Inspect(request.Data) is not { } inspected)
-            return Result.Failure<StickerDto>("Stickers have to be PNG, WebP or GIF images.");
-        var (image, animated) = inspected;
-        var maxSide = animated ? StickerRules.MaxAnimatedSide : StickerRules.MaxStaticSide;
-        if (image.Width > maxSide || image.Height > maxSide)
-            return Result.Failure<StickerDto>($"{(animated ? "Animated stickers" : "Stickers")} can be at most {maxSide}×{maxSide} pixels.");
-
         var uploader = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UploaderUserId, cancellationToken);
         if (uploader is null)
             return Result.Failure<StickerDto>("User not found.");
 
+        var added = await StickerAdder.AddAsync(db, storage, queue, uploader, request.Name, request.Data, cancellationToken);
+        if (added.Duplicate is { } existing)
+            return Result.Failure<StickerDto>($"The library already has this sticker, as {existing}.");
+        return added.Error is { } error
+            ? Result.Failure<StickerDto>(error)
+            : Result.Success(added.Sticker!.ToDto(canEdit: true));
+    }
+}
+
+public record StickerFileUpload(string FileName, byte[] Data);
+
+/// <summary>
+/// An admin adds many stickers at once, such as a whole WhatsApp sticker
+/// folder. Files the library already has are skipped, and one bad file does
+/// not stop the rest. Describing them goes through the describe queue.
+/// </summary>
+public record ImportStickersCommand(Guid UserId, IReadOnlyList<StickerFileUpload> Files) : ICommand<Result<StickerImportResultDto>>;
+
+public class ImportStickersHandler(NeuralDamageDbContext db, IAttachmentStorage storage, IStickerDescribeQueue queue, AppAdmins admins)
+    : ICommandHandler<ImportStickersCommand, Result<StickerImportResultDto>>
+{
+    public const string AdminsOnly = "Only an admin can import stickers.";
+
+    public async ValueTask<Result<StickerImportResultDto>> Handle(ImportStickersCommand request, CancellationToken cancellationToken)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
+        if (user is null || !admins.IsAdmin(user.Email))
+            return Result.Failure<StickerImportResultDto>(AdminsOnly);
+
+        int addedCount = 0, duplicates = 0;
+        var failed = new List<StickerImportFailureDto>();
+        foreach (var file in request.Files)
+        {
+            var added = await StickerAdder.AddAsync(db, storage, queue, user, Path.GetFileNameWithoutExtension(file.FileName), file.Data, cancellationToken);
+            if (added.Sticker is not null)
+                addedCount++;
+            else if (added.Duplicate is not null)
+                duplicates++;
+            else
+                failed.Add(new StickerImportFailureDto(file.FileName, added.Error!));
+        }
+        return Result.Success(new StickerImportResultDto(addedCount, duplicates, failed));
+    }
+}
+
+/// <summary>What adding one file came to: the new sticker, the name of the one it duplicates, or why it was refused.</summary>
+public record StickerAdded(Sticker? Sticker, string? Duplicate, string? Error);
+
+public static class StickerAdder
+{
+    public static async Task<StickerAdded> AddAsync(
+        NeuralDamageDbContext db, IAttachmentStorage storage, IStickerDescribeQueue queue, User uploader, string? name, byte[] data, CancellationToken ct)
+    {
+        if (data.Length == 0)
+            return new(null, null, "The file is empty.");
+        if (data.Length > StickerRules.MaxBytes)
+            return new(null, null, $"Stickers can be at most {StickerRules.MaxBytes / (1024 * 1024)} MB.");
+
+        if (StickerRules.Inspect(data) is not { } inspected)
+            return new(null, null, "Stickers have to be PNG, WebP or GIF images.");
+        var (image, animated) = inspected;
+        var maxSide = animated ? StickerRules.MaxAnimatedSide : StickerRules.MaxStaticSide;
+        if (image.Width > maxSide || image.Height > maxSide)
+            return new(null, null, $"{(animated ? "Animated stickers" : "Stickers")} can be at most {maxSide}×{maxSide} pixels.");
+
+        // Stickers loop forever, as in WhatsApp, whatever loop count the file came with.
+        if (animated)
+            data = StickerRules.LoopForever(data);
+
+        var hash = StickerRules.Hash(data);
+        var duplicate = await db.Stickers
+            .Where(s => s.DeletedAt == null && s.Sha256 == hash)
+            .Select(s => s.Name)
+            .FirstOrDefaultAsync(ct);
+        if (duplicate is not null)
+            return new(null, duplicate, null);
+
         var sticker = new Sticker
         {
-            Name = await FreeNameAsync(StickerRules.Slugify(request.Name) ?? "sticker", cancellationToken),
+            Name = await FreeNameAsync(db, StickerRules.Slugify(name) ?? "sticker", ct),
             ContentType = image.ContentType,
-            SizeBytes = request.Data.Length,
+            SizeBytes = data.Length,
             Width = image.Width,
             Height = image.Height,
             Animated = animated,
+            Sha256 = hash,
             Describing = true,
             UploaderUserId = uploader.Id,
             UploaderUser = uploader,
         };
 
-        await storage.SaveStickerAsync(sticker.Id, request.Data, cancellationToken);
+        await storage.SaveStickerAsync(sticker.Id, data, ct);
         db.Stickers.Add(sticker);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Someone took the name in the meantime; the next file must not trip over this one.
+            db.Entry(sticker).State = EntityState.Detached;
+            return new(null, null, "It could not be saved. Try again.");
+        }
 
-        describer.EnqueueSticker(sticker.Id);
-        return Result.Success(sticker.ToDto(canEdit: true));
+        queue.Enqueue(sticker.Id);
+        return new(sticker, null, null);
     }
 
     /// <summary>"cat", then "cat-2", "cat-3"…</summary>
-    private async Task<string> FreeNameAsync(string wanted, CancellationToken ct)
+    private static async Task<string> FreeNameAsync(NeuralDamageDbContext db, string wanted, CancellationToken ct)
     {
-        var taken = await db.Stickers
+        var taken = (await db.Stickers
             .Where(s => s.DeletedAt == null && s.Name.StartsWith(wanted))
             .Select(s => s.Name)
-            .ToListAsync(ct);
+            .ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
         if (!taken.Contains(wanted))
             return wanted;
         for (var n = 2; ; n++)

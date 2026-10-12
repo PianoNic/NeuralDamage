@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideEllipsis, lucidePencil, lucideSearch, lucideTrash2, lucideUpload } from '@ng-icons/lucide';
+import { lucideEllipsis, lucideFolderUp, lucidePencil, lucideSearch, lucideTrash2, lucideUpload, lucideX } from '@ng-icons/lucide';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
 import { HlmButton } from '@spartan-ng/helm/button';
@@ -11,15 +11,18 @@ import { HlmEmptyImports } from '@spartan-ng/helm/empty';
 import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
+import { HlmProgressImports } from '@spartan-ng/helm/progress';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { HlmTextarea } from '@spartan-ng/helm/textarea';
 import { AuthService } from '../../core/auth/auth.service';
 import { describeApiError } from '../../core/http-errors';
 import { StickerDto } from '../../core/models';
+import { InView } from '../../shared/in-view';
 import { STICKER_TYPES } from './sticker-file';
+import { scrollToTopOnSearch, StickerFeed } from './sticker-feed';
 import { StickerImage } from './sticker-image';
-import { matchesSticker, StickerLibrary } from './sticker-library';
+import { StickerLibrary } from './sticker-library';
 
 /** The longest description the server keeps (StickerRules). */
 const MAX_DESCRIPTION = 200;
@@ -27,7 +30,8 @@ const MAX_DESCRIPTION = 200;
 /**
  * `/stickers`: the shared library everyone sends from, people and bots. Anyone can add stickers;
  * whoever added one can rename it, fix its description or delete it. A sticker without a
- * description works for people but stays hidden from the bots.
+ * description works for people but stays hidden from the bots. The grid reads the library a page
+ * at a time and searches it on the server; admins can import a whole folder at once.
  */
 @Component({
   selector: 'app-stickers-page',
@@ -41,12 +45,14 @@ const MAX_DESCRIPTION = 200;
     HlmFieldImports,
     HlmInput,
     HlmInputGroupImports,
+    HlmProgressImports,
     HlmSidebarImports,
     HlmSpinner,
     HlmTextarea,
     StickerImage,
+    InView,
   ],
-  providers: [provideIcons({ lucideEllipsis, lucidePencil, lucideSearch, lucideTrash2, lucideUpload })],
+  providers: [StickerFeed, provideIcons({ lucideEllipsis, lucideFolderUp, lucidePencil, lucideSearch, lucideTrash2, lucideUpload, lucideX })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
@@ -54,7 +60,7 @@ const MAX_DESCRIPTION = 200;
       <span class="text-sm font-medium">Stickers</span>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div #scroller class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
         <div class="flex flex-col gap-3 md:flex-row md:items-end">
           <div class="flex flex-1 flex-col gap-1">
@@ -70,14 +76,21 @@ const MAX_DESCRIPTION = 200;
                 type="search"
                 placeholder="Search stickers"
                 aria-label="Search stickers"
-                [value]="query()"
-                (input)="query.set($any($event.target).value)"
+                [value]="feed.query()"
+                (input)="feed.search($any($event.target).value)"
               />
               <div hlmInputGroupAddon><ng-icon name="lucideSearch" /></div>
             </div>
             <input #files type="file" class="hidden" multiple [accept]="types" (change)="add(files)" />
-            <button hlmBtn [disabled]="uploading() > 0" (click)="files.click()">
-              @if (uploading() > 0) {
+            @if (library.canImport()) {
+              <input #folder type="file" class="hidden" webkitdirectory multiple (change)="add(folder)" />
+              <button hlmBtn variant="outline" [disabled]="busy()" (click)="folder.click()">
+                <ng-icon name="lucideFolderUp" />
+                Import folder
+              </button>
+            }
+            <button hlmBtn [disabled]="busy()" (click)="files.click()">
+              @if (busy()) {
                 <hlm-spinner class="size-4" />
               } @else {
                 <ng-icon name="lucideUpload" />
@@ -87,18 +100,45 @@ const MAX_DESCRIPTION = 200;
           </div>
         </div>
 
-        @if (library.loading() && !library.stickers().length) {
+        @if (library.importing(); as progress) {
+          <section class="bg-card flex flex-col gap-2 rounded-xl border p-4" aria-label="Import" data-testid="import-progress">
+            <div class="flex items-center gap-2">
+              @if (!progress.uploadDone || progress.described < progress.added) {
+                <hlm-spinner class="size-4" />
+              }
+              <span class="flex-1 text-sm font-medium" data-testid="import-summary">
+                {{ progress.uploaded }} / {{ progress.total }} uploaded, {{ progress.described }} described
+              </span>
+              @if (progress.uploadDone) {
+                <button hlmBtn variant="ghost" size="icon-sm" aria-label="Hide import" (click)="library.dismissImport()">
+                  <ng-icon name="lucideX" />
+                </button>
+              }
+            </div>
+            <hlm-progress [value]="progress.total ? (100 * progress.uploaded) / progress.total : 100" aria-label="Uploaded">
+              <hlm-progress-indicator />
+            </hlm-progress>
+            <p class="text-muted-foreground text-xs" data-testid="import-details">
+              {{ progress.added }} added · {{ progress.duplicates }} already in the library · {{ progress.failed }} refused
+            </p>
+            @for (error of progress.errors; track $index) {
+              <p class="text-destructive text-xs">{{ error }}</p>
+            }
+          </section>
+        }
+
+        @if (!feed.ready() || (feed.loading() && !feed.items().length)) {
           <div class="flex justify-center py-10"><hlm-spinner /></div>
-        } @else if (!visible().length) {
+        } @else if (!feed.items().length) {
           <hlm-empty class="rounded-xl border">
             <hlm-empty-header>
-              <h2 hlmEmptyTitle>{{ query().trim() ? 'No sticker matches' : 'No stickers yet' }}</h2>
+              <h2 hlmEmptyTitle>{{ feed.searched() ? 'No sticker matches' : 'No stickers yet' }}</h2>
               <p hlmEmptyDescription>Add PNG, WebP or GIF images. Animated ones keep moving.</p>
             </hlm-empty-header>
           </hlm-empty>
         } @else {
           <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-label="Stickers">
-            @for (sticker of visible(); track sticker.id) {
+            @for (sticker of feed.items(); track sticker.id) {
               <li class="bg-card flex flex-col gap-2 rounded-xl border p-3" data-testid="sticker-card">
                 <div class="flex items-start justify-between gap-1">
                   <span class="bg-muted/40 flex flex-1 justify-center rounded-lg py-2">
@@ -145,11 +185,20 @@ const MAX_DESCRIPTION = 200;
               </li>
             }
           </ul>
+          @if (feed.hasMore() && !feed.loading()) {
+            <div class="h-1" aria-hidden="true" data-testid="more" [inViewRoot]="scroller" (appInView)="feed.more()"></div>
+          } @else if (feed.loading()) {
+            <div class="flex justify-center py-4"><hlm-spinner /></div>
+          }
         }
 
-        @if (library.stickers().length) {
-          <p class="text-muted-foreground text-[13px]">
-            {{ library.stickers().length }} {{ library.stickers().length === 1 ? 'sticker' : 'stickers' }}.
+        @if (feed.total()) {
+          <p class="text-muted-foreground text-[13px]" data-testid="sticker-count">
+            @if (feed.searched()) {
+              {{ feed.total() }} of {{ library.count() }} stickers match.
+            } @else {
+              {{ feed.total() }} {{ feed.total() === 1 ? 'sticker' : 'stickers' }}.
+            }
             Bots know the ones with a description.
           </p>
         }
@@ -232,38 +281,47 @@ const MAX_DESCRIPTION = 200;
 })
 export class StickersPage implements OnInit {
   protected readonly library = inject(StickerLibrary);
+  protected readonly feed = inject(StickerFeed);
   private readonly auth = inject(AuthService);
 
   protected readonly types = STICKER_TYPES.join(',');
   protected readonly maxDescription = MAX_DESCRIPTION;
-  protected readonly query = signal('');
   protected readonly uploading = signal(0);
+  protected readonly busy = computed(() => this.uploading() > 0 || !!(this.library.importing() && !this.library.importing()!.uploadDone));
   protected readonly editing = signal<StickerDto | null>(null);
   protected readonly deleting = signal<StickerDto | null>(null);
   protected readonly name = signal('');
   protected readonly description = signal('');
   protected readonly saving = signal(false);
 
-  protected readonly visible = computed(() => {
-    const query = this.query();
-    return this.library.stickers().filter((s) => matchesSticker(s, query));
-  });
-
   protected readonly me = computed(() => this.auth.user()?.id ?? null);
+  private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
 
-  ngOnInit(): void {
-    void this.library.reload();
+  constructor() {
+    scrollToTopOnSearch(this.feed, this.scroller);
   }
 
+  ngOnInit(): void {
+    this.feed.pageSize = 60;
+    void this.library.refresh();
+    void this.feed.reset();
+  }
+
+  /** Admins import in bulk, skipping stickers the library has; everyone else uploads one by one. */
   protected async add(input: HTMLInputElement): Promise<void> {
     const files = Array.from(input.files ?? []);
     // Picking the same file again must fire change again.
     input.value = '';
+    if (!files.length) return;
+    if (this.library.canImport()) {
+      await this.library.importFiles(files);
+      return;
+    }
     await Promise.all(
       files.map(async (file) => {
         this.uploading.update((n) => n + 1);
         try {
-          await this.library.upload(file);
+          this.feed.prepend(await this.library.upload(file));
         } catch (error) {
           toast.error(
             error instanceof HttpErrorResponse || !(error instanceof Error)
@@ -288,7 +346,7 @@ export class StickersPage implements OnInit {
     if (!sticker) return;
     this.saving.set(true);
     try {
-      await this.library.update(sticker.id, this.name().trim().toLowerCase(), this.description().trim());
+      this.feed.replace(await this.library.update(sticker.id, this.name().trim().toLowerCase(), this.description().trim()));
       ctx.close();
     } catch (error) {
       toast.error(describeApiError(error, { fallback: 'Could not save the sticker.' }));
@@ -302,6 +360,7 @@ export class StickersPage implements OnInit {
     if (!sticker) return;
     try {
       await this.library.remove(sticker.id);
+      this.feed.remove(sticker.id);
     } catch (error) {
       toast.error(describeApiError(error, { fallback: `Could not delete ${sticker.name}.` }));
     }

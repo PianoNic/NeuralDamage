@@ -16,6 +16,10 @@ public class StickerConfiguration : IEntityTypeConfiguration<Sticker>
         builder.Property(s => s.Name).HasMaxLength(StickerRules.MaxNameLength).IsRequired();
         builder.Property(s => s.Description).HasMaxLength(StickerRules.MaxDescriptionLength);
         builder.Property(s => s.ContentType).HasMaxLength(64).IsRequired();
+        builder.Property(s => s.Sha256).HasMaxLength(64);
+        builder.HasIndex(s => s.Sha256);
+        // The library is read newest first, a page at a time.
+        builder.HasIndex(s => s.CreatedAt);
 
         builder.HasOne(s => s.UploaderUser).WithMany().HasForeignKey(s => s.UploaderUserId).OnDelete(DeleteBehavior.Restrict);
     }

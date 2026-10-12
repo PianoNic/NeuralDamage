@@ -304,7 +304,7 @@ export class Chat implements OnDestroy {
         this.messagesApi.apiChatsChatIdMessagesPost(this.currentChatId, { content: '', replyToId, stickerId: sticker.id }),
       );
       this.replyingTo.set(null);
-      this.stickers.markUsed(sticker.id);
+      this.stickers.markUsed(sticker);
     } catch (error) {
       toastApiError(error, { network: 'Sticker not sent. Check your connection and try again.' });
     }

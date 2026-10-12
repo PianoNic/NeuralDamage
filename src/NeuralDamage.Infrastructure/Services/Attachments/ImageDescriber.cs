@@ -21,13 +21,6 @@ public interface IImageDescriber
     /// at most <paramref name="timeout"/>. Never throws for a failed description.
     /// </summary>
     Task WaitAsync(IReadOnlyCollection<Guid> attachmentIds, TimeSpan timeout, CancellationToken ct = default);
-
-    /// <summary>
-    /// Starts writing a sticker's one-line description in the background. A
-    /// failure leaves it without one: people can still send it, bots cannot
-    /// until its uploader writes one.
-    /// </summary>
-    void EnqueueSticker(Guid stickerId);
 }
 
 public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ImageDescriber> logger) : IImageDescriber
@@ -47,7 +40,8 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
     public const string StickerPrompt = """
         You label stickers for a group chat, so that chat partners who cannot see them know when to send which.
         Write one short line: what the sticker shows, then the mood and the moment you'd send it, e.g. "embarrassed monkey covering its eyes, for cringe or oops moments" or "cat crying with laughter, for when something is hilarious".
-        Be specific and a little funny. Copy any visible text word for word. Never guess who a person is.
+        Be specific and a little funny. Copy any visible text word for word.
+        Name the person, character or meme when you recognise them: famous people, cartoon characters, well-known memes like "distracted boyfriend". Otherwise describe what you see and never make up a name.
         Lowercase, no quotes, no full stop at the end, at most 20 words.
         """;
 
@@ -73,10 +67,12 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
         ct.ThrowIfCancellationRequested();
     }
 
-    public void EnqueueSticker(Guid stickerId) => _ = Task.Run(() => DescribeStickerAsync(stickerId));
-
-    /// <summary>Describes one sticker now; <see cref="EnqueueSticker"/> runs this in the background.</summary>
-    public async Task DescribeStickerAsync(Guid stickerId)
+    /// <summary>
+    /// Writes one sticker's one-line description now; the sticker describe queue
+    /// runs this a few at a time. A failure leaves it without one: people can
+    /// still send it, bots cannot until its uploader writes one.
+    /// </summary>
+    public async Task DescribeStickerAsync(Guid stickerId, CancellationToken ct = default)
     {
         try
         {
@@ -85,7 +81,7 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
             string? text = null;
             try
             {
-                var sticker = await db.Stickers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == stickerId);
+                var sticker = await db.Stickers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == stickerId, ct);
                 if (sticker is null || sticker.Description is not null)
                     return;
 
@@ -96,18 +92,19 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
                     return;
                 }
 
-                var data = await scope.ServiceProvider.GetRequiredService<IAttachmentStorage>().ReadStickerAsync(stickerId);
+                var data = await scope.ServiceProvider.GetRequiredService<IAttachmentStorage>().ReadStickerAsync(stickerId, ct);
                 if (data is null)
                     return;
 
                 var request = new ChatMessage("user", "Label this sticker.") { Images = [new ImagePart(sticker.ContentType, data)] };
-                text = CleanStickerLine(await openRouter.GenerateResponseAsync(Model, 0.4, StickerPrompt, [request]));
+                text = CleanStickerLine(await openRouter.GenerateResponseAsync(Model, 0.4, StickerPrompt, [request], ct));
                 logger.LogInformation("Described sticker {StickerId} with {Model}", stickerId, Model);
             }
             finally
             {
                 // Read fresh: the uploader may have written one by hand meanwhile, which wins.
-                var stored = await db.Stickers.FirstOrDefaultAsync(s => s.Id == stickerId);
+                // Cut short by shutdown, it stays marked, so the next start queues it again.
+                var stored = ct.IsCancellationRequested ? null : await db.Stickers.FirstOrDefaultAsync(s => s.Id == stickerId);
                 if (stored is not null)
                 {
                     if (stored.Description is null && !string.IsNullOrEmpty(text))

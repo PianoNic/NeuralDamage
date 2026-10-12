@@ -42,6 +42,10 @@ model/reactionGroupDto.ts
 model/replyInfoDto.ts
 model/sendMessageRequest.ts
 model/stickerDto.ts
+model/stickerImportFailureDto.ts
+model/stickerImportResultDto.ts
+model/stickerLibraryStatusDto.ts
+model/stickerPageDto.ts
 model/updateBotRequest.ts
 model/updateChatRequest.ts
 model/updateStickerRequest.ts

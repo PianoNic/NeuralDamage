@@ -23,6 +23,9 @@ export type {
   ReactionGroupDto,
   ReplyInfoDto,
   StickerDto,
+  StickerImportResultDto,
+  StickerLibraryStatusDto,
+  StickerPageDto,
   UserDto,
 } from '../api';
 

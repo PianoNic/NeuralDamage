@@ -8,6 +8,7 @@ using NeuralDamage.Application.Queries;
 using NeuralDamage.Application.Validators;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure;
+using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Stickers;
@@ -19,9 +20,10 @@ namespace NeuralDamage.Tests.Commands;
 /// <summary>The shared sticker library: uploads, who may change what, and the describer.</summary>
 public class StickerTests
 {
-    private sealed record Setup(NeuralDamageDbContext Db, User Uploader, User Other, User Admin, InMemoryAttachmentStorage Storage, IImageDescriber Describer, AppAdmins Admins) : IDisposable
+    private sealed record Setup(NeuralDamageDbContext Db, User Uploader, User Other, User Admin, InMemoryAttachmentStorage Storage, IStickerDescribeQueue Queue, AppAdmins Admins) : IDisposable
     {
-        public UploadStickerHandler Upload() => new(Db, Storage, Describer);
+        public UploadStickerHandler Upload() => new(Db, Storage, Queue);
+        public ImportStickersHandler Import() => new(Db, Storage, Queue, Admins);
         public UpdateStickerHandler Update() => new(Db, Admins);
         public DeleteStickerHandler Delete() => new(Db, Admins);
         public void Dispose() => Db.Dispose();
@@ -35,8 +37,13 @@ public class StickerTests
         var admin = new User { ExternalId = "ext-3", Email = "Admin@Test.com", DisplayName = "Admin" };
         db.Users.AddRange(uploader, other, admin);
         await db.SaveChangesAsync();
-        return new Setup(db, uploader, other, admin, new InMemoryAttachmentStorage(), Substitute.For<IImageDescriber>(), new AppAdmins(["admin@test.com"]));
+        return new Setup(db, uploader, other, admin, new InMemoryAttachmentStorage(), Substitute.For<IStickerDescribeQueue>(), new AppAdmins(["admin@test.com"]));
     }
+
+    private static int _pngs;
+
+    /// <summary>A PNG no other call returns, so uploads in a test are not duplicates of each other.</summary>
+    private static byte[] Png() => TestImages.Png(1 + Interlocked.Increment(ref _pngs) % 500, 32);
 
     /// <summary>A GIF with <paramref name="frames"/> one-pixel frames.</summary>
     private static byte[] Gif(int width, int height, int frames)
@@ -74,7 +81,7 @@ public class StickerTests
         await Assert.That(sticker.Describing).IsTrue();
         await Assert.That(sticker.Url).IsEqualTo($"/api/stickers/{sticker.Id}/image");
         await Assert.That(s.Storage.Stickers[sticker.Id]).IsEquivalentTo(png);
-        s.Describer.Received(1).EnqueueSticker(sticker.Id);
+        s.Queue.Received(1).Enqueue(sticker.Id);
 
         var image = await new GetStickerImageHandler(s.Storage).Handle(new GetStickerImageQuery(sticker.Id), CancellationToken.None);
         await Assert.That(image.Value!.ContentType).IsEqualTo("image/png");
@@ -84,8 +91,8 @@ public class StickerTests
     public async Task Upload_WithATakenName_GetsANumber()
     {
         using var s = await CreateAsync();
-        var first = await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "wow", TestImages.Png()), CancellationToken.None);
-        var second = await s.Upload().Handle(new UploadStickerCommand(s.Other.Id, "WOW!", TestImages.Png()), CancellationToken.None);
+        var first = await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "wow", Png()), CancellationToken.None);
+        var second = await s.Upload().Handle(new UploadStickerCommand(s.Other.Id, "WOW!", Png()), CancellationToken.None);
 
         await Assert.That(first.Value!.Name).IsEqualTo("wow");
         await Assert.That(second.Value!.Name).IsEqualTo("wow-2");
@@ -136,7 +143,7 @@ public class StickerTests
     public async Task Uploader_CanRenameAndDescribe_AnEmptyDescriptionHidesItAgain()
     {
         using var s = await CreateAsync();
-        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", TestImages.Png()), CancellationToken.None)).Value!;
+        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", Png()), CancellationToken.None)).Value!;
 
         var described = await s.Update().Handle(new UpdateStickerCommand(sticker.Id, s.Uploader.Id, "cat-lol", "  cat crying with laughter  "), CancellationToken.None);
         await Assert.That(described.Value!.Name).IsEqualTo("cat-lol");
@@ -151,8 +158,8 @@ public class StickerTests
     public async Task Update_RefusesABadOrTakenName_AndALongDescription()
     {
         using var s = await CreateAsync();
-        var cat = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", TestImages.Png()), CancellationToken.None)).Value!;
-        await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "dog", TestImages.Png()), CancellationToken.None);
+        var cat = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", Png()), CancellationToken.None)).Value!;
+        await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "dog", Png()), CancellationToken.None);
 
         foreach (var (name, description) in new[] { ("dog", "x"), ("Cat Face", "x"), ("", "x"), ("cat", new string('x', StickerRules.MaxDescriptionLength + 1)) })
         {
@@ -165,14 +172,14 @@ public class StickerTests
     public async Task SomeoneElse_CannotChangeOrDeleteIt_ButAnAdminCan()
     {
         using var s = await CreateAsync();
-        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", TestImages.Png()), CancellationToken.None)).Value!;
+        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", Png()), CancellationToken.None)).Value!;
 
         var update = await s.Update().Handle(new UpdateStickerCommand(sticker.Id, s.Other.Id, "mine", "x"), CancellationToken.None);
         var delete = await s.Delete().Handle(new DeleteStickerCommand(sticker.Id, s.Other.Id), CancellationToken.None);
         await Assert.That(update.IsFailure).IsTrue();
         await Assert.That(delete.IsFailure).IsTrue();
 
-        var list = (await new GetStickersHandler(s.Db, s.Admins).Handle(new GetStickersQuery(s.Other.Id), CancellationToken.None)).Value!;
+        var list = (await new GetStickersHandler(s.Db, s.Admins).Handle(new GetStickersQuery(s.Other.Id), CancellationToken.None)).Value!.Items;
         await Assert.That(list.Single().CanEdit).IsFalse();
 
         var byAdmin = await s.Update().Handle(new UpdateStickerCommand(sticker.Id, s.Admin.Id, "cat", "cat, tidied up by the admin"), CancellationToken.None);
@@ -185,16 +192,16 @@ public class StickerTests
     public async Task Deleting_TakesItOutOfTheLibrary_ButOldMessagesStillShowIt()
     {
         using var s = await CreateAsync();
-        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", TestImages.Png()), CancellationToken.None)).Value!;
+        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", Png()), CancellationToken.None)).Value!;
 
         await s.Delete().Handle(new DeleteStickerCommand(sticker.Id, s.Uploader.Id), CancellationToken.None);
 
-        var list = (await new GetStickersHandler(s.Db, s.Admins).Handle(new GetStickersQuery(s.Uploader.Id), CancellationToken.None)).Value!;
+        var list = (await new GetStickersHandler(s.Db, s.Admins).Handle(new GetStickersQuery(s.Uploader.Id), CancellationToken.None)).Value!.Items;
         await Assert.That(list).IsEmpty();
         var image = await new GetStickerImageHandler(s.Storage).Handle(new GetStickerImageQuery(sticker.Id), CancellationToken.None);
         await Assert.That(image.IsSuccess).IsTrue();
         // Its name is free again.
-        var again = await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", TestImages.Png()), CancellationToken.None);
+        var again = await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", Png()), CancellationToken.None);
         await Assert.That(again.Value!.Name).IsEqualTo("cat");
     }
 
@@ -219,8 +226,8 @@ public class StickerTests
         using var s = await CreateAsync();
         var chat = new Chat { Name = "Chat", CreatedById = s.Uploader.Id };
         s.Db.Chats.Add(chat);
-        var a = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "a", TestImages.Png()), CancellationToken.None)).Value!;
-        var b = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "b", TestImages.Png()), CancellationToken.None)).Value!;
+        var a = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "a", Png()), CancellationToken.None)).Value!;
+        var b = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "b", Png()), CancellationToken.None)).Value!;
         var now = DateTime.UtcNow;
         s.Db.Messages.AddRange(
             new Message { ChatId = chat.Id, SenderUserId = s.Uploader.Id, Content = "", StickerId = a.Id, CreatedAt = now.AddMinutes(-3) },
@@ -229,7 +236,7 @@ public class StickerTests
             new Message { ChatId = chat.Id, SenderUserId = s.Other.Id, Content = "", StickerId = b.Id, CreatedAt = now });
         await s.Db.SaveChangesAsync();
 
-        var recent = (await new GetRecentStickersHandler(s.Db).Handle(new GetRecentStickersQuery(s.Uploader.Id), CancellationToken.None)).Value!;
+        var recent = (await new GetRecentStickersHandler(s.Db, s.Admins).Handle(new GetRecentStickersQuery(s.Uploader.Id), CancellationToken.None)).Value!.Select(r => r.Id).ToList();
 
         await Assert.That(recent).IsEquivalentTo([a.Id, b.Id]);
         await Assert.That(recent[0]).IsEqualTo(a.Id);
@@ -277,5 +284,205 @@ public class StickerTests
         await Assert.That(ImageDescriber.CleanStickerLine("\"cat crying with laughter, for when something is hilarious.\"\nExtra"))
             .IsEqualTo("cat crying with laughter, for when something is hilarious");
         await Assert.That(ImageDescriber.CleanStickerLine("  ")).IsNull();
+    }
+
+    /// <summary>An animated WebP: VP8X with the animation flag, then ANIM with <paramref name="loops"/>.</summary>
+    private static byte[] AnimatedWebP(ushort loops)
+    {
+        var data = new List<byte>();
+        data.AddRange("RIFF"u8.ToArray());
+        data.AddRange(new byte[4]);
+        data.AddRange("WEBP"u8.ToArray());
+        data.AddRange("VP8X"u8.ToArray());
+        data.AddRange([10, 0, 0, 0, 0x02, 0, 0, 0, 63, 0, 0, 63, 0, 0]);
+        data.AddRange("ANIM"u8.ToArray());
+        data.AddRange([6, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, (byte)loops, (byte)(loops >> 8)]);
+        data.AddRange("ANMF"u8.ToArray());
+        data.AddRange([2, 0, 0, 0, 0, 0]);
+        var bytes = data.ToArray();
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), (uint)(bytes.Length - 8));
+        return bytes;
+    }
+
+    /// <summary>A two-frame GIF with a NETSCAPE2.0 extension saying <paramref name="loops"/>.</summary>
+    private static byte[] LoopingGif(ushort loops)
+    {
+        var gif = Gif(64, 64, frames: 2);
+        byte[] extension = [0x21, 0xFF, 0x0B, .. "NETSCAPE2.0"u8, 0x03, 0x01, (byte)loops, (byte)(loops >> 8), 0x00];
+        return [.. gif.AsSpan(0, 13), .. extension, .. gif.AsSpan(13)];
+    }
+
+    [Test]
+    public async Task AnimatedWebP_ThatPlaysOnce_IsStoredLoopingForever()
+    {
+        using var s = await CreateAsync();
+        var once = AnimatedWebP(loops: 1);
+        await Assert.That(StickerRules.Inspect(once)!.Value.Animated).IsTrue();
+
+        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "wave", once), CancellationToken.None)).Value!;
+
+        var stored = s.Storage.Stickers[sticker.Id];
+        await Assert.That(stored.Length).IsEqualTo(once.Length);
+        await Assert.That(BinaryPrimitives.ReadUInt16LittleEndian(stored.AsSpan(42))).IsEqualTo((ushort)0);
+        // Nothing else changed.
+        await Assert.That(stored.SequenceEqual(AnimatedWebP(loops: 0))).IsTrue();
+        await Assert.That(StickerRules.LoopForever(AnimatedWebP(loops: 0)).SequenceEqual(AnimatedWebP(loops: 0))).IsTrue();
+    }
+
+    [Test]
+    public async Task AnimatedGif_ThatPlaysOnce_IsStoredLoopingForever()
+    {
+        using var s = await CreateAsync();
+
+        var sticker = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "dance", LoopingGif(loops: 1)), CancellationToken.None)).Value!;
+
+        var stored = s.Storage.Stickers[sticker.Id];
+        await Assert.That(stored.SequenceEqual(LoopingGif(loops: 0))).IsTrue();
+        await Assert.That(StickerRules.Inspect(stored)!.Value.Animated).IsTrue();
+    }
+
+    [Test]
+    public async Task AnimatedGif_WithoutALoopExtension_GetsOne()
+    {
+        var plain = Gif(64, 64, frames: 2);
+
+        var looped = StickerRules.LoopForever(plain);
+
+        await Assert.That(looped.SequenceEqual(LoopingGif(loops: 0))).IsTrue();
+        await Assert.That(looped.Length).IsEqualTo(plain.Length + 19);
+        await Assert.That(StickerRules.Inspect(looped)!.Value.Animated).IsTrue();
+        // A still GIF is left alone.
+        var still = Gif(64, 64, frames: 1);
+        await Assert.That(StickerRules.LoopForever(still).SequenceEqual(still)).IsTrue();
+    }
+
+    [Test]
+    public async Task Upload_RefusesAnImageTheLibraryAlreadyHas_UntilItIsDeleted()
+    {
+        using var s = await CreateAsync();
+        var png = Png();
+        var first = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "cat", png), CancellationToken.None)).Value!;
+
+        var again = await s.Upload().Handle(new UploadStickerCommand(s.Other.Id, "other-name", png.ToArray()), CancellationToken.None);
+        await Assert.That(again.IsFailure).IsTrue();
+        await Assert.That(again.Error).Contains("cat");
+
+        await s.Delete().Handle(new DeleteStickerCommand(first.Id, s.Uploader.Id), CancellationToken.None);
+        var afterDelete = await s.Upload().Handle(new UploadStickerCommand(s.Other.Id, "cat", png), CancellationToken.None);
+        await Assert.That(afterDelete.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task Import_SkipsDuplicates_KeepsGoingPastBadFiles_AndQueuesEachNewOne()
+    {
+        using var s = await CreateAsync();
+        var existing = Png();
+        await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "old", existing), CancellationToken.None);
+        var a = Png();
+        var b = Gif(512, 512, frames: 2);
+
+        var result = await s.Import().Handle(new ImportStickersCommand(s.Admin.Id,
+        [
+            new("STK-0001.webp", a),
+            new("STK-0002.webp", a.ToArray()), // the same image twice in one import
+            new("STK-0003.gif", b),
+            new("STK-0004.png", existing.ToArray()), // already in the library
+            new("photo.jpg", TestImages.Jpeg(64, 64)),
+        ]), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Added).IsEqualTo(2);
+        await Assert.That(result.Value.Duplicates).IsEqualTo(2);
+        await Assert.That(result.Value.Failed.Single().FileName).IsEqualTo("photo.jpg");
+
+        var stored = await s.Db.Stickers.Where(x => x.UploaderUserId == s.Admin.Id).OrderBy(x => x.Name).ToListAsync();
+        await Assert.That(stored.Select(x => x.Name)).IsEquivalentTo(["stk-0001", "stk-0003"]);
+        await Assert.That(stored.All(x => x.Sha256 == StickerRules.Hash(s.Storage.Stickers[x.Id]))).IsTrue();
+        foreach (var sticker in stored)
+            s.Queue.Received(1).Enqueue(sticker.Id);
+    }
+
+    [Test]
+    public async Task Import_IsForAdminsOnly()
+    {
+        using var s = await CreateAsync();
+
+        var result = await s.Import().Handle(new ImportStickersCommand(s.Other.Id, [new("a.png", Png())]), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).IsEqualTo(ImportStickersHandler.AdminsOnly);
+        await Assert.That(await s.Db.Stickers.CountAsync()).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task OlderStickers_GetTheirHashFilledIn_SoImportsSkipThem()
+    {
+        using var s = await CreateAsync();
+        var png = Png();
+        var old = new Sticker { Name = "old", ContentType = "image/png", SizeBytes = png.Length, UploaderUserId = s.Uploader.Id };
+        s.Db.Stickers.Add(old);
+        await s.Db.SaveChangesAsync();
+        await s.Storage.SaveStickerAsync(old.Id, png);
+
+        await StickerDescribeService.BackfillHashesAsync(s.Db, s.Storage, NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(old.Sha256).IsEqualTo(StickerRules.Hash(png));
+        var result = await s.Import().Handle(new ImportStickersCommand(s.Admin.Id, [new("again.png", png)]), CancellationToken.None);
+        await Assert.That(result.Value!.Duplicates).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Library_IsReadAPageAtATime_NewestFirst_AndSearchedOnTheServer()
+    {
+        using var s = await CreateAsync();
+        var start = DateTime.UtcNow.AddDays(-1);
+        s.Db.Stickers.AddRange(Enumerable.Range(0, 130).Select(i => new Sticker
+        {
+            Name = i == 7 ? "cat-lol" : $"s{i:000}",
+            Description = i % 10 == 0 ? $"dog laughing so hard, number {i}" : "a plain sticker",
+            ContentType = "image/png",
+            SizeBytes = 10,
+            UploaderUserId = s.Uploader.Id,
+            CreatedAt = start.AddMinutes(i),
+            DeletedAt = i == 129 ? DateTime.UtcNow : null,
+        }));
+        await s.Db.SaveChangesAsync();
+        var handler = new GetStickersHandler(s.Db, s.Admins);
+        async Task<StickerPageDto> Page(string? search, int skip, int take) =>
+            (await handler.Handle(new GetStickersQuery(s.Other.Id, search, skip, take), CancellationToken.None)).Value!;
+
+        var first = await Page(null, 0, 50);
+        await Assert.That(first.Total).IsEqualTo(129);
+        await Assert.That(first.Items.Count).IsEqualTo(50);
+        await Assert.That(first.Items[0].Name).IsEqualTo("s128");
+        var last = await Page(null, 100, 50);
+        await Assert.That(last.Items.Count).IsEqualTo(29);
+        await Assert.That(last.Items[^1].Name).IsEqualTo("s000");
+        await Assert.That(first.Items.Select(x => x.Id).Intersect(last.Items.Select(x => x.Id))).IsEmpty();
+
+        var laughing = await Page("Dog LAUGHING", 0, 50);
+        await Assert.That(laughing.Total).IsEqualTo(13);
+        await Assert.That(laughing.Items.All(x => x.Description!.StartsWith("dog laughing"))).IsTrue();
+        var byName = await Page("cat lol", 0, 50);
+        await Assert.That(byName.Items.Single().Name).IsEqualTo("cat-lol");
+
+        // Asked for nothing, a page still holds one; asked for everything, it stops at the cap.
+        await Assert.That((await Page(null, 0, 0)).Items.Count).IsEqualTo(1);
+        await Assert.That((await Page(null, 0, 10_000)).Items.Count).IsEqualTo(Math.Min(129, GetStickersQuery.MaxTake));
+    }
+
+    [Test]
+    public async Task Status_CountsTheLibrary_WhatIsStillBeingDescribed_AndWhoMayImport()
+    {
+        using var s = await CreateAsync();
+        await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "a", Png()), CancellationToken.None);
+        var b = (await s.Upload().Handle(new UploadStickerCommand(s.Uploader.Id, "b", Png()), CancellationToken.None)).Value!;
+        await s.Update().Handle(new UpdateStickerCommand(b.Id, s.Uploader.Id, "b", "described"), CancellationToken.None);
+
+        var forOther = (await new GetStickerLibraryStatusHandler(s.Db, s.Admins).Handle(new GetStickerLibraryStatusQuery(s.Other.Id), CancellationToken.None)).Value!;
+        var forAdmin = (await new GetStickerLibraryStatusHandler(s.Db, s.Admins).Handle(new GetStickerLibraryStatusQuery(s.Admin.Id), CancellationToken.None)).Value!;
+
+        await Assert.That(forOther).IsEqualTo(new StickerLibraryStatusDto(2, 1, false));
+        await Assert.That(forAdmin.CanImport).IsTrue();
     }
 }

@@ -379,6 +379,10 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("Sha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
 
@@ -396,9 +400,13 @@ namespace NeuralDamage.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasFilter("\"DeletedAt\" IS NULL");
+
+                    b.HasIndex("Sha256");
 
                     b.HasIndex("UploaderUserId");
 
