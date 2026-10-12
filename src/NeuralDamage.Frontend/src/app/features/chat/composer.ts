@@ -41,6 +41,8 @@ import { AppConfig } from '../../core/app-config';
 import { imageProblem } from './attachments';
 import { findMentions, mentionAround } from './mentions';
 import { StickerPicker } from '../stickers/sticker-picker';
+import { convertShortcodes, EmojiIndex, loadEmojis, rememberEmoji, searchEmojis, trailingShortcode } from './emoji';
+import { EmojiPicker } from './emoji-picker';
 import { StickerDto } from '../../core/models';
 
 /** The server's limit on a message body (SendMessageValidator). */
@@ -78,7 +80,8 @@ export const SLASH_COMMANDS = [
   { command: '/help', description: 'Show available commands', arg: null },
 ] as const;
 
-const QUICK_EMOJIS = ['😂', '👍', '❤️', '🔥', '😮', '😢', '🎉', '🤔', '👀', '💀', '🍕', '🙏'] as const;
+/** How many emoji a `:query` offers. */
+const MAX_EMOJI_SUGGESTIONS = 8;
 
 /** An image picked for the next message: previewed locally, uploaded straight away. */
 export interface PendingImage {
@@ -98,8 +101,9 @@ export interface OutgoingMessage {
 
 export interface Suggestion {
   key: string;
-  kind: 'command' | 'member';
+  kind: 'command' | 'member' | 'emoji';
   label: string;
+  emoji?: string;
   description?: string;
   member?: ChatMember;
   /** The whole composer text once this suggestion is picked. */
@@ -108,7 +112,8 @@ export interface Suggestion {
 
 /**
  * The message box: text on top, then attach / mention / emoji and a round send button. Slash
- * commands and @mentions complete in a Command-style popover above it, driven from the keyboard.
+ * commands, @mentions and :shortcodes: complete in a Command-style popover above it, driven from the
+ * keyboard; a complete `:code:` turns into its emoji as it is typed or pasted.
  */
 @Component({
   selector: 'app-composer',
@@ -121,6 +126,7 @@ export interface Suggestion {
     HlmSpinner,
     HlmTooltipImports,
     StickerPicker,
+    EmojiPicker,
   ],
   providers: [
     provideIcons({
@@ -166,6 +172,9 @@ export interface Suggestion {
               @if (item.kind === 'command') {
                 <span class="font-medium">{{ item.label }}</span>
                 <span class="text-muted-foreground truncate">{{ item.description }}</span>
+              } @else if (item.kind === 'emoji') {
+                <span class="w-6 text-center text-lg leading-none">{{ item.emoji }}</span>
+                <span class="truncate">:{{ item.label }}:</span>
               } @else {
                 <app-member-avatar [name]="item.label" [avatarUrl]="item.member?.avatarUrl" [modelId]="item.member?.modelId" [px]="24" />
                 <span class="truncate">{{ item.label }}</span>
@@ -330,25 +339,13 @@ export interface Suggestion {
             size="icon-sm"
             type="button"
             aria-label="Insert emoji"
+            hlmTooltip="Emoji"
           >
             <ng-icon name="lucideSmile" />
           </button>
-          <hlm-popover-content *hlmPopoverPortal="let ctx" class="w-auto p-1.5">
-            <div class="grid grid-cols-6 gap-0.5" role="group" aria-label="Emoji">
-              @for (emoji of emojis; track emoji) {
-                <button
-                  hlmBtn
-                  variant="ghost"
-                  size="icon-sm"
-                  type="button"
-                  class="text-base"
-                  [attr.aria-label]="'Insert ' + emoji"
-                  (click)="insertEmoji(emoji); ctx.close()"
-                >
-                  {{ emoji }}
-                </button>
-              }
-            </div>
+          <hlm-popover-content *hlmPopoverPortal="let ctx" class="w-auto p-2">
+            <!-- The dataset is a lazy chunk; the picker loads it on first open. -->
+            <app-emoji-picker (pick)="insertEmoji($event); ctx.close()" />
           </hlm-popover-content>
         </hlm-popover>
         <hlm-popover align="start" [sideOffset]="8">
@@ -426,7 +423,6 @@ export class Composer {
   protected readonly listId = `${this.textareaId}-suggestions`;
   protected readonly counterId = `${this.textareaId}-counter`;
   protected readonly maxLength = MAX_MESSAGE_LENGTH;
-  protected readonly emojis = QUICK_EMOJIS;
   private readonly limits = inject(AppConfig).uploadLimits;
   protected readonly imageTypes = computed(() => this.limits().contentTypes.join(','));
 
@@ -467,6 +463,9 @@ export class Composer {
     () =>
       (!!this.content().trim() || this.images().length > 0) && !this.tooLong() && !this.uploading(),
   );
+
+  /** The emoji dataset, once its lazy chunk has loaded (on the first `:`). */
+  readonly emojiIndex = signal<EmojiIndex | null>(null);
 
   /** The text Esc closed the popup on; it reopens once the text changes. */
   private readonly dismissedAt = signal<string | null>(null);
@@ -512,6 +511,21 @@ export class Composer {
         }));
     }
 
+    // ":sob" at a word start; checked before mentions, whose query may run on past a space.
+    const shortcode = trailingShortcode(text, this.mentions());
+    if (shortcode) {
+      const index = this.emojiIndex();
+      if (!index) return [];
+      const before = text.slice(0, shortcode.start);
+      return searchEmojis(index, shortcode.query, MAX_EMOJI_SUGGESTIONS).map((e) => ({
+        key: e.emoji,
+        kind: 'emoji' as const,
+        label: e.shortcodes.find((c) => c.startsWith(shortcode.query)) ?? e.shortcodes[0],
+        emoji: e.emoji,
+        result: before + e.emoji,
+      }));
+    }
+
     const mention = TRAILING_MENTION.exec(text);
     if (mention) {
       const query = mention[2].toLowerCase();
@@ -534,8 +548,8 @@ export class Composer {
     return [];
   });
 
-  protected readonly suggestionLabel = computed(() =>
-    this.suggestions()[0]?.kind === 'command' ? 'Commands' : 'Members',
+  protected readonly suggestionLabel = computed(
+    () => ({ command: 'Commands', member: 'Members', emoji: 'Emoji' })[this.suggestions()[0]?.kind ?? 'member'],
   );
 
   /** Keyboard selection; back to the top whenever the list changes. */
@@ -580,7 +594,43 @@ export class Composer {
         el.setSelectionRange(whole.caret, whole.caret);
       }
     }
+    // A ":code:" just typed or pasted becomes its emoji; IME text is left until it is committed.
+    const composing = (event as InputEvent).isComposing || inputType === 'insertCompositionText';
+    if (inputType.startsWith('insert') && !composing && this.convertInserted(this.content(), el.value)) return;
     this.onValueChange(el.value);
+  }
+
+  /**
+   * Converts the known `:code:`s that end in the part of `after` that differs from `before`, as one
+   * undoable edit, keeping the caret where it was relative to the text after them.
+   */
+  private convertInserted(before: string, after: string): boolean {
+    if (!after.includes(':')) return false;
+    const index = this.emojiIndex();
+    if (!index) {
+      // The first ":code:" may be pasted before the dataset is here: convert once it is.
+      void this.loadEmojiIndex().then(() => {
+        if (this.textarea().nativeElement.value === after) this.convertInserted(before, after);
+      });
+      return false;
+    }
+    let from = 0;
+    while (from < before.length && from < after.length && before[from] === after[from]) from++;
+    let tail = 0;
+    while (tail < before.length - from && tail < after.length - from && before.at(-1 - tail) === after.at(-1 - tail)) tail++;
+    const to = after.length - tail;
+    const hit = convertShortcodes(after, index, from, to, findMentions(after, this.names()));
+    if (!hit) return false;
+    const caret = to - (hit.end - hit.start) + hit.text.length;
+    this.replaceRange(hit.start, hit.end, hit.text, caret);
+    return true;
+  }
+
+  private loadEmojiIndex(): Promise<EmojiIndex> {
+    return loadEmojis().then((index) => {
+      this.emojiIndex.set(index);
+      return index;
+    });
   }
 
   /** Keeps the copy behind the textarea scrolled with it. */
@@ -615,6 +665,7 @@ export class Composer {
 
   onValueChange(value: string): void {
     this.content.set(value);
+    if (!this.emojiIndex() && value.includes(':')) void this.loadEmojiIndex();
     if (value.trim()) this.typing.emit();
   }
 
@@ -727,6 +778,7 @@ export class Composer {
     this.replaceAll(suggestion.result);
     // A picked name stays picked: "@Rex " must not reopen the list for "Rex Jr".
     if (suggestion.kind === 'member') this.dismissedAt.set(suggestion.result);
+    if (suggestion.emoji) rememberEmoji(suggestion.emoji);
   }
 
   focus(): void {
@@ -749,7 +801,7 @@ export class Composer {
     this.dismissedAt.set(null);
   }
 
-  protected insertEmoji(emoji: string): void {
+  insertEmoji(emoji: string): void {
     const el = this.textarea().nativeElement;
     const at = el.selectionStart ?? el.value.length;
     this.replaceRange(at, el.selectionEnd ?? at, emoji);
@@ -765,9 +817,9 @@ export class Composer {
 
   /**
    * Replaces `start`..`end` with `text` as typing would, so Ctrl+Z takes it back, and leaves the caret
-   * after it. Where the browser cannot (no execCommand), it sets the value instead.
+   * after it (or at `caret`). Where the browser cannot (no execCommand), it sets the value instead.
    */
-  private replaceRange(start: number, end: number, text: string): void {
+  private replaceRange(start: number, end: number, text: string, caret = start + text.length): void {
     const el = this.textarea().nativeElement;
     const expected = el.value.slice(0, start) + text + el.value.slice(end);
     el.focus();
@@ -782,7 +834,6 @@ export class Composer {
       el.value = expected;
       this.onValueChange(expected);
     }
-    const caret = start + text.length;
     el.setSelectionRange(caret, caret);
     this.lastSelection = { start: caret, end: caret };
     this.focusInput(caret);

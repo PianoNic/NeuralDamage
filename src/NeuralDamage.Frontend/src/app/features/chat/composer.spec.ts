@@ -5,6 +5,7 @@ import { AttachmentsService } from '../../api/api/attachments.service';
 import { AppConfig } from '../../core/app-config';
 import { ChatMember } from '../../core/models';
 import { Composer, MAX_MESSAGE_LENGTH, OutgoingMessage } from './composer';
+import { loadEmojis, recentEmojis } from './emoji';
 
 function member(id: string, displayName: string, memberType: 'user' | 'bot'): ChatMember {
   return {
@@ -422,5 +423,140 @@ describe('Composer mention chips', () => {
     expect(sent).toEqual([]);
     await press('Enter');
     expect(sent).toEqual(['@Alice hi']);
+  });
+});
+
+describe('Composer emoji shortcodes', () => {
+  beforeEach(() => localStorage.clear());
+
+  async function setup() {
+    await TestBed.configureTestingModule({
+      imports: [Composer],
+      providers: [{ provide: AttachmentsService, useValue: {} }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Composer);
+    fixture.componentRef.setInput('members', [member('u1', 'Alice', 'user'), member('b1', 'Gemini', 'bot')]);
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    const textarea = host.querySelector('textarea')!;
+    const component = fixture.componentInstance;
+    const sent: string[] = [];
+    component.send.subscribe((m) => sent.push(m.content));
+
+    /** Types (or pastes) text the way the browser reports it: the new value with the caret at the end. */
+    const type = async (value: string, inputType = 'insertText') => {
+      textarea.value = value;
+      textarea.setSelectionRange(value.length, value.length);
+      textarea.dispatchEvent(new InputEvent('input', { inputType }));
+      // The first ":" loads the dataset; let that land.
+      await loadEmojis();
+      await fixture.whenStable();
+    };
+    const press = async (key: string) => {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      textarea.dispatchEvent(event);
+      await fixture.whenStable();
+      return event;
+    };
+    const chips = () =>
+      [...host.querySelectorAll('[data-testid=composer-mirror] [data-mention]')].map((c) => c.textContent);
+    return { fixture, component, textarea, sent, type, press, chips };
+  }
+
+  it('suggests emoji after a colon and two letters, the exact shortcode first', async () => {
+    const { component, fixture, type } = await setup();
+    await type('so sad :s');
+    expect(component.suggestions()).toEqual([]);
+    await type('so sad :sob');
+    const list = component.suggestions();
+    expect(list[0]).toMatchObject({ kind: 'emoji', emoji: '😭', label: 'sob', result: 'so sad 😭' });
+    expect(list.length).toBeLessThanOrEqual(8);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(':sob:');
+  });
+
+  it('finds emoji by keyword, so :laugh offers 😂', async () => {
+    const { component, type } = await setup();
+    await type(':laugh');
+    expect(component.suggestions().map((s) => s.emoji)).toContain('😂');
+  });
+
+  it('leaves times, URLs, chips and words with a colon alone', async () => {
+    const { component, type } = await setup();
+    for (const text of ['meet at 10:30', 'see https://example.com', 'hey:so', '@Alice:so', 'at 10:30:']) {
+      await type(text);
+      expect(component.suggestions()).toEqual([]);
+      expect(component.content()).toBe(text);
+    }
+  });
+
+  it('inserts the pick with Enter or Tab, without sending', async () => {
+    const { component, sent, type, press } = await setup();
+    await type('ugh :sob');
+    await press('Enter');
+    expect(component.content()).toBe('ugh 😭');
+    expect(sent).toEqual([]);
+
+    await type('ugh 😭 :fir');
+    await press('ArrowDown');
+    await press('ArrowUp');
+    await press('Tab');
+    expect(component.content()).toBe('ugh 😭 🔥');
+    expect(recentEmojis()).toEqual(['🔥', '😭']);
+
+    await press('Enter');
+    expect(sent).toEqual(['ugh 😭 🔥']);
+  });
+
+  it('closes the list on Escape and keeps the text', async () => {
+    const { component, type, press } = await setup();
+    await type(':sob');
+    const event = await press('Escape');
+    expect(event.defaultPrevented).toBe(true);
+    expect(component.suggestions()).toEqual([]);
+    expect(component.content()).toBe(':sob');
+  });
+
+  it('turns a complete known :code: into its emoji as it is typed, and leaves unknown ones', async () => {
+    const { component, textarea, type } = await setup();
+    await type('lol :joy');
+    await type('lol :joy:');
+    expect(component.content()).toBe('lol 😂');
+    expect(textarea.selectionStart).toBe('lol 😂'.length);
+
+    await type('lol 😂 :nope:');
+    expect(component.content()).toBe('lol 😂 :nope:');
+  });
+
+  it('converts the codes in pasted text, keeping the caret after the paste', async () => {
+    const { component, textarea, type } = await setup();
+    await type('hi :x');
+    await type('hi :fire::skull: at 10:30 :nope: end', 'insertFromPaste');
+    expect(component.content()).toBe('hi 🔥💀 at 10:30 :nope: end');
+    expect(textarea.selectionStart).toBe(component.content().length);
+  });
+
+  it('keeps chips and emoji together in one message', async () => {
+    const { component, sent, type, press, chips } = await setup();
+    await type('@Gemini :skull');
+    await type('@Gemini :skull:');
+    expect(component.content()).toBe('@Gemini 💀');
+    expect(chips()).toEqual(['@Gemini']);
+    await press('Enter');
+    expect(sent).toEqual(['@Gemini 💀']);
+  });
+
+  it('leaves text being composed by an IME alone', async () => {
+    const { component, type } = await setup();
+    await type('x :joy:', 'insertCompositionText');
+    expect(component.content()).toBe('x :joy:');
+  });
+
+  it('inserts a picked emoji at the caret', async () => {
+    const { component, textarea, type } = await setup();
+    await type('ab');
+    textarea.focus();
+    textarea.setSelectionRange(1, 1);
+    component.insertEmoji('🔥');
+    expect(component.content()).toBe('a🔥b');
   });
 });
