@@ -395,13 +395,13 @@ public partial class OpenRouterAgentService : IOpenRouterService
 
     /// <summary>
     /// A custom provider's model as the catalogue lists it: free, named
-    /// "Provider: model" like OpenRouter's "Vendor: model", and without vision,
-    /// since nothing says it can see, so its bots get image descriptions.
+    /// "Provider: model" like OpenRouter's "Vendor: model" (by its display name),
+    /// and without vision, since nothing says it can see, so its bots get image descriptions.
     /// </summary>
     public static OpenRouterModel CustomModel(CustomProvider provider, string model, int? contextLength, string? description) =>
-        new(provider.ModelId(model), $"{provider.Name}: {model}", contextLength, new ModelPricing(0, 0))
+        new(provider.ModelId(model), $"{provider.Label}: {model}", contextLength, new ModelPricing(0, 0))
         {
-            Provider = provider.Name,
+            Provider = provider.Label,
             Description = ModelMetadata.Summary(description),
             Capabilities = ModelMetadata.Capabilities(model, model),
             IsCustom = true,

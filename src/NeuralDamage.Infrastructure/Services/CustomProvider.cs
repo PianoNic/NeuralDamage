@@ -17,6 +17,14 @@ public record CustomProvider(string Name, string BaseUrl, string ApiKey, IReadOn
     /// </summary>
     public int? ContextLength { get; init; }
 
+    /// <summary>
+    /// <c>Providers:&lt;Name&gt;:DisplayName</c>, what the picker calls it ("AI Gateway"
+    /// for <c>gateway</c>); <see cref="Name"/> when unset. Model ids keep <see cref="Name"/>.
+    /// </summary>
+    public string? DisplayName { get; init; }
+
+    public string Label => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
+
     /// <summary>Every <c>Providers:*</c> section with a BaseUrl. Models is a comma-separated list (or an array).</summary>
     public static List<CustomProvider> FromConfiguration(IConfiguration configuration) =>
         configuration.GetSection("Providers").GetChildren()
@@ -31,6 +39,7 @@ public record CustomProvider(string Name, string BaseUrl, string ApiKey, IReadOn
                     .ToList())
             {
                 ContextLength = int.TryParse(section["ContextLength"], out var length) && length > 0 ? length : null,
+                DisplayName = section["DisplayName"]?.Trim() is { Length: > 0 } displayName ? displayName : null,
             })
             .ToList();
 

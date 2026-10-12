@@ -105,6 +105,24 @@ public class CustomProviderTests
     }
 
     [Test]
+    public async Task DisplayName_NamesTheProviderInThePicker_ButNotTheModelId()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Providers:gateway:BaseUrl"] = "https://gw.test/v1",
+            ["Providers:gateway:DisplayName"] = " AI Gateway ",
+            ["Providers:local:BaseUrl"] = "http://localhost:11434/v1",
+        }).Build();
+        var providers = CustomProvider.FromConfiguration(configuration);
+
+        var model = OpenRouterAgentService.CustomModel(providers.Single(p => p.Name == "gateway"), "sgl/deepseek", null, null);
+        await Assert.That(model.Id).IsEqualTo("gateway:sgl/deepseek");
+        await Assert.That(model.Provider).IsEqualTo("AI Gateway");
+        await Assert.That(model.Name).IsEqualTo("AI Gateway: sgl/deepseek");
+        await Assert.That(providers.Single(p => p.Name == "local").Label).IsEqualTo("local");
+    }
+
+    [Test]
     public async Task CustomModel_GoesToItsProvider_WithoutPrefixOrOpenRouterExtras()
     {
         var (service, servers, _) = Service("http://or-route.test/api/v1", new()

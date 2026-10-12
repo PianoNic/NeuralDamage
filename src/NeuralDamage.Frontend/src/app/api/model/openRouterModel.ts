@@ -21,5 +21,7 @@ export interface OpenRouterModel {
     priceTier: number;
     isCustom: boolean;
     isDefault: boolean;
+    recommendationRank?: number | null;
+    recommendationHint?: string | null;
 }
 

@@ -59,6 +59,11 @@ describe('formatPrice', () => {
     expect(formatPricing({ prompt: -1, completion: -1 })).toBeNull();
     expect(formatPricing({ prompt: 0.07, completion: 0.28 })).toBe('$0.07 / $0.28');
   });
+
+  it('says Free for a model that costs nothing, rather than $0.00 / $0.00', () => {
+    expect(formatPricing({ prompt: 0, completion: 0 })).toBe('Free');
+    expect(formatPricing({ prompt: 0, completion: 0.28 })).toBe('$0.00 / $0.28');
+  });
 });
 
 describe('hasModelProblem', () => {

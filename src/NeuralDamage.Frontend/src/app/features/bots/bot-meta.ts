@@ -38,9 +38,10 @@ export function formatPrice(perMillion: number): string {
   return `$${Number(perMillion.toPrecision(3))}`;
 }
 
-/** "$in / $out", or null when the model has no fixed price. */
+/** "$in / $out", "Free" when it costs nothing, or null when the model has no fixed price. */
 export function formatPricing(pricing: ModelPricing | null | undefined): string | null {
   if (!pricing || pricing.prompt < 0 || pricing.completion < 0) return null;
+  if (pricing.prompt === 0 && pricing.completion === 0) return 'Free';
   return `${formatPrice(pricing.prompt)} / ${formatPrice(pricing.completion)}`;
 }
 
