@@ -29,6 +29,9 @@ export class ModelCatalog {
     return [...seen].map(([name, iconUrl]) => ({ name, iconUrl }));
   });
 
+  /** The recommended models (`Recommendations` on the server), the default first. */
+  readonly recommended = computed(() => recommendedModels(this.models()));
+
   /** The model a new bot starts on (`App:DefaultModel` on the server), if there is one. */
   readonly defaultId = computed(() => this.models().find((model) => model.isDefault)?.id ?? null);
 
@@ -52,6 +55,31 @@ function byProviderThenName(a: OpenRouterModel, b: OpenRouterModel): number {
     rank(a.provider) - rank(b.provider) ||
     a.provider.localeCompare(b.provider) ||
     modelDisplayName(a).localeCompare(modelDisplayName(b))
+  );
+}
+
+/** Rail key for every provider at once. */
+export const ALL = '';
+/** Rail key for the recommended models, the view the picker opens on. No provider name starts with a space. */
+export const RECOMMENDED = ' recommended';
+
+/** The models the server ranks as recommended, in its order (the default model first). */
+export function recommendedModels(models: readonly OpenRouterModel[]): OpenRouterModel[] {
+  return models
+    .filter((model) => model.recommendationRank != null)
+    .sort((a, b) => a.recommendationRank! - b.recommendationRank!);
+}
+
+/**
+ * What the browser lists for a rail entry and a search. Recommended shows the recommended models until
+ * a search starts, then gives way to the matches among all models; a provider narrows the search to it.
+ */
+export function visibleModels(models: readonly OpenRouterModel[], view: string, query: string): OpenRouterModel[] {
+  if (view === RECOMMENDED && !query.trim()) return recommendedModels(models);
+  const scope = view === RECOMMENDED || view === ALL ? models : models.filter((model) => model.provider === view);
+  return byNameMatchFirst(
+    scope.filter((model) => modelMatches(model, query)),
+    query,
   );
 }
 

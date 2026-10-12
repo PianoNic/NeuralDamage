@@ -51,6 +51,15 @@ public record OpenRouterModel(string Id, string Name, int? ContextLength, ModelP
     /// <summary>The model a new bot starts on (<c>App:DefaultModel</c>, or the first custom model).</summary>
     public bool IsDefault { get; init; }
 
+    /// <summary>
+    /// Its place in the picker's Recommended list (<c>Recommendations:N</c>), 0 first,
+    /// the default model always on top; null when it is not recommended.
+    /// </summary>
+    public int? RecommendationRank { get; init; }
+
+    /// <summary>The "choose this when..." line of a recommended model.</summary>
+    public string? RecommendationHint { get; init; }
+
     /// <summary>Whether the model takes OpenRouter's <c>reasoning</c> parameter, so its effort can be set.</summary>
     [JsonIgnore]
     public bool AcceptsReasoning { get; init; }

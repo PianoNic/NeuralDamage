@@ -1,24 +1,23 @@
 import { Component, computed, ElementRef, inject, input, model, signal, viewChild, afterNextRender, Injector } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideBrain, lucideCheck, lucideCode, lucideEye, lucideSearch, lucideZap } from '@ng-icons/lucide';
+import { lucideBrain, lucideCheck, lucideCode, lucideEye, lucideSearch, lucideStar, lucideZap } from '@ng-icons/lucide';
 import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
+import { HlmSeparator } from '@spartan-ng/helm/separator';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { OpenRouterModel } from '../../core/models';
 import { capabilityIcons, formatPricing, modelDisplayName, priceTierMarks } from './bot-meta';
-import { byNameMatchFirst, ModelCatalog, modelMatches } from './model-catalog';
-
-/** Rail key for every provider at once. */
-const ALL = '';
+import { ALL, ModelCatalog, RECOMMENDED, visibleModels } from './model-catalog';
 
 /**
  * The left half of the bot dialog: search, a provider rail and the allowed models, each with its
  * capabilities, a one-line description, a price tier and the exact price. Adapted from the prompt-kit
- * model selector, laid out inline instead of in a popover. Lists every model straight away.
+ * model selector, laid out inline instead of in a popover. Opens on the recommended models, each with a
+ * "choose this when" line in place of its description; a search covers every model.
  */
 @Component({
   selector: 'app-model-browser',
-  imports: [NgIcon, HlmInputGroupImports, HlmSpinner],
-  providers: [provideIcons({ lucideBrain, lucideCheck, lucideCode, lucideEye, lucideSearch, lucideZap })],
+  imports: [NgIcon, HlmInputGroupImports, HlmSeparator, HlmSpinner],
+  providers: [provideIcons({ lucideBrain, lucideCheck, lucideCode, lucideEye, lucideSearch, lucideStar, lucideZap })],
   host: { class: 'flex min-h-0 min-w-0 flex-col' },
   template: `
     <div class="border-b p-2.5">
@@ -37,12 +36,19 @@ const ALL = '';
     </div>
 
     <div class="flex min-h-0 flex-1">
-      <nav aria-label="Providers" class="hidden w-36 shrink-0 flex-col gap-0.5 overflow-y-auto border-r p-2 sm:flex">
-        <button type="button" [class]="railClass(provider() === ALL)" [attr.aria-current]="provider() === ALL || null" (click)="provider.set(ALL)">
+      <nav aria-label="Providers" class="hidden w-42 shrink-0 flex-col gap-0.5 overflow-y-auto border-r p-2 sm:flex">
+        @if (catalog.recommended().length) {
+          <button type="button" [class]="railClass(view() === RECOMMENDED)" [attr.aria-current]="view() === RECOMMENDED || null" (click)="provider.set(RECOMMENDED)">
+            <ng-icon name="lucideStar" size="16" class="shrink-0" />
+            <span class="truncate">Recommended</span>
+          </button>
+          <hlm-separator class="my-1" />
+        }
+        <button type="button" [class]="railClass(view() === ALL)" [attr.aria-current]="view() === ALL || null" (click)="provider.set(ALL)">
           All
         </button>
         @for (p of catalog.providers(); track p.name) {
-          <button type="button" [class]="railClass(provider() === p.name)" [attr.aria-current]="provider() === p.name || null" (click)="provider.set(p.name)">
+          <button type="button" [class]="railClass(view() === p.name)" [attr.aria-current]="view() === p.name || null" (click)="provider.set(p.name)">
             <img [src]="p.iconUrl" alt="" class="size-4 shrink-0 object-contain dark:invert" />
             <span class="truncate">{{ p.name }}</span>
           </button>
@@ -69,7 +75,9 @@ const ALL = '';
                     <ng-icon [name]="cap.icon" size="14" class="text-muted-foreground ms-1 inline-flex align-[-2px]" [attr.title]="cap.label" [attr.aria-label]="cap.label" role="img" />
                   }
                 </span>
-                @if (m.isCustom) {
+                @if (showHints()) {
+                  <span class="text-muted-foreground truncate text-xs" [attr.title]="hintOf(m)">{{ hintOf(m) }}</span>
+                } @else if (m.isCustom) {
                   <span class="text-muted-foreground truncate text-xs">On {{ m.provider }}{{ m.description ? ' · ' + m.description : '' }}</span>
                 } @else if (m.description) {
                   <span class="text-muted-foreground truncate text-xs">{{ m.description }}</span>
@@ -108,22 +116,25 @@ export class ModelBrowser {
   protected readonly catalog = inject(ModelCatalog);
   private readonly injector = inject(Injector);
   protected readonly ALL = ALL;
+  protected readonly RECOMMENDED = RECOMMENDED;
 
   /** The picked model's id, two-way. */
   readonly selectedId = model<string | null>(null);
 
   protected readonly query = signal('');
-  protected readonly provider = signal(ALL);
+  /** The rail entry picked: Recommended, All or a provider. */
+  protected readonly provider = signal(RECOMMENDED);
   private readonly search = viewChild.required<ElementRef<HTMLInputElement>>('search');
 
-  protected readonly visible = computed(() => {
-    const provider = this.provider();
-    const query = this.query();
-    return byNameMatchFirst(
-      this.catalog.models().filter((m) => (provider === ALL || m.provider === provider) && modelMatches(m, query)),
-      query,
-    );
-  });
+  /** The rail entry in effect: All stands in for Recommended when nothing is recommended. */
+  protected readonly view = computed(() =>
+    this.provider() === RECOMMENDED && !this.catalog.recommended().length ? ALL : this.provider(),
+  );
+
+  protected readonly visible = computed(() => visibleModels(this.catalog.models(), this.view(), this.query()));
+
+  /** The Recommended list shows each model's "choose this when" line; search results show descriptions. */
+  protected readonly showHints = computed(() => this.view() === RECOMMENDED && !this.query().trim());
 
   focusSearch(): void {
     afterNextRender(() => this.search().nativeElement.focus(), { injector: this.injector });
@@ -148,6 +159,10 @@ export class ModelBrowser {
   }
 
   protected priceOf(m: OpenRouterModel): string {
-    return m.isCustom ? 'Free' : (formatPricing(m.pricing) ?? 'Varies');
+    return formatPricing(m.pricing) ?? 'Varies';
+  }
+
+  protected hintOf(m: OpenRouterModel): string {
+    return [m.isDefault ? 'Default' : null, m.recommendationHint ?? m.description].filter(Boolean).join(' · ');
   }
 }
