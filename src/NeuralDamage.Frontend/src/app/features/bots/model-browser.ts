@@ -69,7 +69,9 @@ const ALL = '';
                     <ng-icon [name]="cap.icon" size="14" class="text-muted-foreground ms-1 inline-flex align-[-2px]" [attr.title]="cap.label" [attr.aria-label]="cap.label" role="img" />
                   }
                 </span>
-                @if (m.description) {
+                @if (m.isCustom) {
+                  <span class="text-muted-foreground truncate text-xs">On {{ m.provider }}{{ m.description ? ' · ' + m.description : '' }}</span>
+                } @else if (m.description) {
                   <span class="text-muted-foreground truncate text-xs">{{ m.description }}</span>
                 }
               </span>
@@ -146,6 +148,6 @@ export class ModelBrowser {
   }
 
   protected priceOf(m: OpenRouterModel): string {
-    return formatPricing(m.pricing) ?? 'Varies';
+    return m.isCustom ? 'Free' : (formatPricing(m.pricing) ?? 'Varies');
   }
 }

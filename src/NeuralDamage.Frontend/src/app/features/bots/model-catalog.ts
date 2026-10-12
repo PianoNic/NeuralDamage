@@ -29,6 +29,9 @@ export class ModelCatalog {
     return [...seen].map(([name, iconUrl]) => ({ name, iconUrl }));
   });
 
+  /** The model a new bot starts on (`App:DefaultModel` on the server), if there is one. */
+  readonly defaultId = computed(() => this.models().find((model) => model.isDefault)?.id ?? null);
+
   find(id: string | null | undefined): OpenRouterModel | undefined {
     return this.models().find((model) => model.id === id);
   }

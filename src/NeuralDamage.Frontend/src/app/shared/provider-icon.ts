@@ -14,9 +14,20 @@ const VENDORS = new Set([
   'undi95', 'upstage', 'writer', 'x-ai', 'xiaomi', 'z-ai',
 ]);
 
+/** `gateway:sgl/deepseek` is model `sgl/deepseek` on the custom provider `gateway`; OpenRouter ids have no colon before the slash. */
+export function customModelPart(id: string): string | null {
+  const colon = id.indexOf(':');
+  const slash = id.indexOf('/');
+  return colon > 0 && (slash < 0 || colon < slash) ? id.slice(colon + 1) : null;
+}
+
 export function providerIconUrl(model: { id: string }): string {
+  const custom = customModelPart(model.id);
+  const id = (custom ?? model.id).toLowerCase();
   // "~anthropic/..." is OpenRouter's alias form of the same vendor.
-  const vendor = model.id.split('/')[0].replace(/^~/, '').toLowerCase();
-  if (vendor === 'google' && /gemma/i.test(model.id)) return '/model-icons/gemma.svg';
+  let vendor = id.split('/')[0].replace(/^~/, '');
+  // A custom provider names its models as it likes ("sgl/deepseek"), so any known vendor in the id will do.
+  if (custom !== null && !VENDORS.has(vendor)) vendor = id.split(/[/:._-]/).find((part) => VENDORS.has(part)) ?? vendor;
+  if ((vendor === 'google' || custom !== null) && /gemma/i.test(id)) return '/model-icons/gemma.svg';
   return `/model-icons/${VENDORS.has(vendor) ? vendor : 'unknown'}.svg`;
 }

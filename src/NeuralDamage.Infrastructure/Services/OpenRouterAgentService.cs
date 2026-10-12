@@ -1,5 +1,6 @@
 ﻿using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -41,6 +42,9 @@ public class OpenRouterAgentService : IOpenRouterService
     private readonly int _maxOutputTokens;
     private readonly ILogger<OpenRouterAgentService> _logger;
 
+    /// <summary>The <c>Providers:*</c> endpoints by name, each with its own client.</summary>
+    private readonly Dictionary<string, (CustomProvider Provider, OpenAIClient Client)> _providers;
+
     public OpenRouterAgentService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ModelPolicy policy, ILogger<OpenRouterAgentService> logger)
     {
         _logger = logger;
@@ -52,20 +56,37 @@ public class OpenRouterAgentService : IOpenRouterService
         // Overridable so the outgoing request can be captured against a
         // local listener, and so a gateway can be put in front.
         _baseUrl = configuration["OpenRouter:BaseUrl"] ?? DefaultBaseUrl;
-        _client = new OpenAIClient(
-            new ApiKeyCredential(_apiKey),
+        var retryDelay = configuration.GetValue("OpenRouter:RetryDelay", TimeSpan.FromSeconds(1));
+        _client = Client(_baseUrl, _apiKey);
+        _providers = CustomProvider.FromConfiguration(configuration)
+            .ToDictionary(p => p.Name, p => (p, Client(p.BaseUrl, p.ApiKey)), StringComparer.OrdinalIgnoreCase);
+
+        OpenAIClient Client(string baseUrl, string apiKey) => new(
+            // A local endpoint may want no key, but the credential cannot be empty.
+            new ApiKeyCredential(string.IsNullOrEmpty(apiKey) ? "none" : apiKey),
             new OpenAIClientOptions
             {
-                Endpoint = new Uri(_baseUrl),
+                Endpoint = new Uri(baseUrl),
                 Transport = new HttpClientPipelineTransport(httpClientFactory.CreateClient(nameof(OpenRouterAgentService))),
-                RetryPolicy = new ProviderRetryPolicy(configuration.GetValue("OpenRouter:RetryDelay", TimeSpan.FromSeconds(1)), logger),
+                RetryPolicy = new ProviderRetryPolicy(retryDelay, logger),
             });
     }
 
+    /// <summary>
+    /// The client and model name for <paramref name="modelId"/>: the
+    /// <c>&lt;Name&gt;:&lt;model&gt;</c> id of a configured provider goes to that
+    /// provider without the prefix, anything else to OpenRouter as it is.
+    /// </summary>
+    private (string? Provider, OpenAIClient Client, string Model) Route(string modelId) =>
+        CustomProvider.Split(modelId) is { } split && _providers.TryGetValue(split.Provider, out var custom)
+            ? (custom.Provider.Name, custom.Client, split.Model)
+            : (null, _client, modelId);
+
     public async Task<string> GenerateResponseAsync(string modelId, double temperature, string systemPrompt, List<ChatMessage> history, CancellationToken ct = default)
     {
-        AIAgent agent = _client
-            .GetChatClient(modelId)
+        var (provider, client, model) = Route(modelId);
+        AIAgent agent = client
+            .GetChatClient(model)
             .AsIChatClient()
             .AsAIAgent(instructions: systemPrompt);
 
@@ -80,6 +101,12 @@ public class OpenRouterAgentService : IOpenRouterService
                 m.Role == "assistant" ? ChatRole.Assistant : ChatRole.User,
                 [new TextContent(m.Content), .. m.Images.Select(i => new DataContent(i.Data, i.ContentType))]))
             .ToList();
+
+        // A custom provider gets the plain OpenAI request: the extras below are
+        // OpenRouter's own (reasoning, session, cache markers, routing).
+        if (provider is not null)
+            return await RunAsync(agent, messages, new ChatClientAgentRunOptions(
+                new ChatOptions { Temperature = (float)temperature, MaxOutputTokens = _maxOutputTokens }), modelId, provider, ct);
 
         var effort = await ReasoningEffortAsync(modelId, ct);
 
@@ -115,6 +142,12 @@ public class OpenRouterAgentService : IOpenRouterService
             },
         });
 
+        return await RunAsync(agent, messages, options, modelId, null, ct);
+    }
+
+    /// <param name="provider">The custom provider's name, or null for OpenRouter.</param>
+    private async Task<string> RunAsync(AIAgent agent, List<AgentChatMessage> messages, ChatClientAgentRunOptions options, string modelId, string? provider, CancellationToken ct)
+    {
         try
         {
             var response = await agent.RunAsync(messages, options: options, cancellationToken: ct);
@@ -129,10 +162,10 @@ public class OpenRouterAgentService : IOpenRouterService
         catch (ClientResultException ex) when (ProviderRetryPolicy.IsRetried(ex.Status))
         {
             // Busy, not broken: a warning without the stack trace says all there is.
-            _logger.LogWarning("OpenRouter still answered {Status} for {ModelId} after {MaxRetries} retries", ex.Status, modelId, ProviderRetryPolicy.MaxRetries);
+            _logger.LogWarning("{Provider} still answered {Status} for {ModelId} after {MaxRetries} retries", provider ?? "OpenRouter", ex.Status, modelId, ProviderRetryPolicy.MaxRetries);
             throw new ProviderBusyException(modelId, ex.Status, ex);
         }
-        catch (ClientResultException ex) when (ex.Status == 404)
+        catch (ClientResultException ex) when (ex.Status == 404 && provider is null)
         {
             // A bot saved before the policy was tightened keeps its model, but
             // OpenRouter refuses it once no endpoint satisfies zdr / max_price.
@@ -267,28 +300,111 @@ public class OpenRouterAgentService : IOpenRouterService
     /// so it is fetched once per <see cref="ModelsCacheDuration"/> and shared.
     /// </summary>
     private static readonly TimeSpan ModelsCacheDuration = TimeSpan.FromHours(1);
-    private static (DateTimeOffset FetchedAt, List<OpenRouterModel> Models)? _modelsCache;
 
     /// <summary>
-    /// Plain REST against OpenRouter's model catalogue. This is not an inference
-    /// call, so it stays off the agent pipeline.
+    /// A custom provider that is down is asked again after this long, not on
+    /// every call, and each ask waits at most <see cref="CustomModelsTimeout"/>.
+    /// </summary>
+    private static readonly TimeSpan CustomModelsRetry = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan CustomModelsTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>Each catalogue by the URL it was read from.</summary>
+    private static readonly ConcurrentDictionary<string, (DateTimeOffset Expires, List<OpenRouterModel> Models)> _modelsCache = new();
+
+    /// <summary>
+    /// OpenRouter's catalogue followed by every custom provider's models.
+    /// Plain REST, not an inference call, so it stays off the agent pipeline.
+    /// OpenRouter failing fails the call; a custom provider failing only
+    /// leaves its models out.
     /// </summary>
     public async Task<List<OpenRouterModel>> ListModelsAsync(CancellationToken ct = default)
     {
-        if (_modelsCache is { } cached && DateTimeOffset.UtcNow - cached.FetchedAt < ModelsCacheDuration)
-            return [.. cached.Models];
+        var models = await CachedAsync($"{_baseUrl}/models", async () =>
+            ParseModels(await GetStringAsync($"{_baseUrl}/models", _apiKey, ct)), ModelsCacheDuration);
 
+        foreach (var (provider, _) in _providers.Values)
+            models.AddRange(provider.Models.Count > 0
+                ? provider.Models.Select(m => CustomModel(provider, m, null, null))
+                : await CustomModelsAsync(provider, ct));
+        return models;
+    }
+
+    private async Task<List<OpenRouterModel>> CustomModelsAsync(CustomProvider provider, CancellationToken ct)
+    {
+        var url = $"{provider.BaseUrl}/models";
+        try
+        {
+            return await CachedAsync(url, async () =>
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(CustomModelsTimeout);
+                return ParseCustomModels(provider, await GetStringAsync(url, provider.ApiKey, timeout.Token));
+            }, ModelsCacheDuration);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("Models of provider {Provider} unavailable, left out for {Minutes} minutes: {Error}", provider.Name, CustomModelsRetry.TotalMinutes, ex.Message);
+            _modelsCache[url] = (DateTimeOffset.UtcNow + CustomModelsRetry, []);
+            return [];
+        }
+    }
+
+    private static async Task<List<OpenRouterModel>> CachedAsync(string url, Func<Task<List<OpenRouterModel>>> fetch, TimeSpan duration)
+    {
+        if (_modelsCache.TryGetValue(url, out var cached) && DateTimeOffset.UtcNow < cached.Expires)
+            return [.. cached.Models];
+        var models = await fetch();
+        _modelsCache[url] = (DateTimeOffset.UtcNow + duration, models);
+        return [.. models];
+    }
+
+    private async Task<string> GetStringAsync(string url, string apiKey, CancellationToken ct)
+    {
         using var client = _httpClientFactory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/models");
-        request.Headers.Add("Authorization", $"Bearer {_apiKey}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (!string.IsNullOrEmpty(apiKey))
+            request.Headers.Add("Authorization", $"Bearer {apiKey}");
 
         using var response = await client.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
-
-        var models = ParseModels(await response.Content.ReadAsStringAsync(ct));
-        _modelsCache = (DateTimeOffset.UtcNow, models);
-        return [.. models];
+        return await response.Content.ReadAsStringAsync(ct);
     }
+
+    /// <summary>
+    /// An OpenAI-style <c>/models</c> list: ids, and a context length or
+    /// description where the server gives one (vLLM and SGLang call it max_model_len).
+    /// </summary>
+    public static List<OpenRouterModel> ParseCustomModels(CustomProvider provider, string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            return [];
+
+        return data.EnumerateArray()
+            .Where(item => item.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+            .Select(item =>
+            {
+                int? contextLength = (item.TryGetProperty("context_length", out var cl) || item.TryGetProperty("max_model_len", out cl))
+                    && cl.ValueKind == JsonValueKind.Number && cl.TryGetInt32(out var length) ? length : null;
+                var description = item.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
+                return CustomModel(provider, item.GetProperty("id").GetString()!, contextLength, description);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// A custom provider's model as the catalogue lists it: free, named
+    /// "Provider: model" like OpenRouter's "Vendor: model", and without vision,
+    /// since nothing says it can see, so its bots get image descriptions.
+    /// </summary>
+    public static OpenRouterModel CustomModel(CustomProvider provider, string model, int? contextLength, string? description) =>
+        new(provider.ModelId(model), $"{provider.Name}: {model}", contextLength, new ModelPricing(0, 0))
+        {
+            Provider = provider.Name,
+            Description = ModelMetadata.Summary(description),
+            Capabilities = ModelMetadata.Capabilities(model, model),
+            IsCustom = true,
+        };
 
     public static List<OpenRouterModel> ParseModels(string json)
     {

@@ -32,7 +32,7 @@ public class ListOpenRouterModelsHandlerTests
     [Test]
     public async Task Handle_WithCap_ReturnsOnlyModelsWithinIt()
     {
-        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0.25m, 0.60m));
+        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0.25m, 0.60m), new ConfigurationBuilder().Build());
         var result = await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -43,7 +43,7 @@ public class ListOpenRouterModelsHandlerTests
     [Test]
     public async Task Handle_OneSidedCap_IgnoresTheOtherSide()
     {
-        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0.25m, 0));
+        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0.25m, 0), new ConfigurationBuilder().Build());
         var result = await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None);
 
         await Assert.That(result.Value!.Select(m => m.Id)).IsEquivalentTo(["cheap/model", "pricey-completion/model", "cheap/retaining", "cheap/model:batch"]);
@@ -52,7 +52,7 @@ public class ListOpenRouterModelsHandlerTests
     [Test]
     public async Task Handle_NoCap_ReturnsEverything()
     {
-        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0, 0));
+        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0, 0), new ConfigurationBuilder().Build());
         var result = await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None);
 
         await Assert.That(result.Value!.Count).IsEqualTo(7);
@@ -61,7 +61,7 @@ public class ListOpenRouterModelsHandlerTests
     [Test]
     public async Task Handle_ZdrOnly_DropsModelsWithoutZdrEndpoint()
     {
-        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0, 0, ZdrOnly: true));
+        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0, 0, ZdrOnly: true), new ConfigurationBuilder().Build());
         var result = await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None);
 
         await Assert.That(result.Value!.Select(m => m.Id)).DoesNotContain("cheap/retaining");
@@ -71,7 +71,7 @@ public class ListOpenRouterModelsHandlerTests
     [Test]
     public async Task Handle_ExcludeBatch_DropsBatchVariants()
     {
-        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0, 0, ExcludeBatchModels: true));
+        var handler = new ListOpenRouterModelsHandler(Catalogue(), new ModelPolicy(0, 0, ExcludeBatchModels: true), new ConfigurationBuilder().Build());
         var result = await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None);
 
         await Assert.That(result.Value!.Select(m => m.Id)).DoesNotContain("cheap/model:batch");
@@ -82,7 +82,7 @@ public class ListOpenRouterModelsHandlerTests
     public async Task Handle_SafeDefaults_ReturnOnlyCheapZdrNonBatch()
     {
         var policy = ModelPolicy.FromConfiguration(new ConfigurationBuilder().Build());
-        var handler = new ListOpenRouterModelsHandler(Catalogue(), policy);
+        var handler = new ListOpenRouterModelsHandler(Catalogue(), policy, new ConfigurationBuilder().Build());
         var result = await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None);
 
         await Assert.That(result.Value!.Select(m => m.Id)).IsEquivalentTo(["cheap/model"]);
@@ -92,7 +92,7 @@ public class ListOpenRouterModelsHandlerTests
     public async Task Handle_PolicyOff_DoesNotFetchZdrList()
     {
         var openRouter = Catalogue();
-        var handler = new ListOpenRouterModelsHandler(openRouter, new ModelPolicy(0, 0));
+        var handler = new ListOpenRouterModelsHandler(openRouter, new ModelPolicy(0, 0), new ConfigurationBuilder().Build());
         await handler.Handle(new ListOpenRouterModelsQuery(), CancellationToken.None);
 
         await openRouter.DidNotReceive().ListZdrModelIdsAsync(Arg.Any<CancellationToken>());

@@ -1,4 +1,5 @@
 using Mediator;
+using Microsoft.Extensions.Configuration;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure;
@@ -8,14 +9,18 @@ namespace NeuralDamage.Application.Queries;
 
 public record ListOpenRouterModelsQuery : IQuery<Result<List<OpenRouterModel>>>;
 
-public class ListOpenRouterModelsHandler(IOpenRouterService openRouter, ModelPolicy modelPolicy) : IQueryHandler<ListOpenRouterModelsQuery, Result<List<OpenRouterModel>>>
+/// <summary>The models a bot may use, the one a new bot starts on (<c>App:DefaultModel</c>) marked.</summary>
+public class ListOpenRouterModelsHandler(IOpenRouterService openRouter, ModelPolicy modelPolicy, IConfiguration configuration) : IQueryHandler<ListOpenRouterModelsQuery, Result<List<OpenRouterModel>>>
 {
     public async ValueTask<Result<List<OpenRouterModel>>> Handle(ListOpenRouterModelsQuery request, CancellationToken cancellationToken)
     {
         try
         {
             var models = await modelPolicy.FilterAsync(openRouter, await openRouter.ListModelsAsync(cancellationToken), cancellationToken);
-            return Result<List<OpenRouterModel>>.Success(models.Select(m => m with { PriceTier = modelPolicy.PriceTier(m.Pricing) }).ToList());
+            var defaultModel = CustomProvider.DefaultModel(configuration["App:DefaultModel"], models);
+            return Result<List<OpenRouterModel>>.Success(models
+                .Select(m => m with { PriceTier = modelPolicy.PriceTier(m.Pricing), IsDefault = m.Id == defaultModel })
+                .ToList());
         }
         catch (Exception ex)
         {

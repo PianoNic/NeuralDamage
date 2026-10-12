@@ -8,6 +8,8 @@ const flash: OpenRouterModel = {
   description: "DeepSeek's quick general model.",
   capabilities: ['fast'],
   priceTier: 1,
+  isCustom: false,
+  isDefault: false,
 };
 
 describe('modelMatches', () => {
