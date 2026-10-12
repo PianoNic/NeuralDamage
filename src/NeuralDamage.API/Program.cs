@@ -39,6 +39,8 @@ builder.Services.AddSingleton(BotRankingOptions.FromConfiguration(builder.Config
 builder.Services.AddHttpClient<IDecisionsClient, DecisionsClient>((sp, client) =>
     client.Timeout = sp.GetRequiredService<BotRankingOptions>().Timeout);
 builder.Services.Configure<BotBehaviorOptions>(builder.Configuration.GetSection(BotBehaviorOptions.SectionName));
+builder.Services.Configure<HistoryOptions>(builder.Configuration.GetSection(HistoryOptions.SectionName));
+builder.Services.AddSingleton<IChatCompactor, ChatCompactor>();
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
 builder.Services.AddSingleton(sp => BotClock.FromConfiguration(builder.Configuration, sp.GetRequiredService<ILogger<BotClock>>()));
 builder.Services.AddSingleton<BotResponseQueue>();

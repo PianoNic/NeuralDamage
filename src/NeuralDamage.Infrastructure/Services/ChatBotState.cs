@@ -7,8 +7,9 @@ namespace NeuralDamage.Infrastructure.Services;
 /// <remarks>
 /// Stops and mutes are written to the database (<see cref="BotSilence"/>) so
 /// they survive a restart, and read from memory, since every bot round asks.
-/// The table is read once, on first use. Model notices and history starts only
-/// save a repeated notice or a prompt cache miss, so they stay in memory.
+/// The table is read once, on first use. Model notices, history starts and the
+/// summaries the bots last saw only save a repeated notice or a prompt cache
+/// miss, so they stay in memory.
 /// Built without a scope factory, as the tests do, nothing is persisted.
 /// </remarks>
 public class ChatBotState : IChatBotState
@@ -21,6 +22,7 @@ public class ChatBotState : IChatBotState
     private readonly ConcurrentDictionary<(Guid ChatId, Guid BotId), byte> _muted = new();
     private readonly ConcurrentDictionary<(Guid ChatId, Guid BotId), byte> _modelNotices = new();
     private readonly ConcurrentDictionary<(Guid ChatId, Guid BotId), DateTime> _historyStarts = new();
+    private readonly ConcurrentDictionary<(Guid ChatId, Guid BotId), SummarySeen> _historySummaries = new();
 
     public ChatBotState() => _loaded = true;
 
@@ -52,6 +54,10 @@ public class ChatBotState : IChatBotState
     public DateTime? HistoryStart(Guid chatId, Guid botId) =>
         _historyStarts.TryGetValue((chatId, botId), out var start) ? start : null;
     public void SetHistoryStart(Guid chatId, Guid botId, DateTime start) => _historyStarts[(chatId, botId)] = start;
+
+    public SummarySeen? HistorySummary(Guid chatId, Guid botId) =>
+        _historySummaries.TryGetValue((chatId, botId), out var summary) ? summary : null;
+    public void SetHistorySummary(Guid chatId, Guid botId, SummarySeen summary) => _historySummaries[(chatId, botId)] = summary;
 
     private bool Contains(Guid chatId, Guid? botId) =>
         botId is { } id ? _muted.ContainsKey((chatId, id)) : _stopped.ContainsKey(chatId);

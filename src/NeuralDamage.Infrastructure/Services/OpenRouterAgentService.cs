@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -19,7 +20,7 @@ namespace NeuralDamage.Infrastructure.Services;
 /// Semantic Kernel. OpenRouter speaks the OpenAI wire protocol, so the OpenAI
 /// client works against it once the endpoint is repointed.
 /// </summary>
-public class OpenRouterAgentService : IOpenRouterService
+public partial class OpenRouterAgentService : IOpenRouterService
 {
     private const string DefaultBaseUrl = "https://openrouter.ai/api/v1";
 
@@ -324,7 +325,7 @@ public class OpenRouterAgentService : IOpenRouterService
 
         foreach (var (provider, _) in _providers.Values)
             models.AddRange(provider.Models.Count > 0
-                ? provider.Models.Select(m => CustomModel(provider, m, null, null))
+                ? provider.Models.Select(m => CustomModel(provider, m, provider.ContextLength, null))
                 : await CustomModelsAsync(provider, ct));
         return models;
     }
@@ -387,7 +388,7 @@ public class OpenRouterAgentService : IOpenRouterService
                 int? contextLength = (item.TryGetProperty("context_length", out var cl) || item.TryGetProperty("max_model_len", out cl))
                     && cl.ValueKind == JsonValueKind.Number && cl.TryGetInt32(out var length) ? length : null;
                 var description = item.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
-                return CustomModel(provider, item.GetProperty("id").GetString()!, contextLength, description);
+                return CustomModel(provider, item.GetProperty("id").GetString()!, provider.ContextLength ?? contextLength, description);
             })
             .ToList();
     }
@@ -405,6 +406,108 @@ public class OpenRouterAgentService : IOpenRouterService
             Capabilities = ModelMetadata.Capabilities(model, model),
             IsCustom = true,
         };
+
+    /// <summary>The context assumed when nothing says what a model has.</summary>
+    public const int FallbackContextLength = 32_768;
+
+    /// <summary>
+    /// Comfortably past any context a provider here serves (about 300k tokens
+    /// of "hi"), so the request is refused before anything is generated.
+    /// </summary>
+    private const int ProbeWords = 300_000;
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>Probed context lengths by provider URL and model, one probe each per process.</summary>
+    private static readonly ConcurrentDictionary<string, Lazy<Task<int>>> _probed = new();
+
+    /// <summary>
+    /// The model's context, in tokens, from the first source that knows it:
+    /// <c>Providers:&lt;Name&gt;:ContextLength</c>, the catalogue (OpenRouter's
+    /// <c>context_length</c>, or a provider's <c>context_length</c> /
+    /// <c>max_model_len</c>), a one-time probe of a custom provider, and
+    /// <see cref="FallbackContextLength"/> when all of them come up empty.
+    /// Never throws, except on cancellation.
+    /// </summary>
+    public async Task<int> ContextLengthAsync(string modelId, CancellationToken ct = default)
+    {
+        var (provider, _, model) = Route(modelId);
+        var custom = provider is null ? null : _providers[provider].Provider;
+        if (custom?.ContextLength is { } configured)
+            return configured;
+
+        try
+        {
+            // A custom provider's own /models, even when Models is configured:
+            // it is only read for the length here, and OpenRouter being down
+            // must not cost a probe.
+            var listed = (custom is null ? await ListModelsAsync(ct) : await CustomModelsAsync(custom, ct))
+                .FirstOrDefault(m => m.Id == modelId)?.ContextLength;
+            if (listed is > 0)
+                return listed.Value;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Model catalogue unavailable for the context of {ModelId}: {Error}", modelId, ex.Message);
+        }
+
+        if (custom is null)
+            return FallbackContextLength;
+        return await _probed.GetOrAdd($"{custom.BaseUrl}|{model}", _ => new Lazy<Task<int>>(() => ProbeAsync(custom, model, modelId))).Value.WaitAsync(ct);
+    }
+
+    /// <summary>
+    /// Asks <paramref name="provider"/> to complete a prompt too long for any
+    /// model it serves, with one token of output, and reads the model's limit
+    /// off the refusal ("maximum context length is 131072 tokens", as vLLM,
+    /// SGLang and OpenAI word it). A prompt that is accepted, or a refusal
+    /// that says no number, leaves the fallback.
+    /// </summary>
+    private async Task<int> ProbeAsync(CustomProvider provider, string model, string modelId)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(ProbeTimeout);
+            using var client = _httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{provider.BaseUrl}/chat/completions")
+            {
+                Content = JsonContent(new
+                {
+                    model,
+                    max_tokens = 1,
+                    messages = new[] { new { role = "user", content = string.Concat(Enumerable.Repeat("hi ", ProbeWords)) } },
+                }),
+            };
+            if (!string.IsNullOrEmpty(provider.ApiKey))
+                request.Headers.Add("Authorization", $"Bearer {provider.ApiKey}");
+
+            using var response = await client.SendAsync(request, timeout.Token);
+            var body = await response.Content.ReadAsStringAsync(timeout.Token);
+            if (ParseContextLength(body) is { } length)
+            {
+                _logger.LogInformation("Probed the context of {ModelId}: {ContextLength} tokens", modelId, length);
+                return length;
+            }
+            _logger.LogWarning("Probing the context of {ModelId} gave {Status} without a length; assuming {ContextLength} tokens", modelId, (int)response.StatusCode, FallbackContextLength);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Probing the context of {ModelId} failed, assuming {ContextLength} tokens: {Error}", modelId, FallbackContextLength, ex.Message);
+        }
+        return FallbackContextLength;
+    }
+
+    private static StringContent JsonContent(object body) =>
+        new(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+    /// <summary>The N of "maximum context length is N" in a provider's refusal, or null.</summary>
+    public static int? ParseContextLength(string? error) =>
+        error is not null && MaximumContextLength().Match(error) is { Success: true } match
+            && int.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var length) && length > 0
+            ? length
+            : null;
+
+    [GeneratedRegex(@"maximum context length is (\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex MaximumContextLength();
 
     public static List<OpenRouterModel> ParseModels(string json)
     {

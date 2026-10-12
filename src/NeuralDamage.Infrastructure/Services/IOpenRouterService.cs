@@ -64,6 +64,8 @@ public interface IOpenRouterService
 {
     Task<string> GenerateResponseAsync(string modelId, double temperature, string systemPrompt, List<ChatMessage> history, CancellationToken ct = default);
     Task<List<OpenRouterModel>> ListModelsAsync(CancellationToken ct = default);
+    /// <summary>The model's context, in tokens; a safe default when nothing says.</summary>
+    Task<int> ContextLengthAsync(string modelId, CancellationToken ct = default);
     /// <summary>Ids of the models that have at least one zero-data-retention endpoint.</summary>
     Task<IReadOnlySet<string>> ListZdrModelIdsAsync(CancellationToken ct = default);
 }

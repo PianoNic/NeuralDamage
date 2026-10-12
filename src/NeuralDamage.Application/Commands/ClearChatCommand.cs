@@ -22,6 +22,12 @@ public class ClearChatHandler(NeuralDamageDbContext db, IChatNotificationService
         var messages = await db.Messages.Where(m => m.ChatId == request.ChatId).ToListAsync(cancellationToken);
         db.Messages.RemoveRange(messages);
         db.Attachments.RemoveRange(await db.Attachments.Where(a => a.ChatId == request.ChatId).ToListAsync(cancellationToken));
+        // The summary is of the messages that are gone.
+        if (await db.Chats.FirstOrDefaultAsync(c => c.Id == request.ChatId, cancellationToken) is { } chat)
+        {
+            chat.Summary = null;
+            chat.SummarizedBefore = null;
+        }
         await db.SaveChangesAsync(cancellationToken);
         attachmentStorage.DeleteChat(request.ChatId);
 
