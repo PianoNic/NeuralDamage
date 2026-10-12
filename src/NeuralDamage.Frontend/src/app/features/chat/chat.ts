@@ -29,6 +29,7 @@ import {
   Message,
   MessageDto,
   ReactionGroupDto,
+  StickerDto,
 } from '../../core/models';
 import { SystemMessage } from '../../core/signalr/hub-events';
 import { SignalRService } from '../../core/signalr/signalr.service';
@@ -45,6 +46,7 @@ import {
 } from './message.mapper';
 import { MessageList } from './message-list';
 import { Typer, TypingRow } from './typing-row';
+import { StickerLibrary } from '../stickers/sticker-library';
 
 /** Messages per request, both for the first page and for each older page. */
 const PAGE_SIZE = 50;
@@ -97,6 +99,7 @@ const TYPING_SEND_INTERVAL_MS = 3000;
         [placeholder]="placeholder()"
         [chatId]="chatId()"
         (send)="sendMessage($event.content, $event.attachmentIds)"
+        (sendSticker)="sendSticker($event)"
         (typing)="onTyping()"
         (cancelReply)="replyingTo.set(null)"
       />
@@ -122,6 +125,7 @@ export class Chat implements OnDestroy {
   private readonly chatList = inject(ChatList);
   private readonly chatsApi = inject(ChatsService);
   private readonly messagesApi = inject(MessagesService);
+  private readonly stickers = inject(StickerLibrary);
   private readonly reactionsApi = inject(ReactionsService);
 
   /** Route parameter of `/chat/:chatId`. */
@@ -288,6 +292,21 @@ export class Chat implements OnDestroy {
         error,
         rejected ? undefined : { network: 'Message not sent. Check your connection and try again.' },
       );
+    }
+  }
+
+  protected async sendSticker(sticker: StickerDto): Promise<void> {
+    if (!this.currentChatId) return;
+    const replyToId = this.replyingTo()?.id;
+    this.list()?.scrollToBottom();
+    try {
+      await firstValueFrom(
+        this.messagesApi.apiChatsChatIdMessagesPost(this.currentChatId, { content: '', replyToId, stickerId: sticker.id }),
+      );
+      this.replyingTo.set(null);
+      this.stickers.markUsed(sticker.id);
+    } catch (error) {
+      toastApiError(error, { network: 'Sticker not sent. Check your connection and try again.' });
     }
   }
 

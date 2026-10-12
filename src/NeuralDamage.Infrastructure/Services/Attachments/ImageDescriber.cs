@@ -21,6 +21,13 @@ public interface IImageDescriber
     /// at most <paramref name="timeout"/>. Never throws for a failed description.
     /// </summary>
     Task WaitAsync(IReadOnlyCollection<Guid> attachmentIds, TimeSpan timeout, CancellationToken ct = default);
+
+    /// <summary>
+    /// Starts writing a sticker's one-line description in the background. A
+    /// failure leaves it without one: people can still send it, bots cannot
+    /// until its uploader writes one.
+    /// </summary>
+    void EnqueueSticker(Guid stickerId);
 }
 
 public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ImageDescriber> logger) : IImageDescriber
@@ -35,6 +42,13 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
         Describe the image in detail: what it shows, the setting, people (appearance, expression, what they are doing; never guess who they are), animals, notable objects, colours and mood.
         Copy any visible text word for word. For a meme, screenshot or chart, say what it says and what the point or joke is.
         Plain prose, no markdown, no preamble, at most 150 words.
+        """;
+
+    public const string StickerPrompt = """
+        You label stickers for a group chat, so that chat partners who cannot see them know when to send which.
+        Write one short line: what the sticker shows, then the mood and the moment you'd send it, e.g. "embarrassed monkey covering its eyes, for cringe or oops moments" or "cat crying with laughter, for when something is hilarious".
+        Be specific and a little funny. Copy any visible text word for word. Never guess who a person is.
+        Lowercase, no quotes, no full stop at the end, at most 20 words.
         """;
 
     // One run per image for the life of the process: whoever asks first starts
@@ -57,6 +71,66 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
         await Task.WhenAny(all, Task.Delay(timeout, delayCts.Token));
         await delayCts.CancelAsync();
         ct.ThrowIfCancellationRequested();
+    }
+
+    public void EnqueueSticker(Guid stickerId) => _ = Task.Run(() => DescribeStickerAsync(stickerId));
+
+    /// <summary>Describes one sticker now; <see cref="EnqueueSticker"/> runs this in the background.</summary>
+    public async Task DescribeStickerAsync(Guid stickerId)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
+            string? text = null;
+            try
+            {
+                var sticker = await db.Stickers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == stickerId);
+                if (sticker is null || sticker.Description is not null)
+                    return;
+
+                var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
+                if (await RefusalAsync(openRouter, scope.ServiceProvider.GetRequiredService<ModelPolicy>()) is { } refusal)
+                {
+                    logger.LogWarning("Sticker {StickerId} left undescribed: {Reason}", stickerId, refusal);
+                    return;
+                }
+
+                var data = await scope.ServiceProvider.GetRequiredService<IAttachmentStorage>().ReadStickerAsync(stickerId);
+                if (data is null)
+                    return;
+
+                var request = new ChatMessage("user", "Label this sticker.") { Images = [new ImagePart(sticker.ContentType, data)] };
+                text = CleanStickerLine(await openRouter.GenerateResponseAsync(Model, 0.4, StickerPrompt, [request]));
+                logger.LogInformation("Described sticker {StickerId} with {Model}", stickerId, Model);
+            }
+            finally
+            {
+                // Read fresh: the uploader may have written one by hand meanwhile, which wins.
+                var stored = await db.Stickers.FirstOrDefaultAsync(s => s.Id == stickerId);
+                if (stored is not null)
+                {
+                    if (stored.Description is null && !string.IsNullOrEmpty(text))
+                        stored.Description = text;
+                    stored.Describing = false;
+                    await db.SaveChangesAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Describing sticker {StickerId} with {Model} failed", stickerId, Model);
+        }
+    }
+
+    /// <summary>One line, without the quotes and full stop models like to add, cut to the column's length.</summary>
+    public static string? CleanStickerLine(string? text)
+    {
+        var line = (text ?? "").Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+        line = line.Trim('"', '\'', '“', '”', ' ').TrimEnd('.');
+        if (line.Length > Stickers.StickerRules.MaxDescriptionLength)
+            line = line[..Stickers.StickerRules.MaxDescriptionLength].TrimEnd();
+        return line.Length == 0 ? null : line;
     }
 
     private Task Run(Guid attachmentId) =>

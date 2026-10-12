@@ -17,6 +17,7 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.HasOne(m => m.Chat).WithMany(c => c.Messages).HasForeignKey(m => m.ChatId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(m => m.SenderUser).WithMany(u => u.Messages).HasForeignKey(m => m.SenderUserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(m => m.SenderBot).WithMany(b => b.Messages).HasForeignKey(m => m.SenderBotId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(m => m.Sticker).WithMany().HasForeignKey(m => m.StickerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(m => m.ReplyTo).WithMany().HasForeignKey(m => m.ReplyToId).OnDelete(DeleteBehavior.SetNull);
     }
 }

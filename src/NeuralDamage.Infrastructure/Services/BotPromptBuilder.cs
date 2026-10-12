@@ -1,4 +1,5 @@
 using NeuralDamage.Domain;
+using NeuralDamage.Infrastructure.Services.Stickers;
 
 namespace NeuralDamage.Infrastructure.Services;
 
@@ -60,6 +61,27 @@ public static class BotPromptBuilder
             - One language per message. A word from your character's own language now and then is fine, half sentences in another language are not.
             - No stage directions. Never narrate what you do, feel or look like, in parentheses, asterisks or otherwise: no "(sighs)", no "*leans back*", no "(smiles, tired but true)". Only write what the character would actually type into a chat.
             - No em dashes and no semicolons, ever. Use a comma, a full stop or a new message instead.
+            """;
+    }
+
+    /// <summary>
+    /// The system prompt with the stickers the bot can send appended, as
+    /// "name: description" lines. The list is in a stable order and only
+    /// changes with the library, so the prompt still hits the cache. When and
+    /// how often to send one is left to the model and the character.
+    /// </summary>
+    public static string WithStickers(string systemPrompt, IReadOnlyList<BotSticker>? stickers)
+    {
+        if (stickers is not { Count: > 0 })
+            return systemPrompt;
+        var list = string.Join("\n", stickers.Select(s => $"{s.Name}: {s.Description}"));
+        return $"""
+            {systemPrompt.TrimEnd()}
+
+            Stickers (name: what it shows):
+            {list}
+
+            You can send a sticker the way people in a group chat do, whenever it feels right to you: put [sticker: name] on its own line. Stickers others send reach you as [sticker from Name: what it shows].
             """;
     }
 
@@ -247,7 +269,7 @@ public static class BotPromptBuilder
         var content = msg.Content.Length > maxContentChars
             ? msg.Content[..maxContentChars] + "..."
             : msg.Content;
-        if (msg.Attachments.Count == 0)
+        if (msg.Attachments.Count == 0 && msg.Sticker is null)
             return content;
 
         var sender = SenderName(msg);
@@ -255,8 +277,16 @@ public static class BotPromptBuilder
             images?.ContainsKey(a.Id) != true && !string.IsNullOrWhiteSpace(a.Description)
                 ? $"[image from {sender}: {Cut(a.Description.Trim(), MaxDescriptionChars)}]"
                 : $"[image from {sender}]");
+        if (msg.Sticker is { } sticker)
+            lines = lines.Append(StickerLine(sender, sticker));
         return string.Join("\n", new[] { content }.Where(c => c.Length > 0).Concat(lines));
     }
+
+    /// <summary>"[sticker from Alice: cat crying with laughter]", or "[sticker from Alice]" before it has a description.</summary>
+    public static string StickerLine(string sender, Sticker sticker) =>
+        string.IsNullOrWhiteSpace(sticker.Description)
+            ? $"[sticker from {sender}]"
+            : $"[sticker from {sender}: {Cut(sticker.Description.Trim(), MaxDescriptionChars)}]";
 
     private static IEnumerable<Attachment> Ordered(Message msg) =>
         msg.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id);
@@ -265,7 +295,10 @@ public static class BotPromptBuilder
 
     private static string Format(Message msg, Message? previous, bool isTrigger, bool ownTurn, IReadOnlyDictionary<Guid, ImagePart>? images = null)
     {
-        var content = WithImages(msg, images);
+        // The bot's own stickers read the way it sends them, so it learns the format from its own turns.
+        var content = ownTurn && msg.Sticker is { } sticker && msg.Content.Length == 0
+            ? $"[sticker: {sticker.Name}]"
+            : WithImages(msg, images);
         return ownTurn ? content : $"{Header(msg, previous, isTrigger)}: {content}";
     }
 

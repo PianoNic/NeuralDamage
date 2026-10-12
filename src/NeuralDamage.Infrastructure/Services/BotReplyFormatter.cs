@@ -1,6 +1,10 @@
 using System.Text.RegularExpressions;
+using NeuralDamage.Infrastructure.Services.Stickers;
 
 namespace NeuralDamage.Infrastructure.Services;
+
+/// <summary>One message a reply turns into: text, or a sticker.</summary>
+public record ReplyPart(string Text, BotSticker? Sticker = null);
 
 /// <summary>
 /// Turns what a model returned into what a person in a chat would have sent.
@@ -62,11 +66,43 @@ public static partial class BotReplyFormatter
     }
 
     /// <summary>
-    /// Drops lines that are only "[image from Alice]" or "[image from Alice: ...]".
-    /// That is how the history shows pictures, and some models imitate it,
-    /// inventing images nobody sent. A reply of nothing else ends up empty.
+    /// Drops lines that are only "[image from Alice]" or "[image from Alice: ...]",
+    /// or the same for stickers. That is how the history shows them, and some
+    /// models imitate it, inventing images nobody sent. A reply of nothing else
+    /// ends up empty.
     /// </summary>
     public static string StripImageLines(string reply) => ImageLine().Replace(reply, "").Trim();
+
+    /// <summary>
+    /// Pulls "[sticker: name]" out of the reply's parts: each one the bot named
+    /// that <paramref name="find"/> knows becomes a sticker message of its own,
+    /// in place; unknown names are dropped without a trace. Text around a
+    /// sticker in the same part stays, before and after it.
+    /// </summary>
+    public static List<ReplyPart> ExtractStickers(IEnumerable<string> parts, Func<string, BotSticker?> find)
+    {
+        var result = new List<ReplyPart>();
+        foreach (var part in parts)
+        {
+            var at = 0;
+            foreach (Match token in StickerToken().Matches(part))
+            {
+                AddText(result, part[at..token.Index]);
+                if (find(token.Groups[1].Value.Trim()) is { } sticker)
+                    result.Add(new ReplyPart("", sticker));
+                at = token.Index + token.Length;
+            }
+            AddText(result, part[at..]);
+        }
+        return result;
+
+        static void AddText(List<ReplyPart> into, string text)
+        {
+            text = text.Trim();
+            if (text.Length > 0)
+                into.Add(new ReplyPart(text, null));
+        }
+    }
 
     /// <summary>Removes headings, bold/italic markers and list bullets.</summary>
     public static string StripMarkdown(string text)
@@ -118,8 +154,12 @@ public static partial class BotReplyFormatter
     private static partial Regex SpeakerHeader();
 
     // A whole line in the history's picture format, with its line break.
-    [GeneratedRegex(@"^[ \t]*\[image from\b[^\n]*\][ \t]*(?:\r?\n|$)", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^[ \t]*\[(?:image|sticker) from\b[^\n]*\][ \t]*(?:\r?\n|$)", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex ImageLine();
+
+    // "[sticker: name]", wherever the model put it.
+    [GeneratedRegex(@"\[sticker:\s*([^\]\n]{1,64})\]", RegexOptions.IgnoreCase)]
+    private static partial Regex StickerToken();
 
     // A symbol repeated past three ("!!!!!!!!"): what a model that has
     // degenerated sends, hundreds of times over. Nobody types more than three.

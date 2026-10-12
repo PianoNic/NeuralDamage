@@ -10,6 +10,7 @@
 import { BotSummaryDto } from './botSummaryDto';
 import { AttachmentDto } from './attachmentDto';
 import { UserDto } from './userDto';
+import { MessageStickerDto } from './messageStickerDto';
 import { ReactionGroupDto } from './reactionGroupDto';
 import { ReplyInfoDto } from './replyInfoDto';
 
@@ -28,5 +29,6 @@ export interface MessageDto {
     reactions: Array<ReactionGroupDto>;
     replyTo?: ReplyInfoDto;
     attachments: Array<AttachmentDto>;
+    sticker?: MessageStickerDto;
 }
 

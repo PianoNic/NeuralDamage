@@ -19,7 +19,38 @@ public static class MessageMapper
         message.SenderBot?.ToSummaryDto(),
         message.Reactions.ToGroups(),
         message.ReplyTo?.ToReplyInfo(),
-        message.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).Select(a => a.ToDto()).ToList());
+        message.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).Select(a => a.ToDto()).ToList(),
+        message.Sticker?.ToMessageDto());
+
+    public static MessageStickerDto ToMessageDto(this Sticker sticker) => new(
+        sticker.Id,
+        sticker.Name,
+        StickerUrl(sticker.Id),
+        sticker.Width,
+        sticker.Height,
+        sticker.Animated,
+        sticker.Description);
+
+    /// <summary>Requires UploaderUser to be loaded.</summary>
+    public static StickerDto ToDto(this Sticker sticker, bool canEdit) => new(
+        sticker.Id,
+        sticker.Name,
+        StickerUrl(sticker.Id),
+        sticker.ContentType,
+        sticker.Width,
+        sticker.Height,
+        sticker.Animated,
+        sticker.Description,
+        // A run cut short by a restart never clears the flag; past a couple of minutes it is not describing anything.
+        sticker.Describing && sticker.Description is null && DateTime.UtcNow - sticker.UpdatedAt < TimeSpan.FromMinutes(2),
+        sticker.UseCount,
+        sticker.UploaderUserId,
+        sticker.UploaderUser?.DisplayName ?? "Unknown",
+        sticker.CreatedAt,
+        canEdit);
+
+    /// <summary>A sticker's file never changes under its id, so the URL can be cached for good.</summary>
+    public static string StickerUrl(Guid stickerId) => $"/api/stickers/{stickerId}/image";
 
     public static AttachmentDto ToDto(this Attachment attachment) => new(
         attachment.Id,
@@ -56,5 +87,5 @@ public static class MessageMapper
         message.Id,
         message.SenderBot?.Name ?? message.SenderUser?.DisplayName ?? "Unknown",
         message.SenderBotId is not null ? "bot" : "user",
-        message.Content);
+        message.StickerId is not null && message.Content.Length == 0 ? "Sticker" : message.Content);
 }

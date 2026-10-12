@@ -63,6 +63,7 @@ The web app reads the sign-in settings from `GET /api/app` at startup, so none o
 | `OpenRouter__MaxOutputTokens` | `1500` | Output token budget per bot reply. Reasoning models spend part of it thinking, so leave headroom. |
 | `OpenRouter__BaseUrl` | `https://openrouter.ai/api/v1` | Point at a gateway or proxy that speaks the OpenRouter API. |
 | `App__TimeZone` | `Europe/Zurich` | IANA time zone for the time the bots see. They get only the day and part of day ("Wednesday afternoon": night until 5, morning until 12, afternoon until 17, evening until 22) and are told not to bring it up unless it matters. An unknown zone falls back to UTC with a warning in the log. Stored timestamps stay UTC. |
+| `App__Admins` | (none) | Comma-separated sign-in emails of the people who may edit or delete any sticker in the shared library, not only their own. |
 
 Out of the box, bots can only use cheap models whose providers keep no data. A model that fails any of these rules (over a price cap, without a fixed price such as `openrouter/auto`, without a zero-data-retention endpoint, a batch variant, or a model that always reasons while `DisableReasoning` is on) is hidden from the model picker and refused when a bot is created or switched to it. Every reply request also sends the caps as OpenRouter's `provider.max_price` and, with `ZdrOnly`, `provider.zdr`, so a request is never routed to a provider that charges more or retains data.
 
@@ -87,7 +88,7 @@ People can attach PNG, JPEG, WebP and GIF images to a message. Bots on a model t
 | Variable | Default | Description |
 |---|---|---|
 | `OpenRouter__VisionModel` | `google/gemini-2.5-flash-lite` | The describer. It is held to the same policy as the bots (price caps, zero data retention, reasoning off), and `:free` variants are never used. |
-| `Attachments__Path` | `data/attachments` | Where uploads are stored, relative to the app. `compose.yml` mounts the `attachments` volume there. Deleting or clearing a chat deletes its files. |
+| `Attachments__Path` | `data/attachments` | Where uploads are stored, relative to the app. `compose.yml` mounts the `attachments` volume there. Deleting or clearing a chat deletes its files. Stickers go in its `stickers/` folder and stay when a chat is deleted. |
 | `Attachments__MaxBytes` | `10485760` | Largest image, in bytes (10 MB). |
 | `Attachments__MaxPerMessage` | `4` | Most images on one message. |
 | `Attachments__DescriptionWaitSeconds` | `20` | How long a reply waits for a description that is still being written, before text-only bots answer with just "[image from alice]". |

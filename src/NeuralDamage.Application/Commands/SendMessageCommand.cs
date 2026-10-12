@@ -9,7 +9,7 @@ using NeuralDamage.Domain;
 
 namespace NeuralDamage.Application.Commands;
 
-public record SendMessageCommand(Guid ChatId, Guid SenderUserId, string Content, Guid? ReplyToId = null, IReadOnlyList<Guid>? AttachmentIds = null) : ICommand<Result>;
+public record SendMessageCommand(Guid ChatId, Guid SenderUserId, string Content, Guid? ReplyToId = null, IReadOnlyList<Guid>? AttachmentIds = null, Guid? StickerId = null) : ICommand<Result>;
 
 public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IBotResponseOrchestrator botOrchestrator, IBotResponseQueue botQueue, ISender sender, IChatBotState botState) : ICommandHandler<SendMessageCommand, Result>
 {
@@ -21,7 +21,7 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
 
         // Commands act on the chat instead of joining the conversation, so they are never saved
         var attachmentIds = request.AttachmentIds?.Distinct().ToList() ?? [];
-        if (attachmentIds.Count == 0 && SlashCommand.Parse(request.Content) is not null)
+        if (attachmentIds.Count == 0 && request.StickerId is null && SlashCommand.Parse(request.Content) is not null)
             return await sender.Send(new RunSlashCommand(request.ChatId, request.SenderUserId, request.Content), cancellationToken);
 
         if (request.ReplyToId is not null)
@@ -40,6 +40,15 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
         if (attachments.Count != attachmentIds.Count)
             return Result.Failure("An attached image was not found. Attach it again.");
 
+        Sticker? sticker = null;
+        if (request.StickerId is not null)
+        {
+            sticker = await db.Stickers.FirstOrDefaultAsync(s => s.Id == request.StickerId && s.DeletedAt == null, cancellationToken);
+            if (sticker is null)
+                return Result.Failure("That sticker is gone.");
+            sticker.UseCount++;
+        }
+
         // Cancel any pending bot responses for this chat (human interrupted)
         botOrchestrator.CancelPendingResponses(request.ChatId);
         // A new human message lifts /stop (but not /mute)
@@ -50,7 +59,8 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
             ChatId = request.ChatId,
             SenderUserId = request.SenderUserId,
             Content = request.Content,
-            ReplyToId = request.ReplyToId
+            ReplyToId = request.ReplyToId,
+            StickerId = sticker?.Id,
         };
         db.Messages.Add(message);
         foreach (var attachment in attachments)
@@ -64,6 +74,7 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
             .Include(m => m.Reactions).ThenInclude(r => r.User)
             .Include(m => m.Reactions).ThenInclude(r => r.Bot)
             .Include(m => m.Attachments)
+            .Include(m => m.Sticker)
             // Reactions and attachments are both collections; one joined query multiplies them.
             .AsSplitQuery()
             .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)

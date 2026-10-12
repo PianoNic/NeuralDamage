@@ -2,7 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideBot, lucidePlus, lucideSearch } from '@ng-icons/lucide';
+import { lucideBot, lucidePlus, lucideSearch, lucideSticker } from '@ng-icons/lucide';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmKbdImports } from '@spartan-ng/helm/kbd';
 import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
@@ -10,6 +10,7 @@ import { filter, map } from 'rxjs';
 import { AppConfig } from '../../core/app-config';
 import { Logo } from '../../shared/logo';
 import { BotDirectory } from '../bots/bot-directory';
+import { StickerLibrary } from '../stickers/sticker-library';
 import { NewChatDialog } from '../chat/chat-dialogs';
 import { ChatList } from '../chat/chat-list';
 import { AccountMenu } from './account-menu';
@@ -17,7 +18,7 @@ import { ChatNav } from './chat-nav';
 import { SearchPalette } from './search-palette';
 
 /**
- * The sidebar: logo and version, New chat, Search and Bots, the chats, and the account menu. Hosts
+ * The sidebar: logo and version, New chat, Search, Bots and Stickers, the chats, and the account menu. Hosts
  * the page next to it, since helm's inset panel styles itself from the sidebar as its sibling.
  */
 @Component({
@@ -34,7 +35,7 @@ import { SearchPalette } from './search-palette';
     NewChatDialog,
     SearchPalette,
   ],
-  providers: [provideIcons({ lucideBot, lucidePlus, lucideSearch })],
+  providers: [provideIcons({ lucideBot, lucidePlus, lucideSearch, lucideSticker })],
   template: `
     <div hlmSidebarWrapper class="h-svh">
       <hlm-sidebar variant="inset" sidebarWidthMobile="100vw">
@@ -71,6 +72,15 @@ import { SearchPalette } from './search-palette';
                 <div hlmSidebarMenuBadge class="text-muted-foreground">{{ bots.bots().length }}</div>
               }
             </li>
+            <li hlmSidebarMenuItem>
+              <a hlmSidebarMenuButton closeMobileSidebarOnClick routerLink="/stickers" [isActive]="path() === '/stickers'">
+                <ng-icon name="lucideSticker" />
+                <span>Stickers</span>
+              </a>
+              @if (stickers.stickers().length) {
+                <div hlmSidebarMenuBadge class="text-muted-foreground">{{ stickers.stickers().length }}</div>
+              }
+            </li>
           </ul>
         </hlm-sidebar-header>
 
@@ -94,6 +104,7 @@ export class AppSidebar implements OnInit {
   private readonly sidebar = inject(HlmSidebarService);
   private readonly chatList = inject(ChatList);
   protected readonly bots = inject(BotDirectory);
+  protected readonly stickers = inject(StickerLibrary);
 
   /** The running server's release, from `/api/app`. */
   protected readonly version = inject(AppConfig).version;
@@ -112,6 +123,7 @@ export class AppSidebar implements OnInit {
   ngOnInit(): void {
     void this.chatList.start();
     void this.bots.load();
+    void this.stickers.load();
   }
 
   /** On phones the sidebar is a sheet; opening the dialog from it closes the sheet first. */

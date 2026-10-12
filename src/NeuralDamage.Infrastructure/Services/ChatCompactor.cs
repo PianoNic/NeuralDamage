@@ -180,6 +180,7 @@ public class ChatCompactor(
             .Include(m => m.SenderUser)
             .Include(m => m.SenderBot)
             .Include(m => m.Attachments)
+            .Include(m => m.Sticker)
             .AsNoTracking()
             .ToListAsync(ct);
 

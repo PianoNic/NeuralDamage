@@ -30,6 +30,7 @@ builder.Services.AddDbContext<NeuralDamageDbContext>(options => options.UseNpgsq
 // Services
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddSingleton(AppAdmins.FromConfiguration(builder.Configuration));
 builder.Services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 builder.Services.AddSingleton<IChatBotState, ChatBotState>();
 builder.Services.AddScoped<IChatNotificationService, ChatNotificationService>();

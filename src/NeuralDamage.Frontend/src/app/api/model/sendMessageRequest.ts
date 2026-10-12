@@ -13,5 +13,6 @@ export interface SendMessageRequest {
     content: string;
     replyToId?: string | null;
     attachmentIds?: Array<string> | null;
+    stickerId?: string | null;
 }
 
