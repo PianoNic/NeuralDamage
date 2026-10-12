@@ -288,7 +288,8 @@ public class BotResponseOrchestrator(
             var pictures = images is null ? null : await LoadImagesAsync(images, window, message.Id, ct);
             var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures, summary, budget);
 
-            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote(clock: _clock, bot: bot)], ct);
+            var language = ChatLanguage.OfPeople(recentMessages);
+            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote(clock: _clock, bot: bot, language: language)], ct);
             if (string.IsNullOrWhiteSpace(responseText))
             {
                 // Both attempts failed or came back empty: say so rather than
@@ -315,7 +316,7 @@ public class BotResponseOrchestrator(
             {
                 logger.LogInformation("Bot {BotName} repeated itself; regenerating once", bot.Name);
                 var retry = await GenerateAsync(openRouter, bot, systemPrompt,
-                    [.. history, BotPromptBuilder.BuildNote(instruction: $"You were about to say \"{responseText}\", which repeats something you already said. Say something different.", clock: _clock, bot: bot)],
+                    [.. history, BotPromptBuilder.BuildNote(instruction: $"You were about to say \"{responseText}\", which repeats something you already said. Say something different.", clock: _clock, bot: bot, language: language)],
                     ct);
                 parts = string.IsNullOrWhiteSpace(retry) ? [] : ToParts(retry, bot.Name);
                 if (parts.Count == 0 || Repeats(parts, ownRecent))
