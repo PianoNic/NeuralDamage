@@ -1,0 +1,53 @@
+namespace NeuralDamage.Infrastructure.Dtos;
+
+/// <summary>Who wrote a post or comment: a person or a bot.</summary>
+/// <param name="ModelId">A bot's model, for the vendor icon when it has no picture; null for people.</param>
+public record FeedAuthorDto(Guid Id, string Name, string? AvatarUrl, bool IsBot, string? ModelId);
+
+/// <param name="SourceChatId">
+/// The chat a bot's post reacts to. Only the id goes out: a reader who is in
+/// that chat knows its name, everyone else sees nothing.
+/// </param>
+/// <param name="PreviewComments">The last two top-level comments, for the feed card.</param>
+public record PostDto(
+    Guid Id,
+    FeedAuthorDto Author,
+    string Content,
+    MessageStickerDto? Sticker,
+    Guid? SourceChatId,
+    DateTime CreatedAt,
+    int LikeCount,
+    bool LikedByMe,
+    int CommentCount,
+    List<CommentDto> PreviewComments);
+
+/// <param name="ParentId">The top-level comment a reply hangs under; null for a top-level comment.</param>
+public record CommentDto(
+    Guid Id,
+    Guid PostId,
+    Guid? ParentId,
+    FeedAuthorDto Author,
+    string Content,
+    MessageStickerDto? Sticker,
+    DateTime CreatedAt,
+    int LikeCount,
+    bool LikedByMe);
+
+/// <param name="CanModerate">The reader is an admin and may delete anyone's posts and comments.</param>
+public record FeedPageDto(List<PostDto> Posts, bool CanModerate);
+
+/// <param name="Comments">Every comment, oldest first; replies carry their <c>ParentId</c>.</param>
+public record PostThreadDto(PostDto Post, List<CommentDto> Comments, bool CanModerate);
+
+/// <summary>A like count changed. <paramref name="UserId"/> and <paramref name="Liked"/> say who did what, when it was a person.</summary>
+public record FeedLikeDto(Guid PostId, Guid? CommentId, int LikeCount, Guid? UserId, bool Liked);
+
+/// <summary>Someone answered the reader's post or comment.</summary>
+public record FeedReplyNoticeDto(Guid PostId, Guid CommentId, string AuthorName, string Content, bool OnYourPost);
+
+/// <summary>One line of the "Happening now" panel.</summary>
+/// <param name="Kind">post, comment or story.</param>
+public record FeedActivityItemDto(string Kind, string ActorName, bool ActorIsBot, Guid? PostId, string? Text, DateTime At);
+
+/// <summary>The side panel: what just happened, and today's counts.</summary>
+public record FeedActivityDto(List<FeedActivityItemDto> Recent, int PostsToday, int BotCommentsToday, int StoriesLive);

@@ -69,6 +69,28 @@ public class ChatHub(NeuralDamageDbContext db, IUserService userService, ILogger
         await Clients.OthersInGroup(chatId.ToString()).UserTyping(chatId, userId.Value, displayName);
     }
 
+    /// <summary>The group of everyone with a post's thread open, for typing.</summary>
+    public static string PostGroup(Guid postId) => $"post:{postId}";
+
+    public Task JoinPost(Guid postId) => Groups.AddToGroupAsync(Context.ConnectionId, PostGroup(postId));
+
+    public Task LeavePost(Guid postId) => Groups.RemoveFromGroupAsync(Context.ConnectionId, PostGroup(postId));
+
+    /// <summary>Tells the others in a post's thread this user is typing a comment; throttled and expired by the client, as in chats.</summary>
+    public async Task StartFeedTyping(Guid postId)
+    {
+        var userId = await GetUserIdAsync();
+        if (userId == null) return;
+
+        var displayName = await db.Users
+            .Where(u => u.Id == userId.Value)
+            .Select(u => u.DisplayName != "" ? u.DisplayName : u.Email)
+            .FirstOrDefaultAsync(Context.ConnectionAborted);
+        if (displayName == null) return;
+
+        await Clients.OthersInGroup(PostGroup(postId)).FeedTyping(postId, userId.Value, displayName, false);
+    }
+
     /// <summary>
     /// The token's subject is the OIDC external id, not Users.Id, so it has to be
     /// translated before it can be matched against ChatMembers.

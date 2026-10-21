@@ -297,29 +297,31 @@ export interface Suggestion {
           [accept]="imageTypes()"
           (change)="onFilesPicked($event)"
         />
-        <button
-          hlmBtn
-          variant="ghost"
-          size="icon-sm"
-          type="button"
-          aria-label="Attach images"
-          hlmTooltip="Attach images"
-          [disabled]="!chatId()"
-          (click)="fileInput.click()"
-        >
-          <ng-icon name="lucideImagePlus" />
-        </button>
-        <button
-          hlmBtn
-          variant="ghost"
-          size="icon-sm"
-          type="button"
-          aria-label="Commands"
-          hlmTooltip="Commands"
-          (click)="insertTrigger('/')"
-        >
-          <ng-icon name="lucideSlash" />
-        </button>
+        @if (!feed()) {
+          <button
+            hlmBtn
+            variant="ghost"
+            size="icon-sm"
+            type="button"
+            aria-label="Attach images"
+            hlmTooltip="Attach images"
+            [disabled]="!chatId()"
+            (click)="fileInput.click()"
+          >
+            <ng-icon name="lucideImagePlus" />
+          </button>
+          <button
+            hlmBtn
+            variant="ghost"
+            size="icon-sm"
+            type="button"
+            aria-label="Commands"
+            hlmTooltip="Commands"
+            (click)="insertTrigger('/')"
+          >
+            <ng-icon name="lucideSlash" />
+          </button>
+        }
         <button
           hlmBtn
           variant="ghost"
@@ -357,7 +359,7 @@ export interface Suggestion {
             type="button"
             aria-label="Send a sticker"
             hlmTooltip="Stickers"
-            [disabled]="!chatId()"
+            [disabled]="!chatId() && !feed()"
           >
             <ng-icon name="lucideSticker" />
           </button>
@@ -375,7 +377,7 @@ export interface Suggestion {
             [class.text-destructive]="tooLong()"
             [class.text-muted-foreground]="!tooLong()"
           >
-            {{ content().length }} / {{ maxLength }}
+            {{ content().length }} / {{ limit() }}
             @if (tooLong()) {
               <span class="sr-only">Message is too long</span>
             }
@@ -422,6 +424,13 @@ export class Composer {
   protected readonly textareaId = `composer-${Composer.nextId++}`;
   protected readonly listId = `${this.textareaId}-suggestions`;
   protected readonly counterId = `${this.textareaId}-counter`;
+  /**
+   * Outside a chat, on the feed: no images or slash commands, and stickers work without a chat.
+   * @mentions and emoji work the same.
+   */
+  readonly feed = input(false);
+  /** The longest text it sends. */
+  readonly limit = input(MAX_MESSAGE_LENGTH);
   protected readonly maxLength = MAX_MESSAGE_LENGTH;
   private readonly limits = inject(AppConfig).uploadLimits;
   protected readonly imageTypes = computed(() => this.limits().contentTypes.join(','));
@@ -456,8 +465,10 @@ export class Composer {
   protected composing = false;
   private lastSelection = { start: 0, end: 0 };
 
-  protected readonly tooLong = computed(() => this.content().length > MAX_MESSAGE_LENGTH);
-  protected readonly showCounter = computed(() => this.content().length > COUNTER_FROM);
+  protected readonly tooLong = computed(() => this.content().length > this.limit());
+  protected readonly showCounter = computed(
+    () => this.content().length > (this.limit() === MAX_MESSAGE_LENGTH ? COUNTER_FROM : this.limit() * 0.8),
+  );
   private readonly uploading = computed(() => this.images().some((i) => !i.id));
   readonly canSend = computed(
     () =>
@@ -484,7 +495,7 @@ export class Composer {
     const text = this.content();
     if (text === this.dismissedAt()) return [];
 
-    const partial = PARTIAL_COMMAND.exec(text);
+    const partial = this.feed() ? null : PARTIAL_COMMAND.exec(text);
     if (partial) {
       const query = `/${partial[1].toLowerCase()}`;
       return SLASH_COMMANDS.filter((c) => c.command.startsWith(query)).map((c) => ({

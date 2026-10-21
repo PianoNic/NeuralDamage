@@ -104,6 +104,8 @@ describe('visibility rules', () => {
       temperature: 0.9,
       isPublic: false,
       chatId: 'chat-1',
+      feedEnabled: true,
+      maxPostsPerDay: 3,
     });
   });
 

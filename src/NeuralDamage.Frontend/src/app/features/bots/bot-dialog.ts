@@ -20,6 +20,7 @@ import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmRadioGroupImports } from '@spartan-ng/helm/radio-group';
 import { HlmSliderImports } from '@spartan-ng/helm/slider';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
+import { HlmSwitch } from '@spartan-ng/helm/switch';
 import { HlmTextarea } from '@spartan-ng/helm/textarea';
 import { firstValueFrom } from 'rxjs';
 import { BotsService } from '../../api/api/bots.service';
@@ -29,7 +30,9 @@ import { BotDto } from '../../core/models';
 import {
   characterFields,
   clampTemperature,
+  DEFAULT_POSTS_PER_DAY,
   hasModelProblem,
+  MAX_POSTS_PER_DAY,
   MAX_SHORT_DESCRIPTION,
   MAX_TEMPERATURE,
   modelDisplayName,
@@ -75,6 +78,7 @@ interface PictureOffer {
     HlmInput,
     HlmRadioGroupImports,
     HlmSliderImports,
+    HlmSwitch,
     HlmSpinner,
     HlmTextarea,
     MemberAvatar,
@@ -344,6 +348,33 @@ interface PictureOffer {
             </div>
           </div>
 
+          @if (visibility() === 'public') {
+            <div hlmField>
+              <div class="flex items-center justify-between gap-3">
+                <span class="flex flex-col gap-0.5">
+                  <span hlmFieldLabel id="bot-feed-label">Posts on the feed</span>
+                  <span class="text-muted-foreground text-xs">Posts and comments on its own, at plausible times of day.</span>
+                </span>
+                <hlm-switch aria-labelledby="bot-feed-label" [checked]="feedEnabled()" (checkedChange)="feedEnabled.set($event)" />
+              </div>
+              @if (feedEnabled()) {
+                <div class="flex items-center gap-3">
+                  <span class="text-muted-foreground text-sm" id="bot-posts-label">Posts a day</span>
+                  <hlm-slider
+                    class="flex-1"
+                    aria-labelledby="bot-posts-label"
+                    [min]="0"
+                    [max]="maxPostsPerDayLimit"
+                    [step]="1"
+                    [value]="[maxPostsPerDay()]"
+                    (valueChange)="maxPostsPerDay.set($event[0])"
+                  />
+                  <span class="w-8 text-right text-sm tabular-nums" data-testid="posts-per-day">{{ maxPostsPerDay() }}</span>
+                </div>
+              }
+            </div>
+          }
+
           @if (error(); as message) {
             <div hlmAlert variant="destructive" role="alert">
               <ng-icon name="lucideTriangleAlert" />
@@ -396,6 +427,9 @@ export class BotDialog {
   protected readonly modelId = signal<string | null>(null);
   protected readonly temperature = signal(DEFAULT_TEMPERATURE);
   protected readonly maxTemperature = MAX_TEMPERATURE;
+  protected readonly feedEnabled = signal(true);
+  protected readonly maxPostsPerDay = signal(DEFAULT_POSTS_PER_DAY);
+  protected readonly maxPostsPerDayLimit = MAX_POSTS_PER_DAY;
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   /** A picture picked but not uploaded yet: it goes up when the bot is saved. */
@@ -471,6 +505,8 @@ export class BotDialog {
         this.visibility.set(bot && !bot.isPublic ? 'private' : 'public');
         this.modelId.set(bot?.modelId ?? this.catalog.defaultId());
         this.temperature.set(clampTemperature(bot?.temperature ?? DEFAULT_TEMPERATURE));
+        this.feedEnabled.set(bot?.feedEnabled ?? true);
+        this.maxPostsPerDay.set(bot?.maxPostsPerDay ?? DEFAULT_POSTS_PER_DAY);
         this.nameTouched.set(false);
         this.error.set(null);
         this.saving.set(false);
@@ -654,6 +690,8 @@ export class BotDialog {
             personality: this.description().trim(),
             aliases: normalizeAliases(this.aliases()),
             temperature: this.temperature(),
+            feedEnabled: this.feedEnabled(),
+            maxPostsPerDay: this.maxPostsPerDay(),
             // Always sent, so clearing the field goes back to the server default.
             systemPrompt: this.character().trim(),
           }),
@@ -672,6 +710,8 @@ export class BotDialog {
                 modelId,
                 temperature: this.temperature(),
                 systemPrompt: this.character(),
+                feedEnabled: this.feedEnabled(),
+                maxPostsPerDay: this.maxPostsPerDay(),
               },
               this.chatId(),
             ),

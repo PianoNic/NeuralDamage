@@ -22,4 +22,10 @@ public interface IBotDecisionEngine
     /// that must stay quiet (muted, stopped, the sender).
     /// </summary>
     Task<List<BotVerdict>> DecideAsync(Guid chatId, Message message, List<Bot> bots, CancellationToken ct = default);
+
+    /// <summary>
+    /// The same decision anywhere else, such as a feed thread: the caller builds
+    /// what Jev reads, keyed by the names it used for the bots in its state.
+    /// </summary>
+    Task<List<BotVerdict>> DecideAsync(DecisionRound round, List<(string Key, Bot Bot)> keyed, CancellationToken ct = default);
 }

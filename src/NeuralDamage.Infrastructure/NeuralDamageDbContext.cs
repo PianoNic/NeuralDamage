@@ -15,6 +15,9 @@ public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> optio
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<Sticker> Stickers => Set<Sticker>();
     public DbSet<BotSilence> BotSilences => Set<BotSilence>();
+    public DbSet<Post> Posts => Set<Post>();
+    public DbSet<PostComment> PostComments => Set<PostComment>();
+    public DbSet<FeedLike> FeedLikes => Set<FeedLike>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(NeuralDamageDbContext).Assembly);
 

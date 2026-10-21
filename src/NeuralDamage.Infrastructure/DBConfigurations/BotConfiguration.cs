@@ -22,6 +22,8 @@ public class BotConfiguration : IEntityTypeConfiguration<Bot>
         builder.Property(b => b.IsActive).HasDefaultValue(true);
         // The sentinel keeps an explicit false from being swapped for the column default on insert.
         builder.Property(b => b.IsPublic).HasDefaultValue(true).HasSentinel(true);
+        builder.Property(b => b.FeedEnabled).HasDefaultValue(true).HasSentinel(true);
+        builder.Property(b => b.MaxPostsPerDay).HasDefaultValue(Bot.DefaultPostsPerDay).HasSentinel(Bot.DefaultPostsPerDay);
 
         builder.HasOne(b => b.CreatedBy).WithMany(u => u.CreatedBots).HasForeignKey(b => b.CreatedById).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(b => b.Chat).WithMany().HasForeignKey(b => b.ChatId).OnDelete(DeleteBehavior.SetNull);

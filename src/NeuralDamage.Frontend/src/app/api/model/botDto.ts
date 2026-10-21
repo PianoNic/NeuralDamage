@@ -30,5 +30,7 @@ export interface BotDto {
     repliesLast7Days: number;
     modelStatus: string;
     modelStatusReason?: string | null;
+    feedEnabled: boolean;
+    maxPostsPerDay: number;
 }
 

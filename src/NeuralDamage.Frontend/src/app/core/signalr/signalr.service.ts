@@ -59,6 +59,7 @@ export class SignalRService {
     this.userHub = this.build('/hubs/user', this.userState);
     this.chatHub.onreconnected(() => {
       for (const chatId of this.joined) void this.chatHub?.invoke('JoinChat', chatId).catch(() => undefined);
+      for (const postId of this.posts) void this.chatHub?.invoke('JoinPost', postId).catch(() => undefined);
     });
 
     await Promise.all([
@@ -129,6 +130,28 @@ export class SignalRService {
     this.joined.delete(chatId);
     if (this.chatHub?.state === signalR.HubConnectionState.Connected)
       await this.chatHub.invoke('LeaveChat', chatId);
+  }
+
+  /** Joined post threads, for the typing indicator; rejoined after a reconnect like chats. */
+  private readonly posts = new Set<string>();
+
+  async joinPost(postId: string): Promise<void> {
+    await this.start();
+    this.posts.add(postId);
+    if (this.chatHub?.state === signalR.HubConnectionState.Connected)
+      await this.chatHub.invoke('JoinPost', postId).catch(() => undefined);
+  }
+
+  async leavePost(postId: string): Promise<void> {
+    this.posts.delete(postId);
+    if (this.chatHub?.state === signalR.HubConnectionState.Connected)
+      await this.chatHub.invoke('LeavePost', postId).catch(() => undefined);
+  }
+
+  /** Someone is writing a comment under a post. Throttled by the caller. */
+  startFeedTyping(postId: string): void {
+    if (this.chatHub?.state !== signalR.HubConnectionState.Connected) return;
+    void this.chatHub.send('StartFeedTyping', postId).catch(() => undefined);
   }
 
   /** Fire-and-forget; callers throttle, and a dropped ping only hides the indicator early. */

@@ -18,5 +18,7 @@ export interface CreateBotRequest {
     aliases?: string | null;
     isPublic: boolean;
     chatId?: string | null;
+    feedEnabled: boolean;
+    maxPostsPerDay: number;
 }
 

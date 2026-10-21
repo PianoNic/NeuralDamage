@@ -94,6 +94,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<Guid>("CreatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("FeedEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -103,6 +108,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
+
+                    b.Property<int>("MaxPostsPerDay")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3);
 
                     b.Property<string>("ModelId")
                         .IsRequired()
@@ -251,6 +261,53 @@ namespace NeuralDamage.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.FeedLike", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PostId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BotId");
+
+                    b.HasIndex("CommentId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("PostId", "CommentId", "BotId")
+                        .IsUnique()
+                        .HasFilter("\"BotId\" IS NOT NULL");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("PostId", "CommentId", "BotId"), false);
+
+                    b.HasIndex("PostId", "CommentId", "UserId")
+                        .IsUnique()
+                        .HasFilter("\"UserId\" IS NOT NULL");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("PostId", "CommentId", "UserId"), false);
+
+                    b.ToTable("FeedLikes");
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.Message", b =>
                 {
                     b.Property<Guid>("Id")
@@ -299,6 +356,97 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.HasIndex("ChatId", "CreatedAt");
 
                     b.ToTable("Messages");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.Post", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorBotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SourceChatId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("StickerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("SourceChatId");
+
+                    b.HasIndex("StickerId");
+
+                    b.HasIndex("AuthorBotId", "CreatedAt");
+
+                    b.ToTable("Posts");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.PostComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorBotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PostId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("StickerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("StickerId");
+
+                    b.HasIndex("AuthorBotId", "CreatedAt");
+
+                    b.HasIndex("PostId", "CreatedAt");
+
+                    b.ToTable("PostComments");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.Reaction", b =>
@@ -441,6 +589,9 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<DateTime?>("FeedSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -552,6 +703,34 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.FeedLike", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", null)
+                        .WithMany()
+                        .HasForeignKey("BotId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.PostComment", "Comment")
+                        .WithMany("Likes")
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.Post", "Post")
+                        .WithMany("Likes")
+                        .HasForeignKey("PostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NeuralDamage.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Comment");
+
+                    b.Navigation("Post");
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.Message", b =>
                 {
                     b.HasOne("NeuralDamage.Domain.Chat", "Chat")
@@ -587,6 +766,76 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("SenderBot");
 
                     b.Navigation("SenderUser");
+
+                    b.Navigation("Sticker");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.Post", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", "AuthorBot")
+                        .WithMany()
+                        .HasForeignKey("AuthorBotId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.User", "AuthorUser")
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.Chat", "SourceChat")
+                        .WithMany()
+                        .HasForeignKey("SourceChatId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("NeuralDamage.Domain.Sticker", "Sticker")
+                        .WithMany()
+                        .HasForeignKey("StickerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AuthorBot");
+
+                    b.Navigation("AuthorUser");
+
+                    b.Navigation("SourceChat");
+
+                    b.Navigation("Sticker");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.PostComment", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", "AuthorBot")
+                        .WithMany()
+                        .HasForeignKey("AuthorBotId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.User", "AuthorUser")
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.PostComment", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.Post", "Post")
+                        .WithMany("Comments")
+                        .HasForeignKey("PostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NeuralDamage.Domain.Sticker", "Sticker")
+                        .WithMany()
+                        .HasForeignKey("StickerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AuthorBot");
+
+                    b.Navigation("AuthorUser");
+
+                    b.Navigation("Parent");
+
+                    b.Navigation("Post");
 
                     b.Navigation("Sticker");
                 });
@@ -648,6 +897,18 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("Reactions");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.Post", b =>
+                {
+                    b.Navigation("Comments");
+
+                    b.Navigation("Likes");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.PostComment", b =>
+                {
+                    b.Navigation("Likes");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.User", b =>

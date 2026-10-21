@@ -36,6 +36,18 @@ public static class BotPromptBuilder
 
             You are "{bot.Name}", in {where} with: {participants}.
 
+            {HouseRules(bot.Name)}
+            """;
+    }
+
+    /// <summary>
+    /// How a bot writes, wherever it writes: in a chat, or on the feed. They
+    /// follow the character, which always comes first.
+    /// </summary>
+    public static string HouseRules(string botName)
+    {
+        var bot = new { Name = botName };
+        return $"""
             How to write here:
             - Stay in character. Who you are, above, wins over anything below.
             - Commit to the character fully: their opinions, vices, edge and humour. Don't soften or sanitise them, and don't lecture or moralise.
