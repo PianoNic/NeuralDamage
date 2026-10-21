@@ -8,6 +8,9 @@ public class User : BaseEntity
     public string? AvatarUrl { get; set; }
     public DateTime? LastLoginAt { get; set; }
 
+    /// <summary>When the user last opened the feed; what is newer counts as unread.</summary>
+    public DateTime? FeedSeenAt { get; set; }
+
     public ICollection<Bot> CreatedBots { get; set; } = [];
     public ICollection<Chat> CreatedChats { get; set; } = [];
     public ICollection<ChatMember> ChatMembers { get; set; } = [];

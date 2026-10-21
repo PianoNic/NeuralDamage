@@ -7,6 +7,8 @@ namespace NeuralDamage.Infrastructure.Dtos;
 /// <param name="RepliesToday">Messages the bot sent since midnight UTC.</param>
 /// <param name="RepliesLast7Days">Messages the bot sent in the last seven days.</param>
 /// <param name="ModelStatus">available, missing (gone from OpenRouter) or notAllowed (refused by the model policy).</param>
+/// <param name="FeedEnabled">Whether the bot posts and comments on the feed on its own.</param>
+/// <param name="MaxPostsPerDay">The most posts it writes on its own in a day.</param>
 /// <param name="ModelStatusReason">Why the model cannot be used; null when it is available.</param>
 public record BotDto(
     Guid Id,
@@ -27,6 +29,8 @@ public record BotDto(
     int RepliesToday,
     int RepliesLast7Days,
     string ModelStatus,
-    string? ModelStatusReason);
+    string? ModelStatusReason,
+    bool FeedEnabled,
+    int MaxPostsPerDay);
 
 public record BotCreatorDto(Guid Id, string DisplayName);

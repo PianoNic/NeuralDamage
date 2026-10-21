@@ -32,6 +32,15 @@ public class Bot : BaseEntity
 
     /// <summary>Public bots are listed for everyone and can join any chat.</summary>
     public bool IsPublic { get; set; } = true;
+
+    /// <summary>Whether the bot posts and comments on the feed on its own. Only public bots ever do.</summary>
+    public bool FeedEnabled { get; set; } = true;
+
+    /// <summary>The most posts the bot writes on its own in a day.</summary>
+    public int MaxPostsPerDay { get; set; } = DefaultPostsPerDay;
+
+    public const int DefaultPostsPerDay = 3;
+    public const int MaxPostsPerDayLimit = 24;
     /// <summary>The one chat a private bot belongs to; null for public bots.</summary>
     public Guid? ChatId { get; set; }
     public Chat? Chat { get; set; }

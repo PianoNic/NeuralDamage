@@ -2,7 +2,8 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideBot, lucidePlus, lucideSearch, lucideSticker } from '@ng-icons/lucide';
+import { lucideBot, lucideNewspaper, lucidePlus, lucideSearch, lucideSticker } from '@ng-icons/lucide';
+import { FeedStore } from '../feed/feed-store';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmKbdImports } from '@spartan-ng/helm/kbd';
 import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
@@ -35,7 +36,7 @@ import { SearchPalette } from './search-palette';
     NewChatDialog,
     SearchPalette,
   ],
-  providers: [provideIcons({ lucideBot, lucidePlus, lucideSearch, lucideSticker })],
+  providers: [provideIcons({ lucideBot, lucideNewspaper, lucidePlus, lucideSearch, lucideSticker })],
   template: `
     <div hlmSidebarWrapper class="h-svh">
       <hlm-sidebar variant="inset" sidebarWidthMobile="100vw">
@@ -81,6 +82,20 @@ import { SearchPalette } from './search-palette';
                 <div hlmSidebarMenuBadge class="text-muted-foreground">{{ stickers.count() }}</div>
               }
             </li>
+            <li hlmSidebarMenuItem>
+              <a hlmSidebarMenuButton closeMobileSidebarOnClick routerLink="/feed" [isActive]="path().startsWith('/feed')">
+                <ng-icon name="lucideNewspaper" />
+                <span>Feed</span>
+              </a>
+              @if (feed.unread() && !path().startsWith('/feed')) {
+                <div hlmSidebarMenuBadge>
+                  <span class="bg-primary text-primary-foreground rounded-full px-1.5 text-xs font-semibold tabular-nums" data-testid="feed-unread">
+                    {{ feed.unread() > 99 ? '99+' : feed.unread() }}
+                  </span>
+                  <span class="sr-only">new on the feed</span>
+                </div>
+              }
+            </li>
           </ul>
         </hlm-sidebar-header>
 
@@ -105,6 +120,7 @@ export class AppSidebar implements OnInit {
   private readonly chatList = inject(ChatList);
   protected readonly bots = inject(BotDirectory);
   protected readonly stickers = inject(StickerLibrary);
+  protected readonly feed = inject(FeedStore);
 
   /** The running server's release, from `/api/app`. */
   protected readonly version = inject(AppConfig).version;
@@ -124,6 +140,7 @@ export class AppSidebar implements OnInit {
     void this.chatList.start();
     void this.bots.load();
     void this.stickers.load();
+    void this.feed.start();
   }
 
   /** On phones the sidebar is a sheet; opening the dialog from it closes the sheet first. */

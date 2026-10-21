@@ -35,6 +35,32 @@ public static partial class BotReplyFormatter
     }
 
     /// <summary>
+    /// Cleans a model's reply into what would be posted: its own name prefix,
+    /// any lines written for other people and any invented "[image from ...]"
+    /// lines go, then it is split into at most <paramref name="maxParts"/>,
+    /// each "[sticker: name]" becomes a sticker part (or nothing, for a name
+    /// <paramref name="findSticker"/> does not know), and parts that are only
+    /// a stage direction or punctuation are dropped. The same for chat
+    /// messages, feed posts and feed comments.
+    /// </summary>
+    public static List<ReplyPart> ToParts(string reply, string botName, int maxParts, Func<string, BotSticker?> findSticker) =>
+        ExtractStickers(Split(StripImageLines(DropOtherSpeakers(StripOwnName(reply, botName))), maxParts), findSticker)
+            .Where(p => p.Sticker is not null || !IsFiller(p.Text))
+            .ToList();
+
+    /// <summary>
+    /// One post or comment from a reply: its text parts on lines of their own,
+    /// and the first sticker it named. Empty text and no sticker means nothing to post.
+    /// </summary>
+    public static (string Text, BotSticker? Sticker) Single(List<ReplyPart> parts, int maxLength)
+    {
+        var text = string.Join("\n", parts.Where(p => p.Sticker is null).Select(p => p.Text)).Trim();
+        if (text.Length > maxLength)
+            text = text[..maxLength].TrimEnd();
+        return (text, parts.FirstOrDefault(p => p.Sticker is not null)?.Sticker);
+    }
+
+    /// <summary>
     /// Keeps only the bot's own turn. Models that see the history as
     /// "[Name]: text" lines sometimes carry on writing that transcript, putting
     /// words in other people's mouths ("[Alice]: ok got it"). A header at the

@@ -54,8 +54,33 @@ public class BotDecisionEngine(
 
         var keyed = bots.Select((bot, i) => (Key: $"bot_{i}", Bot: bot)).ToList();
         var state = await BuildStateAsync(chatId, message, keyed, ct);
-        var questions = keyed.ToDictionary(k => k.Key, k => Question(k.Key));
-        questions[HealthKey] = HealthQuestion;
+        return await DecideAsync(new DecisionRound(
+            GroupChat,
+            $"message {message.Id}",
+            state,
+            FromBot: message.SenderBotId is not null,
+            Addressed(message, bots).Select(b => b.Id).ToHashSet(),
+            (repliers, token) => RepliesLastMinuteAsync(chatId, repliers, token)), keyed, ct);
+    }
+
+    /// <summary>Where the bots are, for the questions: "this group chat".</summary>
+    public const string GroupChat = "group chat";
+
+    /// <summary>
+    /// The one Jev call and everything after it, wherever the conversation is:
+    /// a chat, or a thread on the feed. The caller builds the state Jev reads
+    /// and says who the message is addressed to and how to count the bots'
+    /// recent replies; the thresholds, the health bands, the fallback and the
+    /// caps are the same everywhere.
+    /// </summary>
+    public async Task<List<BotVerdict>> DecideAsync(DecisionRound round, List<(string Key, Bot Bot)> keyed, CancellationToken ct = default)
+    {
+        if (keyed.Count == 0)
+            return [];
+
+        var state = round.State;
+        var questions = keyed.ToDictionary(k => k.Key, k => Question(k.Key, round.Place));
+        questions[HealthKey] = round.Place == GroupChat ? HealthQuestion : HealthQuestionFor(round.Place);
 
         DecisionsResponse? response;
         try
@@ -64,15 +89,14 @@ public class BotDecisionEngine(
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Decisions call failed for message {MessageId}", message.Id);
+            logger.LogWarning(ex, "Decisions call failed for {Subject}", round.Subject);
             response = null;
         }
 
         // The health only holds back bots answering bots: a person is always
         // answered as usual, which is also what brings the bots back.
-        var fromBot = message.SenderBotId is not null;
         var health = response?.Answers?.GetValueOrDefault(HealthKey) is { } healthAnswer ? Health(healthAnswer) : null;
-        var band = fromBot && health is { } h
+        var band = round.FromBot && health is { } h
             ? h >= ranking.SilentHealth ? HealthBand.Silent : h >= ranking.CautiousHealth ? HealthBand.Cautious : HealthBand.Normal
             : HealthBand.Normal;
         var replyThreshold = band == HealthBand.Cautious ? Math.Max(ranking.ReplyThreshold, ranking.CautiousReplyThreshold) : ranking.ReplyThreshold;
@@ -80,24 +104,24 @@ public class BotDecisionEngine(
         // A person who @mentions bots, or replies to one, is directing the
         // message: only those bots may reply. Jev is still asked about every
         // bot, so the others can react or stay quiet.
-        var addressed = Addressed(message, bots);
+        var addressed = keyed.Where(k => round.Addressed.Contains(k.Bot.Id)).Select(k => k.Bot).ToList();
         if (response?.Answers is not null && addressed.Count > 0)
-            logger.LogInformation("Message {MessageId} is addressed to {Bots}; only they may reply",
-                message.Id, string.Join(", ", addressed.Select(b => b.Name)));
+            logger.LogInformation("{Subject} is addressed to {Bots}; only they may reply",
+                round.Subject, string.Join(", ", addressed.Select(b => b.Name)));
 
         var decided = response?.Answers is { } answers
             ? keyed.Select(k => Map(k.Bot, answers.GetValueOrDefault(k.Key), replyThreshold,
-                mayReply: addressed.Count == 0 || addressed.Contains(k.Bot))).ToList()
-            : Fallback(message, bots);
+                mayReply: addressed.Count == 0 || round.Addressed.Contains(k.Bot.Id))).ToList()
+            : Fallback(round, keyed.Select(k => k.Bot).ToList());
 
         if (response?.Answers is not null)
-            logger.LogInformation("Jev for message {MessageId}: health {Health} ({Band}; {BotMessages} bot messages since a person, {Seconds}s, humans active {HumansActive}); {Answers} (cost {Cost})",
-                message.Id, health?.ToString("F2", CultureInfo.InvariantCulture) ?? "none", band, state.Flow.BotMessagesSinceLastHuman,
+            logger.LogInformation("Jev for {Subject}: health {Health} ({Band}; {BotMessages} bot messages since a person, {Seconds}s, humans active {HumansActive}); {Answers} (cost {Cost})",
+                round.Subject, health?.ToString("F2", CultureInfo.InvariantCulture) ?? "none", band, state.Flow.BotMessagesSinceLastHuman,
                 state.Flow.SecondsSinceLastHuman, state.Flow.HumansActive,
                 string.Join(", ", keyed.Select(k => Describe(k.Bot, response.Answers.GetValueOrDefault(k.Key)))),
                 response.Usage?.Cost);
 
-        decided = await RateCapAsync(chatId, decided, ct);
+        decided = await RateCapAsync(round, decided, ct);
 
         // The safety cap: the likeliest repliers keep their turn. The health
         // band and the per-person budget can lower it.
@@ -122,9 +146,9 @@ public class BotDecisionEngine(
             .ToList();
     }
 
-    public static DecisionQuestion Question(string key) => new(
+    public static DecisionQuestion Question(string key, string place = GroupChat) => new(
         "choice",
-        $"What would the person in `bots.{key}`, going only by their persona, naturally do with `new_message` in this group chat?",
+        $"What would the person in `bots.{key}`, going only by their persona, naturally do with `new_message` in this {place}?",
         Criteria);
 
     public const string HealthKey = "conversation_health";
@@ -137,9 +161,11 @@ public class BotDecisionEngine(
         "The bots are going in circles, repeating themselves, drifting off topic, or drowning out the people.",
     ];
 
-    public static readonly DecisionQuestion HealthQuestion = new(
+    public static readonly DecisionQuestion HealthQuestion = HealthQuestionFor(GroupChat);
+
+    public static DecisionQuestion HealthQuestionFor(string place) => new(
         "score",
-        "How is this group chat going right now, judging `recent_messages`, `new_message` and `flow`?",
+        $"How is this {place} going right now, judging `recent_messages`, `new_message` and `flow`?",
         HealthLevels);
 
     /// <summary>Jev's expected level, or the one its probabilities give when it left the score out.</summary>
@@ -189,13 +215,12 @@ public class BotDecisionEngine(
     /// @mentioned or replied to answer, and nobody reacts. Nothing judges the
     /// conversation then, so a bot's message gets no bot replies at all.
     /// </summary>
-    private List<BotVerdict> Fallback(Message message, List<Bot> bots)
+    private List<BotVerdict> Fallback(DecisionRound round, List<Bot> bots)
     {
-        var addressed = Addressed(message, bots);
         var decided = bots.Select(bot => new BotVerdict(bot,
-            addressed.Contains(bot) ? BotAction.Reply : BotAction.Quiet)).ToList();
-        logger.LogWarning("Jev unavailable for message {MessageId}; only mentioned or replied-to bots answer: {Bots}",
-            message.Id, string.Join(", ", decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot.Name)));
+            round.Addressed.Contains(bot.Id) ? BotAction.Reply : BotAction.Quiet)).ToList();
+        logger.LogWarning("Jev unavailable for {Subject}; only mentioned or replied-to bots answer: {Bots}",
+            round.Subject, string.Join(", ", decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot.Name)));
         return decided;
     }
 
@@ -222,19 +247,13 @@ public class BotDecisionEngine(
     /// replies in the last minute sits this one out. It counts replies, not
     /// messages: only the first part of a split reply carries the reply link.
     /// </summary>
-    private async Task<List<BotVerdict>> RateCapAsync(Guid chatId, List<BotVerdict> decided, CancellationToken ct)
+    private async Task<List<BotVerdict>> RateCapAsync(DecisionRound round, List<BotVerdict> decided, CancellationToken ct)
     {
         var repliers = decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot.Id).ToList();
         if (repliers.Count == 0)
             return decided;
 
-        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-        var counts = await db.Messages
-            .Where(m => m.ChatId == chatId && m.SenderBotId != null && repliers.Contains(m.SenderBotId.Value)
-                && m.ReplyToId != null && m.CreatedAt >= oneMinuteAgo)
-            .GroupBy(m => m.SenderBotId!.Value)
-            .Select(g => new { BotId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(g => g.BotId, g => g.Count, ct);
+        var counts = await round.RepliesLastMinute(repliers, ct);
 
         return decided.Select(d =>
         {
@@ -243,6 +262,18 @@ public class BotDecisionEngine(
             logger.LogInformation("Bot {Bot}: rate capped ({Count} replies in the last minute)", d.Bot.Name, counts[d.Bot.Id]);
             return d with { Action = BotAction.Quiet };
         }).ToList();
+    }
+
+    /// <summary>Replies (messages carrying a reply link) each bot sent in the chat in the last minute.</summary>
+    private Task<Dictionary<Guid, int>> RepliesLastMinuteAsync(Guid chatId, IReadOnlyCollection<Guid> repliers, CancellationToken ct)
+    {
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+        return db.Messages
+            .Where(m => m.ChatId == chatId && m.SenderBotId != null && repliers.Contains(m.SenderBotId.Value)
+                && m.ReplyToId != null && m.CreatedAt >= oneMinuteAgo)
+            .GroupBy(m => m.SenderBotId!.Value)
+            .Select(g => new { BotId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.BotId, g => g.Count, ct);
     }
 
     private async Task<DecisionState> BuildStateAsync(Guid chatId, Message message, List<(string Key, Bot Bot)> keyed, CancellationToken ct)
@@ -291,6 +322,12 @@ public class BotDecisionEngine(
     private static DecisionMessage Said(Message m) =>
         new(SenderName(m), m.SenderBotId is not null, BotPromptBuilder.WithImages(m, maxContentChars: MaxMessageChars));
 
+    /// <summary>A message's text as Jev reads it, cut to the same length wherever it was written.</summary>
+    public static string ForJev(string text) => Trim(text, MaxMessageChars);
+
+    /// <summary>The persona Jev decides a bot from, for callers outside a chat.</summary>
+    public static string PersonaOf(Bot bot) => Persona(bot);
+
     private static string SenderName(Message m) =>
         m.SenderUser?.DisplayName is { Length: > 0 } user ? user : m.SenderBot?.Name ?? "Unknown";
 
@@ -316,6 +353,20 @@ public class BotDecisionEngine(
             ? $"{bot.Name}={choice} {answer.Probabilities?.GetValueOrDefault(choice) ?? answer.Confidence ?? 0:F2}"
             : $"{bot.Name}=no answer";
 }
+
+/// <summary>One decision: what Jev reads and what the rules around it need.</summary>
+/// <param name="Place">Where the bots are, as the questions name it: "group chat", "feed thread".</param>
+/// <param name="Subject">What is decided, for the logs.</param>
+/// <param name="FromBot">The new message is a bot's, so the conversation health may hold the bots back.</param>
+/// <param name="Addressed">The bots a person's @mention or reply directs it at; only they may reply.</param>
+/// <param name="RepliesLastMinute">How many replies each of the given bots wrote here in the last minute, for the rate cap.</param>
+public record DecisionRound(
+    string Place,
+    string Subject,
+    DecisionState State,
+    bool FromBot,
+    IReadOnlySet<Guid> Addressed,
+    Func<IReadOnlyCollection<Guid>, CancellationToken, Task<Dictionary<Guid, int>>> RepliesLastMinute);
 
 /// <summary>The <c>state</c> Jev reads, in the order it is sent.</summary>
 public record DecisionState(

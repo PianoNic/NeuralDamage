@@ -33,6 +33,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/bots/bots-page').then((m) => m.BotsPage),
       },
       {
+        path: 'feed',
+        title: 'Feed · Neural Damage',
+        loadComponent: () => import('./features/feed/feed-page').then((m) => m.FeedPage),
+      },
+      {
+        path: 'feed/:postId',
+        title: 'Post · Neural Damage',
+        loadComponent: () => import('./features/feed/post-thread').then((m) => m.PostThread),
+      },
+      {
         path: 'stickers',
         title: 'Stickers · Neural Damage',
         loadComponent: () => import('./features/stickers/stickers-page').then((m) => m.StickersPage),

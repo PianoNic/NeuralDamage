@@ -17,5 +17,7 @@ export interface UpdateBotRequest {
     temperature?: number | null;
     aliases?: string | null;
     isActive?: boolean | null;
+    feedEnabled?: boolean | null;
+    maxPostsPerDay?: number | null;
 }
 

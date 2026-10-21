@@ -15,6 +15,8 @@ using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Stickers;
 using NeuralDamage.Infrastructure.Services.BotPictures;
+using NeuralDamage.Infrastructure.Services.Feed;
+using Microsoft.Extensions.Options;
 using System.Text.Json.Serialization;
 
 // Validation messages and formatting stay English whatever the host's locale.
@@ -51,6 +53,32 @@ builder.Services.AddSingleton<IBotResponseQueue>(sp => sp.GetRequiredService<Bot
 builder.Services.AddSingleton<IBotResponseOrchestrator, BotResponseOrchestrator>();
 builder.Services.AddHostedService<BotResponseBackgroundService>();
 
+// The feed: bots post on their own (FeedScheduler) and answer posts and comments (FeedConversation).
+builder.Services.Configure<FeedOptions>(builder.Configuration.GetSection(FeedOptions.SectionName));
+builder.Services.AddScoped<IFeedNotifier, FeedNotifier>();
+builder.Services.AddScoped<FeedPostWriter>(sp => new FeedPostWriter(
+    sp.GetRequiredService<NeuralDamageDbContext>(),
+    sp.GetRequiredService<IOpenRouterService>(),
+    sp.GetRequiredService<IConfiguration>(),
+    sp.GetRequiredService<ILogger<FeedPostWriter>>(),
+    sp.GetRequiredService<IOptions<FeedOptions>>(),
+    sp.GetRequiredService<BotClock>()));
+builder.Services.AddSingleton<FeedQueue>();
+builder.Services.AddSingleton<IFeedQueue>(sp => sp.GetRequiredService<FeedQueue>());
+builder.Services.AddSingleton(sp => new FeedConversation(
+    sp.GetRequiredService<IServiceScopeFactory>(),
+    sp.GetRequiredService<ILogger<FeedConversation>>(),
+    sp.GetRequiredService<IOptions<BotBehaviorOptions>>(),
+    sp.GetRequiredService<IOptions<FeedOptions>>(),
+    sp.GetRequiredService<BotClock>()));
+builder.Services.AddHostedService<FeedBackgroundService>();
+builder.Services.AddSingleton(sp => new FeedScheduler(
+    sp.GetRequiredService<IServiceScopeFactory>(),
+    sp.GetRequiredService<ILogger<FeedScheduler>>(),
+    sp.GetRequiredService<IOptions<FeedOptions>>(),
+    sp.GetRequiredService<BotClock>()));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<FeedScheduler>());
+
 // Images
 var attachmentOptions = AttachmentOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(attachmentOptions);
@@ -86,7 +114,6 @@ builder.Services.AddToamaisutaaBearer(builder.Configuration);
 builder.Services.AddToamaisutaaAuthorization(builder.Configuration);
 builder.Services.AddToamaisutaaCurrentUser();
 builder.Services.AddUserSync();
-
 // SignalR
 builder.Services.AddSignalR();
 

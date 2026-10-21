@@ -91,7 +91,15 @@ export interface BotFormValue {
   temperature: number;
   /** The character: the full instructions for how the bot talks and thinks (the API's `systemPrompt`). */
   systemPrompt?: string;
+  /** Whether it posts and comments on the feed on its own (public bots only). */
+  feedEnabled?: boolean;
+  /** Its own posts per day at most. */
+  maxPostsPerDay?: number;
 }
+
+/** The default and the bounds of a bot's own posts per day. */
+export const DEFAULT_POSTS_PER_DAY = 3;
+export const MAX_POSTS_PER_DAY = 24;
 
 /**
  * The character and short description to edit for a bot. Bots from before the short description
@@ -127,6 +135,8 @@ export function toCreateRequest(value: BotFormValue, chatId: string | null | und
     temperature: value.temperature,
     isPublic,
     chatId: chatId || null,
+    feedEnabled: value.feedEnabled ?? true,
+    maxPostsPerDay: value.maxPostsPerDay ?? DEFAULT_POSTS_PER_DAY,
   };
 }
 

@@ -40,7 +40,9 @@ describe('BotDialog', () => {
     const { form } = await open();
 
     const labels = [...form.querySelectorAll('[hlmFieldLabel]')].map((el) => el.textContent?.trim());
-    expect(labels).toEqual(['Name', 'Nicknames', 'Short description', 'Character', 'Visibility', 'Model', 'Temperature']);
+    expect(labels).toEqual(['Name', 'Nicknames', 'Short description', 'Character', 'Visibility', 'Model', 'Temperature', 'Posts on the feed']);
+    // A public bot posts on the feed by default, a few times a day.
+    expect(form.querySelector('[data-testid=posts-per-day]')?.textContent?.trim()).toBe('3');
     expect(form.textContent).not.toContain('Advanced');
     expect(form.textContent).not.toContain('System prompt');
     expect(form.textContent).not.toContain('Personality');

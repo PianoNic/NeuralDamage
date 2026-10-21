@@ -14,7 +14,7 @@ namespace NeuralDamage.Application.Commands;
 /// The chat the new bot joins. Required for a private bot, which is bound to
 /// it for good; optional for a public one. The creator must be a member.
 /// </param>
-public record CreateBotCommand(string Name, string ModelId, string SystemPrompt, string? Personality, double Temperature, string? Aliases, Guid CreatedById, bool IsPublic = true, Guid? ChatId = null) : ICommand<Result<BotDto>>;
+public record CreateBotCommand(string Name, string ModelId, string SystemPrompt, string? Personality, double Temperature, string? Aliases, Guid CreatedById, bool IsPublic = true, Guid? ChatId = null, bool FeedEnabled = true, int MaxPostsPerDay = Bot.DefaultPostsPerDay) : ICommand<Result<BotDto>>;
 
 public class CreateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy, IChatNotificationService notifications) : ICommandHandler<CreateBotCommand, Result<BotDto>>
 {
@@ -45,6 +45,8 @@ public class CreateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             Aliases = request.Aliases,
             CreatedById = request.CreatedById,
             IsPublic = request.IsPublic,
+            FeedEnabled = request.FeedEnabled,
+            MaxPostsPerDay = request.MaxPostsPerDay,
             ChatId = request.IsPublic ? null : request.ChatId
         };
         db.Bots.Add(bot);

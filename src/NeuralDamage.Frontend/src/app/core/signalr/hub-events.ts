@@ -1,4 +1,13 @@
-import { ChatDetailDto, ChatDto, ChatMemberDto, MessageDto, ReactionGroupDto } from '../models';
+import {
+  ChatDetailDto,
+  ChatDto,
+  ChatMemberDto,
+  CommentDto,
+  FeedLikeDto,
+  MessageDto,
+  PostDto,
+  ReactionGroupDto,
+} from '../models';
 
 /**
  * The hub payloads, which OpenAPI does not describe — it only covers HTTP, so
@@ -26,6 +35,25 @@ export interface ChatHubEvents {
   SystemMessage: [message: SystemMessage];
   /** An image on a sent message got its description (alt text and lightbox caption). */
   AttachmentDescribed: [chatId: string, messageId: string, attachmentId: string, description: string];
+
+  // The feed. Posts, comments and likes reach everyone; typing only those with the thread open
+  // (JoinPost); FeedReply only the person answered.
+  FeedPostNew: [post: PostDto];
+  FeedPostDeleted: [postId: string];
+  FeedCommentNew: [comment: CommentDto];
+  FeedCommentDeleted: [postId: string, commentId: string];
+  FeedLikeUpdated: [like: FeedLikeDto];
+  FeedTyping: [postId: string, authorId: string, name: string, isBot: boolean];
+  FeedReply: [notice: FeedReplyNoticeDto];
+}
+
+/** Mirrors `FeedReplyNoticeDto`, which only travels over the hub: someone answered your post or comment. */
+export interface FeedReplyNoticeDto {
+  postId: string;
+  commentId: string;
+  authorName: string;
+  content: string;
+  onYourPost: boolean;
 }
 
 export interface SystemMessage {

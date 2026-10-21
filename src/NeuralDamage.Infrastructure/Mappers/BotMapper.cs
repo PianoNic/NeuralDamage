@@ -22,7 +22,9 @@ public static class BotMapper
             b.Messages.Count(m => m.CreatedAt >= today),
             b.Messages.Count(m => m.CreatedAt >= weekAgo),
             ModelStatus.Available,
-            null));
+            null,
+            b.FeedEnabled,
+            b.MaxPostsPerDay));
     }
 
     public static BotDto WithModelStatus(this BotDto bot, Func<string, ModelStatus> lookup)

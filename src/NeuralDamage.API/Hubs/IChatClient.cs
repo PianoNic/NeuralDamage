@@ -16,4 +16,13 @@ public interface IChatClient
     Task BotResponseCancelled(Guid chatId);
     Task SystemMessage(SystemMessageDto message);
     Task AttachmentDescribed(Guid chatId, Guid messageId, Guid attachmentId, string description);
+
+    // The feed: posts, comments and likes go to everyone, typing to the post's thread, replies to one user.
+    Task FeedPostNew(PostDto post);
+    Task FeedPostDeleted(Guid postId);
+    Task FeedCommentNew(CommentDto comment);
+    Task FeedCommentDeleted(Guid postId, Guid commentId);
+    Task FeedLikeUpdated(FeedLikeDto like);
+    Task FeedTyping(Guid postId, Guid authorId, string name, bool isBot);
+    Task FeedReply(FeedReplyNoticeDto notice);
 }

@@ -482,8 +482,16 @@ public class BotResponseOrchestrator(
     /// <summary>
     /// Generates a reply, or returns empty when the model gives nothing usable.
     /// </summary>
-    private async Task<string> GenerateAsync(IOpenRouterService openRouter, Bot bot, string systemPrompt, List<ChatMessage> history, CancellationToken ct)
+    private Task<string> GenerateAsync(IOpenRouterService openRouter, Bot bot, string systemPrompt, List<ChatMessage> history, CancellationToken ct) =>
+        GenerateAsync(openRouter, bot.Name, bot.ModelId, bot.Temperature, systemPrompt, history, logger, ct);
+
+    /// <summary>
+    /// A model's answer in two tries, the second one cooler, or empty when
+    /// neither gave anything usable. Shared by chat replies and the feed.
+    /// </summary>
+    public static async Task<string> GenerateAsync(IOpenRouterService openRouter, string botName, string modelId, double temperature, string systemPrompt, List<ChatMessage> history, ILogger logger, CancellationToken ct)
     {
+        var bot = new { Name = botName, ModelId = modelId, Temperature = temperature };
         // Sampling is non-deterministic and a model run hot will occasionally
         // return nothing at all, so one empty result is worth a second attempt
         // before giving up - otherwise the bot just looks broken to the person
@@ -623,11 +631,7 @@ public class BotResponseOrchestrator(
     /// have), and parts that are only a stage direction or punctuation are dropped.
     /// </summary>
     private List<ReplyPart> ToParts(string reply, string botName, StickerCatalog stickers) =>
-        BotReplyFormatter.ExtractStickers(
-                BotReplyFormatter.Split(BotReplyFormatter.StripImageLines(BotReplyFormatter.DropOtherSpeakers(BotReplyFormatter.StripOwnName(reply, botName))), _options.MaxReplyParts),
-                stickers.Find)
-            .Where(p => p.Sticker is not null || !BotReplyFormatter.IsFiller(p.Text))
-            .ToList();
+        BotReplyFormatter.ToParts(reply, botName, _options.MaxReplyParts, stickers.Find);
 
     /// <summary>Only the text counts: sending a sticker again is not saying the same thing twice.</summary>
     private static bool Repeats(List<ReplyPart> parts, List<string> ownRecent)

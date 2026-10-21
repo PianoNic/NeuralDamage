@@ -17,6 +17,7 @@ public class CreateBotValidator : AbstractValidator<CreateBotCommand>
         RuleFor(x => x.Personality).NotEmpty().WithMessage(NoShortDescription)
             .Must(FitsAShortDescription).WithMessage(TooLongShortDescription);
         RuleFor(x => x.Temperature).InclusiveBetween(0.0, Bot.MaxTemperature);
+        RuleFor(x => x.MaxPostsPerDay).InclusiveBetween(0, Bot.MaxPostsPerDayLimit);
     }
 
     /// <summary>Measured trimmed, as it is saved.</summary>
