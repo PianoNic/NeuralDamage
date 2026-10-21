@@ -1,5 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronLeft, lucideHeart, lucideTrash2 } from '@ng-icons/lucide';
@@ -252,6 +253,22 @@ export class PostThread {
       const id = this.postId();
       untracked(() => void this.load(id));
     });
+
+    this.signalr.reconnected$.pipe(takeUntilDestroyed()).subscribe(() => void this.refresh());
+  }
+
+  /** After a reconnect: comments and likes sent meanwhile are lost, and anyone typing has stopped. */
+  private async refresh(): Promise<void> {
+    const id = this.postId();
+    this.typing.set(new Map());
+    try {
+      const thread = await firstValueFrom(this.api.apiFeedPostsPostIdGet(id));
+      if (id !== this.postId()) return;
+      this.post.set(thread.post);
+      this.comments.set(thread.comments);
+    } catch {
+      // The thread keeps what it shows; a deleted post arrives as FeedPostDeleted or a 404 on reload.
+    }
   }
 
   private async load(id: string): Promise<void> {

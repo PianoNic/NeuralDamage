@@ -84,6 +84,57 @@ public class GetMessagesHandlerTests
     }
 
     [Test]
+    public async Task Handle_After_ReturnsOnlyNewerMessagesInChronologicalOrder()
+    {
+        var (db, user, chat) = await SetupChatWithMessages(10);
+        using var _ = db;
+
+        var handler = new GetMessagesHandler(db);
+        var all = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id), CancellationToken.None);
+        var cursor = all.Value![6].CreatedAt;
+
+        var result = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, After: cursor), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.Select(m => m.Content).ToList())
+            .IsEquivalentTo(new[] { "Message 7", "Message 8", "Message 9" }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    [Test]
+    public async Task Handle_After_PagesForwardFromTheCursor()
+    {
+        var (db, user, chat) = await SetupChatWithMessages(10);
+        using var _ = db;
+
+        var handler = new GetMessagesHandler(db);
+        var all = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id), CancellationToken.None);
+
+        // A gap longer than one page comes back oldest first, so the next page continues from its end.
+        var first = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, Limit: 3, After: all.Value![1].CreatedAt), CancellationToken.None);
+        var second = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, Limit: 3, After: first.Value![^1].CreatedAt), CancellationToken.None);
+
+        await Assert.That(first.Value.Select(m => m.Content).ToList())
+            .IsEquivalentTo(new[] { "Message 2", "Message 3", "Message 4" }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(second.Value!.Select(m => m.Content).ToList())
+            .IsEquivalentTo(new[] { "Message 5", "Message 6", "Message 7" }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    [Test]
+    public async Task Handle_After_NewestMessage_ReturnsEmpty()
+    {
+        var (db, user, chat) = await SetupChatWithMessages(3);
+        using var _ = db;
+
+        var handler = new GetMessagesHandler(db);
+        var all = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id), CancellationToken.None);
+
+        var result = await handler.Handle(new GetMessagesQuery(chat.Id, user.Id, After: all.Value![^1].CreatedAt), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!).IsEmpty();
+    }
+
+    [Test]
     public async Task Handle_NonMember_ReturnsFailure()
     {
         var (db, user, chat) = await SetupChatWithMessages(1);

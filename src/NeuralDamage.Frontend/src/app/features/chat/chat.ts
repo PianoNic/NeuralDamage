@@ -11,6 +11,7 @@ import {
   viewChild,
   WritableSignal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { toast } from '@spartan-ng/brain/sonner';
@@ -40,6 +41,7 @@ import { ChatHeader } from './chat-header';
 import { ChatList } from './chat-list';
 import { Composer } from './composer';
 import {
+  mergeMessages,
   toChatMember,
   toChatMembers,
   toMessage,
@@ -53,6 +55,12 @@ import { StickerLibrary } from '../stickers/sticker-library';
 
 /** Messages per request, both for the first page and for each older page. */
 const PAGE_SIZE = 50;
+
+/** The API's largest page, for reading forward through what was missed while disconnected. */
+const CATCH_UP_PAGE_SIZE = 100;
+
+/** Stops a catch-up after this many pages; the rest is a reload away. */
+const CATCH_UP_MAX_PAGES = 10;
 
 /**
  * The backend re-sends BotTyping every ~3s while a bot works, and clients send StartTyping at most
@@ -289,6 +297,8 @@ export class Chat implements OnDestroy {
       const name = this.chat()?.name;
       this.title.setTitle(name ? `${name} · Neural Damage` : 'Neural Damage');
     });
+
+    this.signalr.reconnected$.pipe(takeUntilDestroyed()).subscribe(() => void this.catchUp());
   }
 
   ngOnDestroy(): void {
@@ -410,6 +420,51 @@ export class Chat implements OnDestroy {
     } catch (error) {
       toastApiError(error, { fallback: 'Could not update the reaction.' });
     }
+  }
+
+  /**
+   * Events sent while this client was disconnected are lost, so after a reconnect the chat is read
+   * again: its details and members, the newest page (for reactions and descriptions that changed),
+   * and everything after the newest message shown, so a gap longer than a page is filled too.
+   */
+  private async catchUp(): Promise<void> {
+    const chatId = this.currentChatId;
+    if (!chatId || this.loading()) return;
+    // Anyone typing before the outage has long stopped, and no "stopped" event arrived.
+    this.resetTyping();
+
+    // Side by side: the details can be slow on a server that has just started.
+    await Promise.all([this.catchUpDetails(chatId), this.catchUpMessages(chatId)]).catch((error) => {
+      // Removed from the chat or the chat deleted while away: the API no longer lets this user read it.
+      if (error instanceof HttpErrorResponse && (error.status === 400 || error.status === 404))
+        this.onChatGone(chatId);
+    });
+  }
+
+  private async catchUpDetails(chatId: string): Promise<void> {
+    const chat = await firstValueFrom(this.chatsApi.apiChatsChatIdGet(chatId));
+    if (chatId !== this.currentChatId) return;
+    this.chat.set(chat);
+    this.members.set(toChatMembers(chat.members));
+  }
+
+  private async catchUpMessages(chatId: string): Promise<void> {
+    const fetched = toMessages(
+      await firstValueFrom(this.messagesApi.apiChatsChatIdMessagesGet(chatId, PAGE_SIZE)),
+    );
+    const newest = this.messages().at(-1);
+    if (newest && !fetched.some((m) => m.id === newest.id)) {
+      let after = newest.createdAt;
+      for (let page = 0; page < CATCH_UP_MAX_PAGES; page++) {
+        const dtos = await firstValueFrom(
+          this.messagesApi.apiChatsChatIdMessagesGet(chatId, CATCH_UP_PAGE_SIZE, undefined, after),
+        );
+        fetched.push(...toMessages(dtos));
+        if (dtos.length < CATCH_UP_PAGE_SIZE) break;
+        after = dtos[dtos.length - 1].createdAt;
+      }
+    }
+    if (chatId === this.currentChatId) this.messages.update((list) => mergeMessages(list, fetched));
   }
 
   private markTyping(target: WritableSignal<ReadonlyMap<string, string>>, id: string, name: string) {

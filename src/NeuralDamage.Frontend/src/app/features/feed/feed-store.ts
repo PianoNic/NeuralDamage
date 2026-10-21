@@ -53,11 +53,23 @@ export class FeedStore {
       this.posts.update((list) => list.map((p) => withLike(p, like, this.me))),
     );
     this.signalr.onChatEvent('FeedReply', (notice) => this.onReply(notice));
+    this.signalr.reconnected$.subscribe(() => void this.catchUp());
     void this.signalr.start();
     try {
       this.unread.set(await firstValueFrom(this.api.apiFeedUnreadGet()));
     } catch {
       // The badge stays empty.
+    }
+  }
+
+  /** Posts, comments and likes sent while disconnected are lost; read the feed and the badge again. */
+  private async catchUp(): Promise<void> {
+    if (this.loadedOnce) void this.loadFirst();
+    if (this.open()) return;
+    try {
+      this.unread.set(await firstValueFrom(this.api.apiFeedUnreadGet()));
+    } catch {
+      // The badge keeps what it had.
     }
   }
 

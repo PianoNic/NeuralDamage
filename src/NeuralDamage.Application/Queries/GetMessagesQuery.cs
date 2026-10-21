@@ -9,7 +9,12 @@ using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Application.Queries;
 
-public record GetMessagesQuery(Guid ChatId, Guid RequestingUserId, int Limit = 50, DateTime? Before = null) : IQuery<Result<List<MessageDto>>>;
+/// <summary>
+/// A page of a chat's messages, in chronological order. With <see cref="Before"/> it is the newest
+/// page older than that point (scrolling back); with <see cref="After"/> it is the oldest page newer
+/// than it, which is how a client catches up on what it missed while disconnected.
+/// </summary>
+public record GetMessagesQuery(Guid ChatId, Guid RequestingUserId, int Limit = 50, DateTime? Before = null, DateTime? After = null) : IQuery<Result<List<MessageDto>>>;
 
 public class GetMessagesHandler(NeuralDamageDbContext db) : IQueryHandler<GetMessagesQuery, Result<List<MessageDto>>>
 {
@@ -25,11 +30,17 @@ public class GetMessagesHandler(NeuralDamageDbContext db) : IQueryHandler<GetMes
 
         if (request.Before is not null)
             query = query.Where(m => m.CreatedAt < request.Before);
+        if (request.After is not null)
+            query = query.Where(m => m.CreatedAt > request.After);
 
         var limit = Math.Clamp(request.Limit, 1, 100);
 
-        var messages = await query
-            .OrderByDescending(m => m.CreatedAt)
+        // Catching up reads forward from the cursor, so a gap longer than one page is filled oldest first.
+        var ordered = request.After is not null
+            ? query.OrderBy(m => m.CreatedAt)
+            : query.OrderByDescending(m => m.CreatedAt);
+
+        var messages = await ordered
             .Take(limit)
             .Include(m => m.SenderUser)
             .Include(m => m.SenderBot)
@@ -44,7 +55,8 @@ public class GetMessagesHandler(NeuralDamageDbContext db) : IQueryHandler<GetMes
             .ToListAsync(cancellationToken);
 
         // Return in chronological order
-        messages.Reverse();
+        if (request.After is null)
+            messages.Reverse();
 
         return Result<List<MessageDto>>.Success(messages.Select(m => m.ToDto()).ToList());
     }

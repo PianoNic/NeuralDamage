@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { AttachmentsService } from '../../api/api/attachments.service';
 import { FeedService } from '../../api/api/feed.service';
 import { AuthService } from '../../core/auth/auth.service';
@@ -62,6 +62,7 @@ function fakeHub() {
       joinPost: () => Promise.resolve(),
       leavePost: () => Promise.resolve(),
       startFeedTyping: () => undefined,
+      reconnected$: new Subject<{ since: number }>(),
     },
   };
 }

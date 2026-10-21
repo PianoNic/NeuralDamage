@@ -87,3 +87,16 @@ export function withDescription(
   };
   return next;
 }
+
+/**
+ * Folds messages fetched after a reconnect into the ones shown: a fetched copy replaces the shown one
+ * (its reactions and descriptions are newer), the rest are added, and the result is oldest first.
+ * Timestamps are compared as dates, since the API does not pad fractional seconds to one width.
+ */
+export function mergeMessages(current: Message[], fetched: readonly Message[]): Message[] {
+  if (fetched.length === 0) return current;
+  const byId = new Map(current.map((m) => [m.id, m]));
+  for (const message of fetched) byId.set(message.id, message);
+  // The sort is stable, so messages sharing a timestamp keep their order.
+  return [...byId.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+}
