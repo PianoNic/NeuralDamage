@@ -2,9 +2,16 @@ import { computed, inject, Service, signal } from '@angular/core';
 import { toast } from '@spartan-ng/brain/sonner';
 import { firstValueFrom } from 'rxjs';
 import { ChatsService } from '../../api/api/chats.service';
+import { MessagesService } from '../../api/api/messages.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { ChatDetailDto, ChatDto, MessageDto } from '../../core/models';
-import { SignalRService } from '../../core/signalr/signalr.service';
+import { Reconnected, SignalRService } from '../../core/signalr/signalr.service';
+
+/** Slack for the browser's clock against the server's when asking what arrived during an outage. */
+const CLOCK_SLACK_MS = 60_000;
+
+/** Message ids remembered for de-duplicating the unread count; old ones fall out first. */
+const SEEN_LIMIT = 2_000;
 
 /**
  * The signed-in user's chats, newest activity first, kept live from the hubs. Also counts messages
@@ -13,6 +20,7 @@ import { SignalRService } from '../../core/signalr/signalr.service';
 @Service()
 export class ChatList {
   private readonly api = inject(ChatsService);
+  private readonly messagesApi = inject(MessagesService);
   private readonly signalr = inject(SignalRService);
   private readonly auth = inject(AuthService);
 
@@ -35,6 +43,9 @@ export class ChatList {
   /** Chats this user deleted, so their own deletion does not read as the chat vanishing on them. */
   private readonly deletedHere = new Set<string>();
 
+  /** Messages already counted, so the catch-up after a reconnect does not count them twice. */
+  private readonly seen = new Set<string>();
+
   private started = false;
 
   async start(): Promise<void> {
@@ -46,13 +57,19 @@ export class ChatList {
     this.signalr.onChatEvent('ChatUpdated', this.upsert);
     this.signalr.onChatEvent('ChatDeleted', this.drop);
     this.signalr.onChatEvent('MessageNew', this.onMessage);
+    this.signalr.reconnected$.subscribe((event) => void this.catchUp(event));
     await this.reload();
     void this.signalr.start();
   }
 
   async reload(): Promise<void> {
     try {
-      this.list.set(await firstValueFrom(this.api.apiChatsGet()));
+      const fresh = await firstValueFrom(this.api.apiChatsGet());
+      // The server only moves updatedAt on a rename; the activity seen here is newer.
+      this.list.update((list) => {
+        const known = new Map(list.map((c) => [c.id, c.updatedAt]));
+        return fresh.map((chat) => ({ ...chat, updatedAt: later(chat.updatedAt, known.get(chat.id)) }));
+      });
     } catch {
       toast.error('Could not load your chats.');
     } finally {
@@ -125,12 +142,42 @@ export class ChatList {
     this.markRead(chatId);
   };
 
+  /**
+   * After an outage: chats created, joined or left meanwhile come with a fresh list, and messages
+   * that arrived in each chat since the outage began move it up and count as unread.
+   */
+  private async catchUp({ since }: Reconnected): Promise<void> {
+    await this.reload();
+    const after = new Date(since - CLOCK_SLACK_MS).toISOString();
+    await Promise.all(
+      this.list().map(async (chat) => {
+        try {
+          const missed = await firstValueFrom(
+            this.messagesApi.apiChatsChatIdMessagesGet(chat.id, 100, undefined, after),
+          );
+          missed.forEach(this.onMessage);
+        } catch {
+          // The next live message or reload brings this chat up to date.
+        }
+      }),
+    );
+  }
+
   private readonly onMessage = (message: MessageDto) => {
+    if (this.seen.has(message.id)) return;
+    this.seen.add(message.id);
+    if (this.seen.size > SEEN_LIMIT) this.seen.delete(this.seen.values().next().value!);
     this.list.update((list) =>
-      list.map((c) => (c.id === message.chatId ? { ...c, updatedAt: message.createdAt } : c)),
+      list.map((c) =>
+        c.id === message.chatId ? { ...c, updatedAt: later(c.updatedAt, message.createdAt) } : c,
+      ),
     );
     const mine = message.senderUserId != null && message.senderUserId === this.auth.user()?.id;
     if (mine || message.chatId === this.activeId()) return;
     this.unread.update((map) => new Map(map).set(message.chatId, (map.get(message.chatId) ?? 0) + 1));
   };
+}
+
+function later(a: string, b: string | undefined): string {
+  return b && Date.parse(b) > Date.parse(a) ? b : a;
 }

@@ -13,7 +13,9 @@ import { classes } from '@spartan-ng/helm/utils';
     role: 'status',
     '[attr.aria-label]': 'ariaLabel()',
   },
-  template: ` <ng-icon [name]="icon()" /> `,
+  // The icon fills the host's box, so whatever size a caller gives the host, the turning box is the
+  // icon itself: square, and centred on its own middle.
+  template: `<ng-icon class="block" size="100%" [name]="icon()" />`,
 })
 export class HlmSpinner {
   /**
@@ -26,10 +28,9 @@ export class HlmSpinner {
   public readonly ariaLabel = input<string>('Loading', { alias: 'aria-label' });
 
   constructor() {
-    // size-fit: a flex column would otherwise stretch the host across its width, and the rotation
-    // would swing the icon around the middle of that wide box instead of turning it in place.
-    classes(
-      () => 'inline-flex size-fit shrink-0 text-[length:--spacing(4)] motion-safe:animate-spin',
-    );
+    // A square inline-block that spins about its centre. A size class from the caller (size-3)
+    // replaces size-4 and the icon follows; before, the icon kept its own 16px inside a smaller box
+    // and swung around the box's middle instead of its own.
+    classes(() => 'inline-block size-4 shrink-0 origin-center leading-none motion-safe:animate-spin');
   }
 }

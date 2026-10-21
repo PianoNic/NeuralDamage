@@ -31,10 +31,10 @@ public class MessagesController(ISender sender, IUserService userService) : Cont
 
     [HttpGet]
     [ProducesResponseType<List<MessageDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<MessageDto>>> GetMessages(Guid chatId, [FromQuery] int limit = 50, [FromQuery] DateTime? before = null, CancellationToken ct = default)
+    public async Task<ActionResult<List<MessageDto>>> GetMessages(Guid chatId, [FromQuery] int limit = 50, [FromQuery] DateTime? before = null, [FromQuery] DateTime? after = null, CancellationToken ct = default)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new GetMessagesQuery(chatId, userId, limit, before), ct);
+        var result = await sender.Send(new GetMessagesQuery(chatId, userId, limit, before, after), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 }
