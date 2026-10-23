@@ -79,6 +79,9 @@ public sealed class FeedHarness : IDisposable
             sp.GetRequiredService<NeuralDamageDbContext>(), sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>(),
             SharedRenderer, sp.GetRequiredService<NeuralDamage.Infrastructure.Services.BotPictures.IBotPictureFinder>(), notifier,
             NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>.Instance));
+        services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Stories.ImageComposer(
+            sp.GetRequiredService<NeuralDamageDbContext>(), storage, sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>(),
+            NullLogger<NeuralDamage.Infrastructure.Services.Stories.ImageComposer>.Instance));
         services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Stories.StoryWriter(
             sp.GetRequiredService<NeuralDamageDbContext>(), openRouter, sp.GetRequiredService<FeedPostWriter>(),
             sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>(),

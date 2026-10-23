@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, inject, Injectable, input, output, signal } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideImage, lucideSparkles, lucideX } from '@ng-icons/lucide';
+import { lucideImage, lucidePencil, lucideSparkles, lucideX } from '@ng-icons/lucide';
 import { PkAuthImage } from '@prompt-kit/auth-image';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmButton } from '@spartan-ng/helm/button';
@@ -14,7 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ImagesService } from '../../api/api/images.service';
 import { toastApiError } from '../../core/http-errors';
-import { BotDto, GeneratedImageDto } from '../../core/models';
+import { BotDto, GeneratedImageDto, StorySpec } from '../../core/models';
 
 /** How often a picture being drawn is asked after. */
 export const POLL_MS = 2000;
@@ -28,6 +28,8 @@ export interface ImageRequest {
   faceBotId: string | null;
   /** A story's 9:16 background rather than a square picture for a post. */
   forStory?: boolean;
+  /** The background of a picture being composed: drawn in its shape. */
+  format?: string;
 }
 
 /**
@@ -41,6 +43,8 @@ export class ImageDraft {
   readonly image = signal<GeneratedImageDto | null>(null);
   readonly pending = computed(() => this.image()?.status === 'Pending');
   readonly ready = computed(() => this.image()?.status === 'Ready');
+  /** A composed picture is being rendered. */
+  readonly composing = signal(false);
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -50,12 +54,37 @@ export class ImageDraft {
   async generate(request: ImageRequest): Promise<void> {
     const previous = this.image();
     try {
-      const image = await firstValueFrom(this.api.apiImagesPost({ prompt: request.prompt, faceBotId: request.faceBotId, forStory: request.forStory ?? false }));
+      const image = await firstValueFrom(
+        this.api.apiImagesPost({
+          prompt: request.prompt,
+          faceBotId: request.faceBotId,
+          forStory: request.forStory ?? false,
+          ...(request.format ? { format: request.format } : {}),
+        }),
+      );
       if (previous) void this.discardOnServer(previous.id);
       this.image.set(image);
       this.schedule(image.id);
     } catch (error) {
       toastApiError(error, { fallback: 'Could not start the picture.' });
+    }
+  }
+
+  /** Renders layers into the post's picture, in place of any picture before; true when it worked. */
+  async compose(spec: StorySpec): Promise<boolean> {
+    const previous = this.image();
+    this.composing.set(true);
+    try {
+      const image = await firstValueFrom(this.api.apiImagesComposePost({ spec }));
+      this.stop();
+      if (previous) void this.discardOnServer(previous.id);
+      this.image.set(image);
+      return true;
+    } catch (error) {
+      toastApiError(error, { fallback: 'Could not make the picture.' });
+      return false;
+    } finally {
+      this.composing.set(false);
     }
   }
 
@@ -194,6 +223,8 @@ export class GenerateImage {
   readonly label = input<string | null>(null);
   /** For a story's background: 9:16. */
   readonly forStory = input(false);
+  /** For a composed picture's background, drawn in its shape (`post-4x5`, `post-1x1`). */
+  readonly format = input<string | null>(null);
   readonly generate = output<ImageRequest>();
 
   private static nextId = 0;
@@ -211,7 +242,8 @@ export class GenerateImage {
   protected submit(ctx: { close: () => void }): void {
     const prompt = this.prompt().trim();
     if (!prompt) return;
-    this.generate.emit({ prompt, faceBotId: this.face() || null, forStory: this.forStory() });
+    const format = this.format();
+    this.generate.emit({ prompt, faceBotId: this.face() || null, forStory: this.forStory(), ...(format ? { format } : {}) });
     this.prompt.set('');
     this.face.set('');
     ctx.close();
@@ -222,7 +254,7 @@ export class GenerateImage {
 @Component({
   selector: 'app-generated-image-tile',
   imports: [NgIcon, PkAuthImage, HlmButton, HlmSpinner],
-  providers: [provideIcons({ lucideImage, lucideX })],
+  providers: [provideIcons({ lucideImage, lucidePencil, lucideX })],
   host: { class: 'block' },
   template: `
     <div class="relative w-fit pt-1" data-testid="generated-image">
@@ -253,12 +285,28 @@ export class GenerateImage {
       >
         <ng-icon name="lucideX" />
       </button>
+      @if (editable()) {
+        <button
+          hlmBtn
+          variant="secondary"
+          size="icon-xs"
+          type="button"
+          class="absolute -end-1.5 top-7 rounded-full border shadow-xs"
+          aria-label="Edit the picture"
+          (click)="edit.emit()"
+        >
+          <ng-icon name="lucidePencil" />
+        </button>
+      }
     </div>
   `,
 })
 export class GeneratedImageTile {
   readonly image = input.required<GeneratedImageDto>();
+  /** A composed picture whose layers can be opened again. */
+  readonly editable = input(false);
   readonly discard = output<void>();
+  readonly edit = output<void>();
 
   protected readonly src = computed(() => generatedImageSrc(this.image().url ?? ''));
   protected readonly waitingText = computed(() => {

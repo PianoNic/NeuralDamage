@@ -14,5 +14,6 @@ import { StoryLayer } from './storyLayer';
 export interface StorySpec { 
     background: StoryBackground;
     layers: Array<StoryLayer>;
+    format?: string | null;
 }
 

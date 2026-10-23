@@ -7,6 +7,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { GeneratedImageKind } from './generatedImageKind';
+import { StorySpec } from './storySpec';
 import { GeneratedImageStatus } from './generatedImageStatus';
 
 
@@ -20,6 +22,8 @@ export interface GeneratedImageDto {
     height?: number | null;
     error?: string | null;
     waiting: number;
+    kind: GeneratedImageKind;
+    spec?: StorySpec;
 }
 export namespace GeneratedImageDto {
 }

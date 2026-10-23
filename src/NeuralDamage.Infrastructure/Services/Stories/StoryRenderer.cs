@@ -12,14 +12,17 @@ public record StoryAssets(byte[]? Background, IReadOnlyDictionary<string, byte[]
 }
 
 /// <summary>
-/// Draws a story spec into a 1080×1920 PNG with Skia, the same for people and
-/// bots. Text is Inter, with Noto Color Emoji for emoji, both bundled in
-/// <c>Fonts/</c> so the image renders the same on a bare Linux container as on
-/// a desktop. Animated stickers show their first frame. A picture that is
-/// missing or does not decode is left out rather than failing the story.
+/// Draws a spec into a PNG with Skia, the same for people and bots: 1080×1920
+/// for a story, 1080×1350 or 1080×1080 for a post's picture
+/// (<see cref="StoryFormats"/>). Text is Inter, with Noto Color Emoji for
+/// emoji, both bundled in <c>Fonts/</c> so the image renders the same on a
+/// bare Linux container as on a desktop. Animated stickers show their first
+/// frame. A picture that is missing or does not decode is left out rather than
+/// failing the render.
 /// </summary>
 public sealed class StoryRenderer : IDisposable
 {
+    /// <summary>A story's size; every format is this wide.</summary>
     public const int Width = 1080;
     public const int Height = 1920;
 
@@ -60,23 +63,24 @@ public sealed class StoryRenderer : IDisposable
         // Skia objects are not shared across threads; one story at a time is plenty.
         lock (_gate)
         {
-            var info = new SKImageInfo(Width, Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+            var (width, height) = StoryFormats.Canvas(StoryFormats.Of(spec));
+            var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
             using var surface = SKSurface.Create(info);
             var canvas = surface.Canvas;
             canvas.Clear(ParseColor(spec.Background.Color, SKColors.Black));
 
             if (assets.Background is { } bg && Decode(bg) is { } background)
                 using (background)
-                    DrawCover(canvas, background);
+                    DrawCover(canvas, background, width, height);
 
             foreach (var layer in spec.Layers)
             {
-                var x = (float)(layer.X / 100 * Width);
-                var y = (float)(layer.Y / 100 * Height);
+                var x = (float)(layer.X / 100 * width);
+                var y = (float)(layer.Y / 100 * height);
                 switch (layer.Type)
                 {
                     case "text":
-                        DrawText(canvas, layer, x, y);
+                        DrawText(canvas, layer, x, y, width);
                         break;
                     case "sticker" when layer.Name is not null && assets.Stickers.TryGetValue(layer.Name.Trim(), out var sticker):
                         DrawPicture(canvas, sticker, x, y, (float)layer.Size * Scale, (float)(layer.Rotation ?? 0), square: true);
@@ -93,14 +97,14 @@ public sealed class StoryRenderer : IDisposable
         }
     }
 
-    /// <summary>Fills the story, centred, cutting what sticks out.</summary>
-    private static void DrawCover(SKCanvas canvas, SKBitmap image)
+    /// <summary>Fills the canvas, centred, cutting what sticks out.</summary>
+    private static void DrawCover(SKCanvas canvas, SKBitmap image, int width, int height)
     {
-        var scale = Math.Max((float)Width / image.Width, (float)Height / image.Height);
+        var scale = Math.Max((float)width / image.Width, (float)height / image.Height);
         var w = image.Width * scale;
         var h = image.Height * scale;
         using var img = SKImage.FromBitmap(image);
-        canvas.DrawImage(img, SKRect.Create((Width - w) / 2, (Height - h) / 2, w, h), Sampling, Paint());
+        canvas.DrawImage(img, SKRect.Create((width - w) / 2, (height - h) / 2, w, h), Sampling, Paint());
     }
 
     /// <summary>
@@ -140,7 +144,7 @@ public sealed class StoryRenderer : IDisposable
     }
 
     /// <summary>Centred lines at (x, y), wrapped at 85% of the width, emoji in colour.</summary>
-    private void DrawText(SKCanvas canvas, StoryLayer layer, float x, float y)
+    private void DrawText(SKCanvas canvas, StoryLayer layer, float x, float y, int canvasWidth)
     {
         var size = (float)layer.Size * Scale;
         var typeface = (layer.Weight ?? 400) switch
@@ -153,7 +157,7 @@ public sealed class StoryRenderer : IDisposable
         using var emojiFont = new SKFont(_emoji, size) { Edging = SKFontEdging.Antialias };
         using var paint = new SKPaint { IsAntialias = true, Color = ParseColor(layer.Color, SKColors.White) };
 
-        var lines = Wrap(layer.Text ?? "", font, emojiFont, Width * TextWidthShare);
+        var lines = Wrap(layer.Text ?? "", font, emojiFont, canvasWidth * TextWidthShare);
         var lineHeight = size * LineHeight;
         var metrics = font.Metrics;
         // Centre each line's box (ascent to descent) on its slot.

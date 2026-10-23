@@ -6,19 +6,63 @@ using System.Text.RegularExpressions;
 namespace NeuralDamage.Infrastructure.Services.Stories;
 
 /// <summary>
-/// A story as JSON: a background, then layers drawn in order. Positions are
-/// percentages of the story (x across, y down, the layer's centre); sizes are
-/// in points of a 360-wide story, so 1 point is 3 pixels of the 1080×1920 PNG.
+/// A layered picture as JSON, for a story or a post: a background, then layers
+/// drawn in order. Positions are percentages of the canvas (x across, y down,
+/// the layer's centre); sizes are in points of a 360-wide canvas, so 1 point is
+/// 3 pixels of the 1080-wide PNG, whatever its <see cref="StoryFormats">format</see>.
 /// People build it in the editor and bots write it; the server checks it with
 /// <see cref="StorySpecRules.Validate"/> before it renders it.
 /// </summary>
 /// <example>
-/// { "background": { "color": "#1f3a2b", "image": "upload:…", "fit": "cover" },
+/// { "format": "post-4x5",
+///   "background": { "color": "#1f3a2b", "image": "upload:…", "fit": "cover" },
 ///   "layers": [ { "type": "text", "text": "Hi", "x": 50, "y": 30, "size": 28, "color": "#fafafa", "weight": 700 },
 ///               { "type": "sticker", "name": "swole-doge", "x": 50, "y": 70, "size": 130, "rotation": -8 },
 ///               { "type": "image", "image": "wiki:Eiffel Tower", "x": 50, "y": 50, "size": 200 } ] }
 /// </example>
-public record StorySpec(StoryBackground Background, List<StoryLayer> Layers);
+/// <param name="Format">"story" (9:16, the default when it is left out), "post-4x5" or "post-1x1".</param>
+public record StorySpec(StoryBackground Background, List<StoryLayer> Layers, string? Format = null);
+
+/// <summary>The canvases a spec is drawn on, all 1080 pixels (360 points) wide.</summary>
+public static class StoryFormats
+{
+    public const string Story = "story";
+    public const string Post4x5 = "post-4x5";
+    public const string Post1x1 = "post-1x1";
+
+    public static readonly IReadOnlyList<string> All = [Story, Post4x5, Post1x1];
+
+    /// <summary>The spec's format; a missing one is a story.</summary>
+    public static string Of(StorySpec spec) => string.IsNullOrWhiteSpace(spec.Format) ? Story : spec.Format.Trim().ToLowerInvariant();
+
+    public static bool IsKnown(string format) => All.Contains(format);
+
+    public static bool IsPost(string format) => format is Post4x5 or Post1x1;
+
+    /// <summary>The PNG's size in pixels.</summary>
+    public static (int Width, int Height) Canvas(string format) => format switch
+    {
+        Post4x5 => (1080, 1350),
+        Post1x1 => (1080, 1080),
+        _ => (1080, 1920),
+    };
+
+    /// <summary>The size a generated picture for it is drawn at: the same shape, in sizes the image model likes.</summary>
+    public static (int Width, int Height) Picture(string format) => format switch
+    {
+        Post4x5 => (896, 1120),
+        Post1x1 => (1024, 1024),
+        _ => (768, 1344),
+    };
+
+    /// <summary>"9:16", "4:5" or "1:1", for prompts.</summary>
+    public static string Shape(string format) => format switch
+    {
+        Post4x5 => "4:5",
+        Post1x1 => "1:1",
+        _ => "9:16",
+    };
+}
 
 /// <param name="Color">"#rrggbb"; shows under the image, and while it loads.</param>
 /// <param name="Image">An image reference (<see cref="StoryImageRef"/>), or null for a plain colour.</param>
@@ -120,6 +164,8 @@ public static partial class StorySpecRules
     public static List<string> Validate(StorySpec spec, Func<string, bool> stickerExists)
     {
         var errors = new List<string>();
+        if (!StoryFormats.IsKnown(StoryFormats.Of(spec)))
+            errors.Add("The format must be story, post-4x5 or post-1x1.");
         if (!IsColor(spec.Background.Color))
             errors.Add("The background colour must look like #1f3a2b.");
         if (spec.Background.Image is { } bg && StoryImageRef.Parse(bg) is null)
@@ -176,6 +222,21 @@ public static partial class StorySpecRules
         }
         return errors;
     }
+
+    /// <summary>
+    /// The spec with each sticker under its library name, and without the ones
+    /// the library has no sticker for: a bot that makes up a sticker name loses
+    /// that sticker, not its whole picture.
+    /// </summary>
+    /// <param name="resolve">The library's name for a sticker the bot named; null when there is none.</param>
+    public static StorySpec WithoutUnknownStickers(StorySpec spec, Func<string, string?> resolve) =>
+        spec with
+        {
+            Layers = spec.Layers
+                .Select(l => l.Type != "sticker" ? l : l.Name is { } name && resolve(name.Trim()) is { } known ? l with { Name = known } : null)
+                .OfType<StoryLayer>()
+                .ToList(),
+        };
 
     /// <summary>"#rgb" or "#rrggbb".</summary>
     public static bool IsColor(string? value) => value is not null && Color().IsMatch(value);

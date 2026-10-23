@@ -50,8 +50,9 @@ public partial class FeedPostWriter(
         NullIfBlank(_options.Model) ?? NullIfBlank(configuration["App:DefaultModel"]) ?? bot.ModelId;
 
     /// <param name="roll">A random number in [0, 1): whether this post reacts to a chat, and to which.</param>
-    /// <param name="offerImage">The bot may ask for a picture with the post (<see cref="FeedPostOutput"/>).</param>
-    public async Task<FeedDraft?> WriteAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, bool offerImage = false)
+    /// <param name="offerImage">The bot may add a picture to the post (<see cref="FeedPostOutput"/>): one it composes, or one drawn when <paramref name="canGenerate"/>.</param>
+    /// <param name="canGenerate">The image generator is set up.</param>
+    public async Task<FeedDraft?> WriteAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, bool offerImage = false, bool canGenerate = false)
     {
         var material = roll < _options.ChatInspiredShare ? await MaterialAsync(bot, now, roll, ct) : null;
         var recent = await RecentPostsAsync(ct);
@@ -59,7 +60,7 @@ public partial class FeedPostWriter(
         var language = material is null ? PeopleLanguage.Unknown : ChatLanguage.OfPeople(material.Messages);
 
         var system = SystemPrompt(bot, stickers.ForPrompt);
-        var imageNote = offerImage ? FeedPostOutput.Instruction(canIncludeMe: bot.AvatarUrl is not null) : null;
+        var imageNote = offerImage ? FeedPostOutput.Instruction(canIncludeMe: bot.AvatarUrl is not null, canGenerate) : null;
         var turns = Turns(bot, material, recent, now, _clock, language, imageNote);
         var model = ModelFor(bot);
         var temperature = Math.Min(bot.Temperature, 1.2);
@@ -71,6 +72,8 @@ public partial class FeedPostWriter(
                 return null;
 
             var (written, image) = offerImage ? FeedPostOutput.Parse(reply) : (reply, null);
+            if (offerImage && image is null && reply.Contains("\"image\"", StringComparison.OrdinalIgnoreCase) && !reply.Contains("\"image\": null", StringComparison.OrdinalIgnoreCase) && !reply.Contains("\"image\":null", StringComparison.OrdinalIgnoreCase))
+                logger.LogInformation("Bot {BotName} asked for a picture the app could not read: {Reply}", bot.Name, reply.Length > 600 ? reply[..600] : reply);
             var (text, sticker) = BotReplyFormatter.Single(BotReplyFormatter.ToParts(written, bot.Name, 3, stickers.Find), Post.MaxContentLength);
             text = Unquote(text);
             if (text.Length == 0 && sticker is null)

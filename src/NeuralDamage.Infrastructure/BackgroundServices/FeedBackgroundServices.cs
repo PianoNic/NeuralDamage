@@ -190,9 +190,11 @@ public class FeedScheduler(
         var db = services.GetRequiredService<NeuralDamageDbContext>();
         var writer = services.GetRequiredService<FeedPostWriter>();
         var images = services.GetService<ImageGenerator>();
-        var offerImage = images is { IsEnabled: true } && imageRoll < _options.ImageShare;
+        var canGenerate = images is { IsEnabled: true };
+        // Any picture: one the bot composes always works, a drawn one only with the generator.
+        var offerImage = imageRoll < _options.ImageShare;
 
-        var draft = await writer.WriteAsync(bot, now, roll, ct, offerImage);
+        var draft = await writer.WriteAsync(bot, now, roll, ct, offerImage, canGenerate);
         if (draft is null)
         {
             logger.LogInformation("Bot {BotName} had nothing to post", bot.Name);
@@ -200,8 +202,10 @@ public class FeedScheduler(
         }
 
         Guid? imageId = null;
-        if (draft.Image is { } ask && images is { IsEnabled: true })
-            imageId = await PictureAsync(images, bot, ask, ct);
+        if (draft.Image is { Spec: { } spec })
+            imageId = await ComposedAsync(services, bot, spec, canGenerate, ct);
+        else if (draft.Image is { Prompt: not null } ask && canGenerate)
+            imageId = await PictureAsync(images!, bot, ask, ct);
 
         var post = new Post
         {
@@ -228,7 +232,7 @@ public class FeedScheduler(
     /// </summary>
     private async Task<Guid?> PictureAsync(ImageGenerator images, Bot bot, PostImageAsk ask, CancellationToken ct)
     {
-        var started = await images.StartAsync(new ImageAsk(ask.Prompt, null, bot.Id, ask.IncludeMe ? bot.Id : null), ct);
+        var started = await images.StartAsync(new ImageAsk(ask.Prompt!, null, bot.Id, ask.IncludeMe ? bot.Id : null), ct);
         if (started.IsFailure)
         {
             logger.LogInformation("Bot {BotName} posts without its picture: {Error}", bot.Name, started.Error);
@@ -239,6 +243,21 @@ public class FeedScheduler(
             return ticket.Image.Id;
 
         logger.LogInformation("Bot {BotName} posts without its picture, which failed", bot.Name);
+        return null;
+    }
+
+    /// <summary>
+    /// Renders the picture the bot composed, its background drawn first when it
+    /// asked for that and may; the picture's id, or null when the spec does not work out.
+    /// </summary>
+    private async Task<Guid?> ComposedAsync(IServiceProvider services, Bot bot, StorySpec spec, bool canGenerate, CancellationToken ct)
+    {
+        spec = await services.GetRequiredService<StoryWriter>().WithPictureAsync(bot, spec, canGenerate, ct);
+        var composed = await services.GetRequiredService<ImageComposer>().ComposeAsync(spec, null, bot.Id, ct);
+        if (composed.IsSuccess)
+            return composed.Value!.Id;
+
+        logger.LogInformation("Bot {BotName} posts without its composed picture: {Error}", bot.Name, composed.Error);
         return null;
     }
 }

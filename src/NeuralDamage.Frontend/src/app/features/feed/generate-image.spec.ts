@@ -14,6 +14,7 @@ const pending = (over: Partial<GeneratedImageDto> = {}): GeneratedImageDto => ({
   id: 'img1',
   status: 'Pending',
   prompt: 'a cat',
+  kind: 'Generated',
   waiting: 1,
   ...over,
 });
@@ -149,7 +150,7 @@ describe('PostCard with a picture', () => {
       likedByMe: false,
       commentCount: 0,
       previewComments: [],
-      image: { id: 'img1', url: '/api/images/img1/file', width: 1024, height: 768, prompt: 'a burnt lasagna' },
+      image: { id: 'img1', url: '/api/images/img1/file', width: 1024, height: 768, prompt: 'a burnt lasagna', kind: 'Generated' },
     };
     fixture.componentRef.setInput('post', post);
     await fixture.whenStable();

@@ -340,6 +340,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<int?>("Height")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("Prompt")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -347,6 +352,9 @@ namespace NeuralDamage.Infrastructure.Migrations
 
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Spec")
+                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()

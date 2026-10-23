@@ -95,6 +95,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<FeedScheduler>());
 // Stories: rendered with Skia from a spec, by people in the editor and by bots on their own.
 builder.Services.AddSingleton(_ => new StoryRenderer());
 builder.Services.AddScoped<StoryPublisher>();
+builder.Services.AddScoped<ImageComposer>();
 builder.Services.AddScoped(sp => new StoryWriter(
     sp.GetRequiredService<NeuralDamageDbContext>(),
     sp.GetRequiredService<IOpenRouterService>(),

@@ -13,5 +13,6 @@ export interface GenerateImageRequest {
     prompt: string;
     faceBotId?: string | null;
     forStory: boolean;
+    format?: string | null;
 }
 

@@ -257,7 +257,7 @@ public class FeedImageTests
     }
 
     [Test]
-    public async Task WithTheGeneratorOff_NoPictureIsOffered_AndThePostIsPlain()
+    public async Task WithTheGeneratorOff_OnlyAComposedPictureIsOffered_AndPlainWordsStayAPost()
     {
         using var h = await FeedHarness.CreateAsync(botCount: 1, feed: new FeedOptions { ChatInspiredShare = 0, ImageShare = 1 }, time: Afternoon);
         List<ChatMessage>? turns = null;
@@ -269,7 +269,9 @@ public class FeedImageTests
 
         var post = await h.Scheduler.PostAsync(h.Bots[0], Afternoon.Now, 0.5, imageRoll: 0);
 
-        await Assert.That(turns![^1].Content).DoesNotContain("JSON");
+        await Assert.That(turns![^1].Content).Contains("\"spec\"");
+        await Assert.That(turns[^1].Content).DoesNotContain("includeMe");
+        await Assert.That(turns[^1].Content).DoesNotContain("generate:");
         await Assert.That(post!.Content).IsEqualTo("just words");
         await Assert.That(post.ImageId).IsNull();
     }

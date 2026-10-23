@@ -35,6 +35,7 @@ model/chatDetailDto.ts
 model/chatDto.ts
 model/chatMemberDto.ts
 model/commentDto.ts
+model/composeImageRequest.ts
 model/createBotRequest.ts
 model/createChatRequest.ts
 model/createCommentRequest.ts
@@ -48,6 +49,7 @@ model/feedLikeDto.ts
 model/feedPageDto.ts
 model/generateImageRequest.ts
 model/generatedImageDto.ts
+model/generatedImageKind.ts
 model/generatedImageStatus.ts
 model/messageDto.ts
 model/messageStickerDto.ts

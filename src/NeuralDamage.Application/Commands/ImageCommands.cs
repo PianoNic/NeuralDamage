@@ -16,7 +16,8 @@ namespace NeuralDamage.Application.Commands;
 /// a public bot in it, its face taken from its profile picture. It answers at
 /// once with the pending picture; the person polls it until it is ready.
 /// </summary>
-public record GenerateImageCommand(Guid UserId, string Prompt, Guid? FaceBotId = null, bool ForStory = false) : ICommand<Result<GeneratedImageDto>>;
+/// <param name="Format">The shape of what it is for (<see cref="StoryFormats"/>): a story's or a composed post picture's background. Null is a square post picture.</param>
+public record GenerateImageCommand(Guid UserId, string Prompt, Guid? FaceBotId = null, bool ForStory = false, string? Format = null) : ICommand<Result<GeneratedImageDto>>;
 
 public class GenerateImageHandler(NeuralDamageDbContext db, ImageGenerator generator) : ICommandHandler<GenerateImageCommand, Result<GeneratedImageDto>>
 {
@@ -26,13 +27,28 @@ public class GenerateImageHandler(NeuralDamageDbContext db, ImageGenerator gener
             && !await db.Bots.AnyAsync(b => b.Id == faceBotId && b.IsActive && b.IsPublic && b.AvatarUrl != null, cancellationToken))
             return Result.Failure<GeneratedImageDto>("That bot has no picture to take a face from.");
 
-        var ask = request.ForStory
-            ? new ImageAsk(request.Prompt, request.UserId, null, request.FaceBotId, StoryWriter.PictureWidth, StoryWriter.PictureHeight)
-            : new ImageAsk(request.Prompt, request.UserId, null, request.FaceBotId);
-        var started = await generator.StartAsync(ask, cancellationToken);
+        var format = request.ForStory ? StoryFormats.Story : request.Format?.Trim().ToLowerInvariant();
+        if (format is not null && !StoryFormats.IsKnown(format))
+            return Result.Failure<GeneratedImageDto>("The format must be story, post-4x5 or post-1x1.");
+        var (width, height) = format is null ? (ImageGenerator.PostSize, ImageGenerator.PostSize) : StoryFormats.Picture(format);
+        var started = await generator.StartAsync(new ImageAsk(request.Prompt, request.UserId, null, request.FaceBotId, width, height), cancellationToken);
         return started.IsSuccess
             ? Result.Success(GeneratedImages.ToDto(started.Value!.Image, generator.Waiting))
             : Result.Failure<GeneratedImageDto>(started.Error!);
+    }
+}
+
+/// <summary>Renders a layer spec in a post's format into a picture for the post the person is writing.</summary>
+public record ComposeImageCommand(Guid UserId, StorySpec Spec) : ICommand<Result<GeneratedImageDto>>;
+
+public class ComposeImageHandler(ImageComposer composer) : ICommandHandler<ComposeImageCommand, Result<GeneratedImageDto>>
+{
+    public async ValueTask<Result<GeneratedImageDto>> Handle(ComposeImageCommand request, CancellationToken cancellationToken)
+    {
+        var composed = await composer.ComposeAsync(request.Spec, request.UserId, null, cancellationToken);
+        return composed.IsSuccess
+            ? Result.Success(GeneratedImages.ToDto(composed.Value!, 0))
+            : Result.Failure<GeneratedImageDto>(composed.Error!);
     }
 }
 
@@ -107,5 +123,7 @@ public static class GeneratedImages
         image.Width,
         image.Height,
         image.Error,
-        image.Status == GeneratedImageStatus.Pending ? Math.Max(1, waiting) : 0);
+        image.Status == GeneratedImageStatus.Pending ? Math.Max(1, waiting) : 0,
+        image.Kind,
+        image.Spec is { } spec ? StorySpecRules.Parse(spec).Spec : null);
 }
