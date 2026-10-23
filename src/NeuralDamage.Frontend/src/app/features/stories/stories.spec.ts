@@ -271,3 +271,57 @@ describe('StoryEditor with image generation', () => {
     expect(json.background).toEqual({ color: expect.any(String), image: 'generated:img1', fit: 'cover' });
   });
 });
+
+describe('StoryEditor with web image search', () => {
+  it('searches the web, shows the results through the API, and picks one as the background or a layer', async () => {
+    const search = vi.fn(() =>
+      of([
+        { index: 0, title: 'Red panda', thumbnailUrl: '/api/images/search/thumbnail?q=red%20panda&index=0', sourceUrl: 'https://pages.example.com/a', width: 1200, height: 900 },
+        { index: 1, title: 'Another', thumbnailUrl: '/api/images/search/thumbnail?q=red%20panda&index=1', sourceUrl: 'https://pages.example.com/b', width: 800, height: 800 },
+      ]),
+    );
+    const pick = vi.fn((req: { query: string; index: number }) =>
+      of({ id: `web${req.index}`, status: 'Ready', kind: 'Web', prompt: 'Red panda', waiting: 0, url: `/api/images/web${req.index}/file`, sourceUrl: 'https://pages.example.com/a' }),
+    );
+    await TestBed.configureTestingModule({
+      imports: [StoryEditor],
+      providers: providers({}, { apiImagesSearchGet: search, apiImagesSearchPickPost: pick }),
+    }).compileComponents();
+    TestBed.inject(AppConfig).apply({ imageSearch: true });
+    const fixture = TestBed.createComponent(StoryEditor);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector('#web-picture-search') as HTMLInputElement;
+    input.value = 'red panda';
+    input.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    (el.querySelector('button[aria-label="Search the web"]') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    expect(search).toHaveBeenCalledWith('red panda');
+    const images = [...el.querySelectorAll('[data-testid=web-results] img')] as HTMLImageElement[];
+    expect(images.map((i) => i.getAttribute('src'))).toEqual([
+      'blob:/api/images/search/thumbnail?q=red%20panda&index=0',
+      'blob:/api/images/search/thumbnail?q=red%20panda&index=1',
+    ]);
+
+    [...el.querySelectorAll<HTMLButtonElement>('[data-testid=web-results] button')].find((b) => b.textContent?.trim() === 'Background')!.click();
+    await settle(fixture);
+    (el.querySelector('button[aria-label="Add Another"]') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    expect(pick).toHaveBeenCalledWith({ query: 'red panda', index: 0 });
+    expect(pick).toHaveBeenCalledWith({ query: 'red panda', index: 1 });
+    const spec = toSpec(fixture.componentInstance.draft()) as { background: unknown; layers: { type: string; image?: string }[] };
+    expect(spec.background).toEqual({ color: expect.any(String), image: 'generated:web0', fit: 'cover' });
+    expect(spec.layers.find((l) => l.type === 'image')?.image).toBe('generated:web1');
+  });
+
+  it('hides the web search when the server has none', async () => {
+    await TestBed.configureTestingModule({ imports: [StoryEditor], providers: providers({}) }).compileComponents();
+    const fixture = TestBed.createComponent(StoryEditor);
+    await settle(fixture);
+    expect((fixture.nativeElement as HTMLElement).querySelector('#web-picture-search')).toBeNull();
+  });
+});

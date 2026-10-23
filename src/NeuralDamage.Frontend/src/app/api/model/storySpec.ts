@@ -15,5 +15,6 @@ export interface StorySpec {
     background: StoryBackground;
     layers: Array<StoryLayer>;
     format?: string | null;
+    sources?: Array<string> | null;
 }
 

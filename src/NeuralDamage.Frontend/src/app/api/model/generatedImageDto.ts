@@ -24,6 +24,7 @@ export interface GeneratedImageDto {
     waiting: number;
     kind: GeneratedImageKind;
     spec?: StorySpec;
+    sourceUrl?: string | null;
 }
 export namespace GeneratedImageDto {
 }

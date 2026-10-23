@@ -49,6 +49,7 @@ public class StoryPublisher(
         var png = await RenderAsync(spec, userId, ct, botId);
         if (png.IsFailure)
             return Result<StoryDto>.Failure(png.Error!);
+        spec = await WithSourcesAsync(spec, ct);
 
         var story = new Story { AuthorUserId = userId, AuthorBotId = botId, Spec = StorySpecRules.Serialize(spec), SizeBytes = png.Value!.Length };
         await storage.SaveStoryFileAsync(story.Id, png.Value, ct);
@@ -59,6 +60,18 @@ public class StoryPublisher(
         await notifier.StoryNew(dto with { Seen = false });
         logger.LogInformation("Story {StoryId} posted by {Author}", story.Id, dto.Author.Name);
         return Result<StoryDto>.Success(dto);
+    }
+
+    /// <summary>The spec with <see cref="StorySpec.Sources"/> set to the pages its pictures from the web came from, in order.</summary>
+    public async Task<StorySpec> WithSourcesAsync(StorySpec spec, CancellationToken ct = default)
+    {
+        var ids = StorySpecRules.Images(spec).OfType<StoryImageRef.Generated>().Select(g => g.Id).Distinct().ToList();
+        var sources = ids.Count == 0
+            ? []
+            : await db.GeneratedImages.Where(i => ids.Contains(i.Id) && i.Kind == GeneratedImageKind.Web && i.SourceUrl != null)
+                .Select(i => new { i.Id, i.SourceUrl }).ToListAsync(ct);
+        var ordered = ids.Select(id => sources.FirstOrDefault(s => s.Id == id)?.SourceUrl).OfType<string>().Distinct().ToList();
+        return spec with { Sources = ordered.Count == 0 ? null : ordered };
     }
 
     private async Task<(StoryAssets? Assets, string? Problem)> AssetsAsync(StorySpec spec, Guid? uploaderUserId, Guid? botId, CancellationToken ct)

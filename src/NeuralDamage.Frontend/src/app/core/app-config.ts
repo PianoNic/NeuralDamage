@@ -26,9 +26,14 @@ export class AppConfig {
   /** Pictures can be generated (`ImageGen:BaseUrl` is set on the server). */
   readonly imageGeneration = this.imageGenerationOn.asReadonly();
 
-  apply(config: Partial<Pick<AppConfigurationDto, 'attachments' | 'version' | 'imageGeneration'>>): void {
+  private readonly imageSearchOn = signal(false);
+  /** Pictures can be searched on the web (`ImageSearch:BaseUrl` is set on the server). */
+  readonly imageSearch = this.imageSearchOn.asReadonly();
+
+  apply(config: Partial<Pick<AppConfigurationDto, 'attachments' | 'version' | 'imageGeneration' | 'imageSearch'>>): void {
     if (config.attachments) this.limits.set(config.attachments);
     if (config.version) this.serverVersion.set(config.version);
     if (config.imageGeneration !== undefined) this.imageGenerationOn.set(config.imageGeneration);
+    if (config.imageSearch !== undefined) this.imageSearchOn.set(config.imageSearch);
   }
 }

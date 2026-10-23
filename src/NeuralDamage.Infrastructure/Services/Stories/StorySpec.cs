@@ -21,7 +21,11 @@ namespace NeuralDamage.Infrastructure.Services.Stories;
 ///               { "type": "image", "image": "wiki:Eiffel Tower", "x": 50, "y": 50, "size": 200 } ] }
 /// </example>
 /// <param name="Format">"story" (9:16, the default when it is left out), "post-4x5" or "post-1x1".</param>
-public record StorySpec(StoryBackground Background, List<StoryLayer> Layers, string? Format = null);
+/// <param name="Sources">
+/// The pages the pictures from the web in it came from, to credit them. The
+/// server fills it in when it stores the spec; whatever an author sends is replaced.
+/// </param>
+public record StorySpec(StoryBackground Background, List<StoryLayer> Layers, string? Format = null, List<string>? Sources = null);
 
 /// <summary>The canvases a spec is drawn on, all 1080 pixels (360 points) wide.</summary>
 public static class StoryFormats

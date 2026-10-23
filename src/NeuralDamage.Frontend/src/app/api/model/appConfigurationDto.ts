@@ -19,5 +19,6 @@ export interface AppConfigurationDto {
     attachments: AttachmentLimitsDto;
     version: string;
     imageGeneration: boolean;
+    imageSearch: boolean;
 }
 

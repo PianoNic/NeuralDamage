@@ -18,6 +18,7 @@ using NeuralDamage.Infrastructure.Services.BotPictures;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Stories;
 using NeuralDamage.Infrastructure.Services.Images;
+using NeuralDamage.Infrastructure.Services.WebImages;
 using Microsoft.Extensions.Options;
 using System.Text.Json.Serialization;
 
@@ -103,8 +104,17 @@ builder.Services.AddScoped(sp => new StoryWriter(
     sp.GetRequiredService<StoryPublisher>(),
     sp.GetRequiredService<ILogger<StoryWriter>>(),
     sp.GetRequiredService<BotClock>(),
-    sp.GetRequiredService<ImageGenerator>()));
+    sp.GetRequiredService<ImageGenerator>(),
+    sp.GetRequiredService<WebImageStore>()));
 builder.Services.AddHostedService<StorySweeper>();
+
+// Pictures from the web: searched with a self-hosted SearXNG (ImageSearch:BaseUrl), fetched only from public addresses.
+builder.Services.Configure<ImageSearchOptions>(builder.Configuration.GetSection(ImageSearchOptions.SectionName));
+builder.Services.AddHttpClient<IWebImageSearch, SearxngImageSearch>();
+builder.Services.AddSingleton(sp => new SafeImageFetcher(
+    new HttpMessageInvoker(SafeImageFetcher.CreateHandler()),
+    sp.GetRequiredService<ILogger<SafeImageFetcher>>()));
+builder.Services.AddScoped<WebImageStore>();
 
 // Images
 var attachmentOptions = AttachmentOptions.FromConfiguration(builder.Configuration);

@@ -15,6 +15,9 @@ public enum GeneratedImageKind
 
     /// <summary>Rendered from a layer spec, like a story, in a post's format.</summary>
     Composed,
+
+    /// <summary>Found with the image web search and fetched from the page in <see cref="GeneratedImage.SourceUrl"/>.</summary>
+    Web,
 }
 
 /// <summary>
@@ -26,6 +29,7 @@ public enum GeneratedImageKind
 public class GeneratedImage : BaseEntity
 {
     public const int MaxPromptLength = 1000;
+    public const int MaxSourceUrlLength = 2000;
 
     /// <summary>The person who asked for it; null when a bot did.</summary>
     public Guid? UserId { get; init; }
@@ -43,6 +47,9 @@ public class GeneratedImage : BaseEntity
 
     /// <summary>A composed picture's spec, as validated, so it can be opened again; null for a drawn one.</summary>
     public string? Spec { get; init; }
+
+    /// <summary>The page a picture from the web came from, credited on the post; for a composed one, the first web picture in it.</summary>
+    public string? SourceUrl { get; init; }
 
     public GeneratedImageStatus Status { get; set; } = GeneratedImageStatus.Pending;
 

@@ -10,6 +10,10 @@ public record CreatePostRequest(string Content, Guid? StickerId = null, Guid? Im
 /// <param name="Format">The background of a picture being composed: "story", "post-4x5" or "post-1x1". Overrides nothing when ForStory is set.</param>
 public record GenerateImageRequest(string Prompt, Guid? FaceBotId = null, bool ForStory = false, string? Format = null);
 
+/// <param name="Query">The search the result came from, as sent to <c>GET /api/images/search</c>.</param>
+/// <param name="Index">The result's place in that search.</param>
+public record PickWebImageRequest(string Query, int Index);
+
 /// <param name="Spec">The picture's layers, in a post's format ("post-4x5" or "post-1x1"); see <c>StorySpec</c>.</param>
 public record ComposeImageRequest(NeuralDamage.Infrastructure.Services.Stories.StorySpec Spec);
 
