@@ -262,7 +262,9 @@ public class FeedScheduler(
     /// </summary>
     private async Task<Guid?> ComposedAsync(IServiceProvider services, Bot bot, StorySpec spec, bool canGenerate, CancellationToken ct)
     {
-        spec = await services.GetRequiredService<StoryWriter>().WithPictureAsync(bot, spec, canGenerate, ct);
+        var writer = services.GetRequiredService<StoryWriter>();
+        spec = await writer.WithPictureAsync(bot, spec, canGenerate, ct);
+        spec = await writer.ReviseLayoutAsync(bot, spec, ct);
         var composed = await services.GetRequiredService<ImageComposer>().ComposeAsync(spec, null, bot.Id, ct);
         if (composed.IsSuccess)
             return composed.Value!.Id;

@@ -1,6 +1,7 @@
 import { inject, Service, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { StoriesService } from '../../api/api/stories.service';
+import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
 import { AuthService } from '../../core/auth/auth.service';
 import { StoryDto, StoryImageUploadDto, StoryRingDto, StorySpec } from '../../core/models';
 import { SignalRService } from '../../core/signalr/signalr.service';
@@ -96,6 +97,11 @@ export class StoryStore {
 
   uploadImage(file: Blob): Promise<StoryImageUploadDto> {
     return firstValueFrom(this.api.apiStoriesImagesPost(file));
+  }
+
+  /** What the layout check finds in the spec: overlaps, cut-off layers, small text, low contrast. */
+  checkLayout(spec: StorySpec): Promise<LayoutIssueDto[]> {
+    return firstValueFrom(this.api.apiStoriesLayoutPost({ spec }));
   }
 
   /** The PNG the server would post, exactly. */

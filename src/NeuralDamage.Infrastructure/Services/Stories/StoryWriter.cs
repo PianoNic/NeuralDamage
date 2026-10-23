@@ -49,7 +49,7 @@ public class StoryWriter(
               {"type":"text","text":"...","x":50,"y":30,"size":28,"color":"#ffffff","weight":700},
               {"type":"sticker","name":"<a sticker name from the list>","x":50,"y":70,"size":130,"rotation":-8},
               {"type":"image","image":"wiki:<something to look up>","x":50,"y":55,"size":220}]}
-            The {{what}} is {{StoryFormats.Shape(format)}}. x and y are percent from the top left, the layer's centre. Text size 10 to 120 (28 is a headline), sticker and image size 30 to 360 (360 is the full width). At most 12 layers, 3 images and 200 characters per text. "image" is optional everywhere; "wiki:" looks up a picture by name on Wikipedia, so name a real place, thing or person. Use only stickers from the list. Pick colours that read well on each other.
+            The {{what}} is {{StoryFormats.Shape(format)}}. x and y are percent from the top left, the layer's centre. Text size 10 to 120 (28 is a headline), sticker and image size 30 to 360 (360 is the full width). At most 12 layers, 3 images and 200 characters per text. "image" is optional everywhere; "wiki:" looks up a picture by name on Wikipedia, so name a real place, thing or person. Use only stickers from the list. Pick colours that read well on each other; text may have "shadow":true for a soft dark shadow that keeps it readable on a photo.
             """;
     }
 
@@ -74,6 +74,7 @@ public class StoryWriter(
         }
         // Whatever the model wrote, a story is a story.
         spec = await WithPictureAsync(bot, spec with { Format = null }, offerImage, ct);
+        spec = await ReviseLayoutAsync(bot, spec, ct);
 
         var result = await publisher.PublishAsync(spec, null, bot.Id, ct);
         if (result.IsFailure)
@@ -102,6 +103,113 @@ public class StoryWriter(
         return null;
     }
 
+    /// <summary>
+    /// The one look a bot gets at its own layout: the spec is rendered and
+    /// checked (<see cref="LayoutChecker"/>); when something is off, the report
+    /// goes back to the bot once with the spec, and it answers with a revised
+    /// spec or <c>{"keep": true, "reason": "…"}</c>. A revision that does not
+    /// parse or render, or no answer at all, leaves the spec as it was: the
+    /// report never stops the post.
+    /// </summary>
+    public async Task<StorySpec> ReviseLayoutAsync(Bot bot, StorySpec spec, CancellationToken ct = default)
+    {
+        var format = StoryFormats.Of(spec);
+        var what = format == StoryFormats.Story ? "story" : "post picture";
+        var checkedSpec = await publisher.CheckLayoutAsync(spec, null, ct, bot.Id);
+        if (checkedSpec.IsFailure)
+        {
+            logger.LogInformation("Layout check of bot {BotName}'s {What} skipped: {Error}", bot.Name, what, checkedSpec.Error);
+            return spec;
+        }
+        var report = checkedSpec.Value!;
+        if (report.IsClean)
+        {
+            logger.LogInformation("Layout check of bot {BotName}'s {What}: no issues", bot.Name, what);
+            return spec;
+        }
+
+        logger.LogInformation("Layout report for bot {BotName}'s {What} {Spec}:\n{Report}", bot.Name, what, StorySpecRules.Serialize(spec with { Sources = null }), LayoutChecker.Describe(report));
+        var stickers = await StickerCatalog.LoadAsync(db, ct);
+        var reply = await BotResponseOrchestrator.GenerateAsync(openRouter, bot.Name, posts.ModelFor(bot), Math.Min(bot.Temperature, 1.0),
+            RevisionPrompt(bot, stickers.ForPrompt, format, CanSearch), [RevisionNote(spec, report, what)], logger, ct);
+        var (revised, keep) = ParseRevision(reply);
+        if (keep is not null)
+        {
+            logger.LogInformation("Layout check of bot {BotName}'s {What}: {Count} issue(s) ({Kinds}); kept: {Reason}", bot.Name, what, report.Issues.Count, report.Kinds, keep);
+            return spec;
+        }
+        if (revised is null)
+        {
+            logger.LogInformation("Layout check of bot {BotName}'s {What}: {Count} issue(s) ({Kinds}); no usable revision, posted as it was", bot.Name, what, report.Issues.Count, report.Kinds);
+            return spec;
+        }
+
+        // The revision keeps the format and can find new pictures, but draws nothing new.
+        revised = await WithPictureAsync(bot, revised with { Format = spec.Format, Sources = null }, draw: false, ct);
+        var after = await publisher.CheckLayoutAsync(revised, null, ct, bot.Id);
+        if (after.IsFailure)
+        {
+            logger.LogInformation("Layout check of bot {BotName}'s {What}: {Count} issue(s) ({Kinds}); the revision does not work ({Error}), posted as it was",
+                bot.Name, what, report.Issues.Count, report.Kinds, after.Error);
+            return spec;
+        }
+        logger.LogInformation("Layout check of bot {BotName}'s {What}: {Count} issue(s) ({Kinds}); revised, {Left} left", bot.Name, what, report.Issues.Count, report.Kinds, after.Value!.Issues.Count);
+        return revised;
+    }
+
+    public static string RevisionPrompt(Bot bot, IReadOnlyList<BotSticker> stickers, string format, bool canSearch = false)
+    {
+        var list = stickers.Count == 0 ? "(none)" : string.Join("\n", stickers.Select(s => $"{s.Name}: {s.Description}"));
+        return $"""
+            {BotPromptBuilder.Character(bot)}
+
+            You are "{bot.Name}" and just made a picture of layers for a chat app, written as JSON:
+            {LayerSchema(format)}{(canSearch ? "\n" + SearchNote : "")}
+
+            Stickers (name: what it shows):
+            {list}
+            """;
+    }
+
+    public static ChatMessage RevisionNote(StorySpec spec, LayoutReport report, string what) =>
+        new(ChatMessage.Note,
+            $"(Your {what} as JSON:\n{StorySpecRules.Serialize(spec with { Sources = null })}\n\n" +
+            $"A layout check of the rendered picture found:\n{LayoutChecker.Describe(report)}\n\n" +
+            "Layers are named by type and order: t1 is the first text layer, s1 the first sticker, i1 the first image. " +
+            "Fix it and reply with the whole corrected JSON only, keeping the background and image references as they are. " +
+            "If the layout is what you meant, a deliberate overlap for a joke for example, reply {\"keep\": true, \"reason\": \"why\"} instead.)");
+
+    /// <summary>The bot's answer to its layout report: a revised spec, or the reason it keeps the layout; both null when it is neither.</summary>
+    public static (StorySpec? Revised, string? Keep) ParseRevision(string? reply)
+    {
+        var json = ExtractJson(reply);
+        if (json is null)
+            return (null, null);
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return (null, null);
+            foreach (var property in root.EnumerateObject())
+            {
+                if (string.Equals(property.Name, "keep", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == System.Text.Json.JsonValueKind.True)
+                {
+                    var reason = root.EnumerateObject().FirstOrDefault(p => string.Equals(p.Name, "reason", StringComparison.OrdinalIgnoreCase)).Value;
+                    var text = reason.ValueKind == System.Text.Json.JsonValueKind.String ? reason.GetString()?.Trim() : null;
+                    return (null, string.IsNullOrEmpty(text) ? "intended" : text.Length > 200 ? text[..200] : text);
+                }
+                if (string.Equals(property.Name, "spec", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    return (StorySpecRules.Parse(property.Value.GetRawText()).Spec, null);
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return (null, null);
+        }
+        return (StorySpecRules.Parse(json).Spec, null);
+    }
+
     /// <summary>The query of a picture the model asked to have found on the web.</summary>
     public static string? SearchAsk(string? image)
     {
@@ -125,6 +233,9 @@ public class StoryWriter(
             && (value.StartsWith("generate:", StringComparison.OrdinalIgnoreCase) || value.StartsWith("generate-me:", StringComparison.OrdinalIgnoreCase));
         var stickers = await StickerCatalog.LoadAsync(db, ct);
         spec = StorySpecRules.WithoutUnknownStickers(spec, name => stickers.Find(name)?.Name);
+        // A missing or made-up background colour is black, not a lost picture.
+        if (!StorySpecRules.IsColor(spec.Background.Color))
+            spec = spec with { Background = spec.Background with { Color = "#000000" } };
         spec = spec with { Layers = spec.Layers.Where(l => !(l.Type == "image" && Asks(l.Image))).ToList() };
         spec = await WithSearchedAsync(bot, spec, ct);
         if (!Asks(spec.Background.Image))

@@ -77,6 +77,7 @@ public record StoryBackground(string Color, string? Image = null, string? Fit = 
 /// <param name="Name">A sticker's library name.</param>
 /// <param name="Image">An image layer's reference (<see cref="StoryImageRef"/>).</param>
 /// <param name="Rotation">Degrees clockwise, for stickers and images.</param>
+/// <param name="Shadow">Text only: a soft dark shadow behind the letters, so they read on a busy picture.</param>
 public record StoryLayer(
     string Type,
     double X = 50,
@@ -87,7 +88,8 @@ public record StoryLayer(
     int? Weight = null,
     string? Name = null,
     string? Image = null,
-    double? Rotation = null);
+    double? Rotation = null,
+    bool? Shadow = null);
 
 /// <summary>
 /// Where a story's picture comes from: <c>upload:&lt;id&gt;</c>, a picture the

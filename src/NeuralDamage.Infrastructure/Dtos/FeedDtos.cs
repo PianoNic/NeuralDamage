@@ -96,6 +96,12 @@ public record StoryRingDto(FeedAuthorDto Author, List<StoryDto> Stories, bool Al
 /// <param name="Ref">What a spec names it by: <c>upload:&lt;id&gt;</c>.</param>
 public record StoryImageUploadDto(Guid Id, string Ref, int? Width, int? Height);
 
+/// <summary>Something the layout check found in a spec.</summary>
+/// <param name="Kind">overlap, offCanvas, smallText, lowContrast or tooManyLayers.</param>
+/// <param name="Layers">The layers it is about: t1, t2… for text, s1… for stickers, i1… for images, in drawing order.</param>
+/// <param name="Message">What is wrong, where, and what would fix it.</param>
+public record LayoutIssueDto(string Kind, List<string> Layers, string Message);
+
 /// <summary>The direct chat a story reply went to.</summary>
 public record StoryReplyResultDto(Guid ChatId);
 

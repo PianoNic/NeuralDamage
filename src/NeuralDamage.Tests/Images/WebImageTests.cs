@@ -371,7 +371,7 @@ public class WebImageUseTests
         string? system = null;
         h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(ci =>
         {
-            system = ci.ArgAt<string>(2);
+            system ??= ci.ArgAt<string>(2);
             return """{"background":{"color":"#000000","image":"search:Eiffel Tower"},"layers":[{"type":"text","text":"bonjour","x":50,"y":20,"size":30},{"type":"image","image":"search:nothing to find","x":50,"y":70,"size":100}]}""";
         });
         using var scope = h.Provider.CreateScope();

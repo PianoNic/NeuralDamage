@@ -53,6 +53,7 @@ model/generateImageRequest.ts
 model/generatedImageDto.ts
 model/generatedImageKind.ts
 model/generatedImageStatus.ts
+model/layoutIssueDto.ts
 model/messageDto.ts
 model/messageStickerDto.ts
 model/modelPricing.ts

@@ -29,6 +29,7 @@ export * from './generateImageRequest';
 export * from './generatedImageDto';
 export * from './generatedImageKind';
 export * from './generatedImageStatus';
+export * from './layoutIssueDto';
 export * from './messageDto';
 export * from './messageStickerDto';
 export * from './modelPricing';
