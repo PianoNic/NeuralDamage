@@ -52,6 +52,13 @@ public record BotRankingOptions
     public int MaxReplies { get; init; } = 5;
 
     /// <summary>
+    /// In a chat, how much higher the reply probability has to be for each bot
+    /// already answering the same message: at 0.15 a second bot needs 0.75, a
+    /// third 0.9. Zero lets every bot over <see cref="ReplyThreshold"/> answer.
+    /// </summary>
+    public double CrowdStep { get; init; } = 0.15;
+
+    /// <summary>
     /// From this conversation health score (0 healthy, 2 spiralling) the bots
     /// hold back when answering each other: only <see cref="CautiousMaxReplies"/>
     /// of them, and only at <see cref="CautiousReplyThreshold"/> or above.
@@ -89,6 +96,7 @@ public record BotRankingOptions
             ReplyAndReactThreshold = section.GetValue<double?>("ReplyAndReactThreshold") ?? defaults.ReplyAndReactThreshold,
             MaxReactionsPerMessage = section.GetValue<int?>("MaxReactionsPerMessage") ?? defaults.MaxReactionsPerMessage,
             MaxReplies = section.GetValue<int?>("MaxReplies") ?? defaults.MaxReplies,
+            CrowdStep = section.GetValue<double?>("CrowdStep") ?? defaults.CrowdStep,
             CautiousHealth = section.GetValue<double?>("CautiousHealth") ?? defaults.CautiousHealth,
             SilentHealth = section.GetValue<double?>("SilentHealth") ?? defaults.SilentHealth,
             CautiousReplyThreshold = section.GetValue<double?>("CautiousReplyThreshold") ?? defaults.CautiousReplyThreshold,
