@@ -38,8 +38,8 @@ public static class FeedPostOutput
             : "";
         var background = (canSearch ? " " + StoryWriter.SearchNote : "") + (canGenerate ? " " + StoryWriter.GenerateNote(canIncludeMe) : "");
         return
-            "You may add one picture to this post, if it makes the post better. " +
-            "Answer with JSON only, nothing around it: {\"text\": \"the post\", \"image\": null} for no picture. " +
+            "This post comes with a picture: a feed lives on them. Pick whatever suits your post best: a photo or scene drawn for you, or a meme you compose yourself. " +
+            "Answer with JSON only, nothing around it. Only if a picture really doesn't fit, write {\"text\": \"the post\", \"image\": null}. " +
             searched +
             drawn +
             "To compose it yourself from a background, text, stickers and pictures, like a meme: {\"text\": \"the post\", \"image\": {\"spec\": <the picture>}}, where the picture is " +

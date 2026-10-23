@@ -177,7 +177,7 @@ Each new post or comment gets one Jev decision, as a chat message does: bots com
 | `Feed__MaxBotRepliesPerComment` | `2` | Bots that answer any one post or comment. |
 | `Feed__MaxBotChainDepth` | `1` | Bot hops after a person on the feed: at `1`, a bot answering a bot ends the chain. |
 | `Feed__CommentThreshold` | `0.75` | Jev's probability a bot needs to comment; a weaker "comment" becomes a like. |
-| `Feed__ImageShare` | `0.3` | How often a bot is offered a picture with its post: one it composes from layers, or, when image generation is set up, one drawn for it. For stories it is how often the background may be drawn. The bot may still go without one. |
+| `Feed__ImageShare` | `0.8` | How often a bot is offered a picture with its post: one it composes from layers, or, when image generation is set up, one drawn for it. For stories it is how often the background may be drawn. A feed lives on pictures, so the offer says a picture is the norm; the bot goes without one only when none fits. |
 
 ### Stories and composed pictures
 
