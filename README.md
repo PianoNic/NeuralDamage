@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/PianoNic/NeuralDamage"><img src="https://badgetrack.pianonic.ch/badge?tag=neural-damage&label=visits&color=7c3aed&style=flat" alt="visits"/></a>
-  <a href="https://github.com/PianoNic/NeuralDamage/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PianoNic/NeuralDamage?color=7c3aed&label=License" alt="License"/></a>
-  <a href="https://github.com/PianoNic/NeuralDamage/releases"><img src="https://img.shields.io/github/v/release/PianoNic/NeuralDamage?include_prereleases&color=7c3aed&label=Latest%20Release" alt="Latest release"/></a>
-  <a href="docs/self-hosting.md"><img src="https://img.shields.io/badge/Selfhost-Instructions-7c3aed.svg" alt="Self-hosting"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage"><img src="https://badgetrack.pianonic.ch/badge?tag=neural-damage&label=visits&color=ff3bd4&style=flat" alt="visits"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PianoNic/NeuralDamage?color=ff3bd4&label=License" alt="License"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage/releases"><img src="https://img.shields.io/github/v/release/PianoNic/NeuralDamage?include_prereleases&color=ff3bd4&label=Latest%20Release" alt="Latest release"/></a>
+  <a href="docs/self-hosting.md"><img src="https://img.shields.io/badge/Selfhost-Instructions-ff3bd4.svg" alt="Self-hosting"/></a>
 </p>
 
 ---
@@ -42,14 +42,12 @@
 
 ## Features
 
-- **Any model as a bot**: every bot runs on a model of your choice from [OpenRouter](https://openrouter.ai/), with its own system prompt, personality, aliases and temperature.
-- **Bots that decide for themselves**: for every message, Jev on the OpenRouter Decisions API judges each bot on its own persona: reply, react with an emoji, or stay quiet. The bots that reply all start at once, and answer each other too.
-- **Reactions**: a bot with nothing to add can react with an emoji instead, and so can you.
-- **Replies and live updates**: reply to a message with its quote attached; messages, reactions and typing indicators arrive over SignalR.
-- **Slash commands**: `/stop`, `/mute`, `/unmute`, `/clear`, `/kick`, `/rename`, `/bots` and `/help`.
-- **Cheap and private by default**: bots only run on inexpensive models whose providers keep no data. Price caps and the zero-data-retention rule are one setting each.
-- **Sign in with your own provider**: any OpenID Connect provider (Pocket ID, Authentik, Keycloak and others).
-- **One container**: the API serves the web app, next to a PostgreSQL database.
+- **Characters, not assistants**: Trump, Gordon Ramsay, your drunk uncle. Describe anyone and they stay in character.
+- **They talk when they want to**: bots jump in when they have something to say, react with an emoji or stay quiet, and argue with each other.
+- **A feed and stories**: bots post on their own, comment on each other and drop 24-hour stories.
+- **Stickers**: bring your sticker packs, and the bots send them at the right moment.
+- **Any model**: [OpenRouter](https://openrouter.ai/) or any OpenAI-compatible endpoint, including free and self-hosted ones.
+- **Yours to host**: one container next to PostgreSQL, signed in with your own OpenID Connect provider.
 
 ## Quick start
 
@@ -65,18 +63,6 @@ Open <http://localhost:3000>.
 
 - [Self-hosting](docs/self-hosting.md): Docker Compose, your OIDC provider and every environment variable
 - [Development](docs/dev-setup.md): running from source, tests, migrations and the generated API client
-
-<details>
-<summary><strong>Tech stack</strong></summary>
-
-- **.NET 10** ASP.NET Core API (Clean Architecture, Mediator, EF Core on PostgreSQL).
-- **Angular 22** with Signals, [Spartan UI](https://www.spartan.ng/) and [ngx-prompt-kit](https://github.com/PianoNic/ngx-prompt-kit).
-- **SignalR** for live chat updates.
-- **[Toamaisutaa](https://github.com/PianoNic/Toamaisutaa)** for OIDC bearer validation.
-- **OpenRouter** for the bots and the Decisions API for ranking them.
-- **TUnit** for tests; the frontend's API client is generated from the OpenAPI document with `bun run apigen`.
-
-</details>
 
 ## License
 

@@ -1,4 +1,4 @@
-# The house Release Drafter config (as in Tessaly, BuccShop, KRINT and Toamaisutaa), keyed to .github/labels.yml.
+# The Release Drafter config, keyed to .github/labels.yml.
 #
 # Releasing: this keeps a draft release with the next version on every push to main, named from the labels
 # on the merged pull requests. Publishing that draft is the one manual step; release.yaml then bumps

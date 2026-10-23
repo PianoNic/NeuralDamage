@@ -1,4 +1,4 @@
-# The canonical label set (as in Toamaisutaa, HOPPER and KRINT). release-drafter.yml sorts and versions
+# The label set. release-drafter.yml sorts and versions
 # releases by these labels; the Setup Labels workflow creates or updates them on GitHub from this file.
 
 - name: breaking
