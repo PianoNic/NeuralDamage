@@ -230,7 +230,7 @@ describe('StoryEditor with image generation', () => {
     await settle(fixture);
 
     expect(generate).toHaveBeenCalledWith({ prompt: 'a beach', faceBotId: null, forStory: true });
-    const json = JSON.parse(el.querySelector('[data-testid=spec-json]')!.textContent!);
+    const json = toSpec(fixture.componentInstance.draft()) as { background: unknown };
     expect(json.background).toEqual({ color: expect.any(String), image: 'generated:img1', fit: 'cover' });
   });
 });
