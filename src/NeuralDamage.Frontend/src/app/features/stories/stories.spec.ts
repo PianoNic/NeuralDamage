@@ -200,13 +200,14 @@ describe('StoryEditor', () => {
     await settle(fixture);
     expect(el.querySelectorAll('[data-testid=stage-layer]').length).toBe(1);
 
-    const json = JSON.parse(el.querySelector('[data-testid=spec-json]')!.textContent!);
-    expect(json.background).toEqual({ color: '#1d3347' });
-    expect(json.layers[0]).toMatchObject({ type: 'text', text: 'Hello from my story' });
+    // No spec JSON is shown to people; check what gets posted instead.
+    expect(el.querySelector('[data-testid=spec-json]')).toBeNull();
 
     [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Post story')!.click();
     await settle(fixture);
-    expect(post).toHaveBeenCalledWith({ spec: json });
+    const { spec } = post.mock.calls[0][0] as { spec: { background: unknown; layers: unknown[] } };
+    expect(spec.background).toEqual({ color: '#1d3347' });
+    expect(spec.layers[0]).toMatchObject({ type: 'text', text: 'Hello from my story' });
     expect(editor.draft().layers.length).toBe(1);
   });
 });
