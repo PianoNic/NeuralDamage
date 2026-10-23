@@ -24,6 +24,16 @@ public interface IAttachmentStorage
 
     void DeleteBotAvatar(Guid botId);
 
+    /// <summary>Stores one of a bot's reference pictures (<see cref="Domain.BotReference"/>).</summary>
+    Task SaveBotReferenceAsync(Guid botId, Guid referenceId, byte[] data, CancellationToken ct = default);
+
+    Task<byte[]?> ReadBotReferenceAsync(Guid botId, Guid referenceId, CancellationToken ct = default);
+
+    void DeleteBotReference(Guid botId, Guid referenceId);
+
+    /// <summary>Removes all of a bot's reference pictures.</summary>
+    void DeleteBotReferences(Guid botId);
+
     /// <summary>Stores a sticker of the shared library.</summary>
     Task SaveStickerAsync(Guid stickerId, byte[] data, CancellationToken ct = default);
 
@@ -97,6 +107,37 @@ public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
         if (File.Exists(path))
             File.Delete(path);
     }
+
+    public async Task SaveBotReferenceAsync(Guid botId, Guid referenceId, byte[] data, CancellationToken ct = default)
+    {
+        var path = ReferencePathOf(botId, referenceId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, data, ct);
+    }
+
+    public async Task<byte[]?> ReadBotReferenceAsync(Guid botId, Guid referenceId, CancellationToken ct = default)
+    {
+        var path = ReferencePathOf(botId, referenceId);
+        return File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
+    }
+
+    public void DeleteBotReference(Guid botId, Guid referenceId)
+    {
+        var path = ReferencePathOf(botId, referenceId);
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    public void DeleteBotReferences(Guid botId)
+    {
+        var folder = Path.Combine(root, "bot-references", botId.ToString("N"));
+        if (Directory.Exists(folder))
+            Directory.Delete(folder, recursive: true);
+    }
+
+    // Like "bots", "bot-references" can never be a chat's folder.
+    private string ReferencePathOf(Guid botId, Guid referenceId) =>
+        Path.Combine(root, "bot-references", botId.ToString("N"), referenceId.ToString("N"));
 
     public async Task SaveStickerAsync(Guid stickerId, byte[] data, CancellationToken ct = default)
     {

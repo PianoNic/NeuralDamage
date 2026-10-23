@@ -18,7 +18,7 @@ public interface IImageRenderer
 public class ImageGenerationException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
-/// Talks to ComfyUI's own HTTP API: uploads the reference picture
+/// Talks to ComfyUI's own HTTP API: uploads the reference pictures
 /// (<c>/upload/image</c>), queues the workflow (<c>/prompt</c>), polls
 /// <c>/history/{id}</c> until it is done and fetches the result from
 /// <c>/view</c>. When the caller gives up, the job is taken off ComfyUI's
@@ -44,8 +44,10 @@ public class ComfyUiClient(HttpClient http, IOptions<ImageGenOptions> options, I
         if (http.BaseAddress is null)
             throw new ImageGenerationException("Image generation is not set up.");
 
-        var reference = request.Reference is { } bytes ? await UploadAsync(bytes, ct) : null;
-        var graph = ImageWorkflows.Build(request, _options, reference);
+        var references = new List<string>();
+        foreach (var bytes in request.References ?? [])
+            references.Add(await UploadAsync(bytes, ct));
+        var graph = ImageWorkflows.Build(request, _options, references);
         var promptId = await QueueAsync(graph, ct);
         try
         {

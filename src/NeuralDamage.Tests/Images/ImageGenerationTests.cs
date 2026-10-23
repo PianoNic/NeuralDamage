@@ -66,9 +66,61 @@ public class ImageGeneratorTests
         var request = renderer.Requests.Single();
         await Assert.That(request.Workflow).IsEqualTo(ImageWorkflows.Self);
         await Assert.That(request.Prompt).StartsWith("this person cooking. The person from the reference image");
-        using var reference = SKBitmap.Decode(request.Reference);
+        using var reference = SKBitmap.Decode(request.References!.Single());
         await Assert.That(reference.Width).IsEqualTo(ReferenceImage.Size);
         await Assert.That((await h.Db.GeneratedImages.AsNoTracking().SingleAsync()).FaceBotId).IsEqualTo(h.Bots[0].Id);
+    }
+
+    [Test]
+    public async Task WithReferences_TheSelfWorkflowGetsTheAvatarAndThemUpToThree_AndTheLooks()
+    {
+        var renderer = new FakeRenderer();
+        using var h = await FeedHarness.CreateAsync(renderer: renderer);
+        var bot = h.Bots[0];
+        h.Storage.BotAvatars[bot.Id] = Avatar();
+        bot.Looks = "Red hair in a messy bun, round glasses.";
+        foreach (var hair in new[] { SKColors.Red, SKColors.Gold, SKColors.Black })
+        {
+            var reference = new BotReference { BotId = bot.Id, ContentType = "image/png", SizeBytes = 1 };
+            h.Db.BotReferences.Add(reference);
+            h.Storage.BotReferences[(bot.Id, reference.Id)] = TestImages.Face(hair, 400, 300);
+        }
+        await h.Db.SaveChangesAsync();
+
+        var ticket = (await h.Images!.StartAsync(new ImageAsk("me at the beach", null, bot.Id, bot.Id))).Value!;
+        await Assert.That(await ticket.Done).IsTrue();
+
+        var request = renderer.Requests.Single();
+        await Assert.That(request.Workflow).IsEqualTo(ImageWorkflows.Self);
+        await Assert.That(request.References!.Count).IsEqualTo(3);
+        using var avatar = SKBitmap.Decode(request.References[0]);
+        using var collage = SKBitmap.Decode(request.References[1]);
+        await Assert.That(avatar.Width).IsEqualTo(ReferenceImage.Size);
+        await Assert.That(collage.Width).IsEqualTo(ReferenceImage.LargeSize);
+        await Assert.That(request.Prompt).Contains("reference images (all of the same person)");
+        await Assert.That(request.Prompt).EndsWith("How they look: Red hair in a messy bun, round glasses.");
+        // The stored prompt stays what was asked for.
+        await Assert.That((await h.Db.GeneratedImages.AsNoTracking().SingleAsync()).Prompt).IsEqualTo("me at the beach");
+    }
+
+    [Test]
+    public async Task WithOnlyReferences_TheFaceStillComesFromThem()
+    {
+        var renderer = new FakeRenderer();
+        using var h = await FeedHarness.CreateAsync(renderer: renderer);
+        var bot = h.Bots[0];
+        var reference = new BotReference { BotId = bot.Id, ContentType = "image/png", SizeBytes = 1 };
+        h.Db.BotReferences.Add(reference);
+        h.Storage.BotReferences[(bot.Id, reference.Id)] = TestImages.Face(SKColors.Gold);
+        await h.Db.SaveChangesAsync();
+
+        var ticket = (await h.Images!.StartAsync(new ImageAsk("me cooking", null, bot.Id, bot.Id))).Value!;
+        await ticket.Done;
+
+        var request = renderer.Requests.Single();
+        await Assert.That(request.Workflow).IsEqualTo(ImageWorkflows.Self);
+        await Assert.That(request.References!.Count).IsEqualTo(1);
+        await Assert.That(request.Prompt).IsEqualTo("me cooking. The person from the reference image is in this picture: keep their face and identity exactly the same.");
     }
 
     [Test]

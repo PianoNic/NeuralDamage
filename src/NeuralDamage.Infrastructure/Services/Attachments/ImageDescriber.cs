@@ -23,7 +23,14 @@ public interface IImageDescriber
     Task WaitAsync(IReadOnlyCollection<Guid> attachmentIds, TimeSpan timeout, CancellationToken ct = default);
 }
 
-public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ImageDescriber> logger) : IImageDescriber
+/// <summary>Writes a bot's <see cref="Bot.Looks"/> from its reference pictures.</summary>
+public interface ILooksDescriber
+{
+    /// <returns>The text, or null when the describer cannot be used or fails.</returns>
+    Task<string?> DescribeLooksAsync(IReadOnlyList<ImagePart> pictures, CancellationToken ct = default);
+}
+
+public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ImageDescriber> logger) : IImageDescriber, ILooksDescriber
 {
     /// <summary>Cheap, sees images, and has a zero-data-retention endpoint within the default price caps.</summary>
     public const string DefaultModel = "google/gemini-2.5-flash-lite";
@@ -45,6 +52,49 @@ public class ImageDescriber(IServiceScopeFactory scopeFactory, IConfiguration co
         Name the person, character or meme when you recognise them: famous people, cartoon characters, well-known memes like "distracted boyfriend". Otherwise describe what you see and never make up a name.
         Lowercase, no quotes, no full stop at the end, at most 20 words.
         """;
+
+    public const string LooksPrompt = """
+        You get reference pictures of one character: photos or collages of the same person. Write how they look, for the character to know their own appearance and for drawing new pictures of them.
+        Cover what stays the same across the pictures: apparent age, build, face, skin, hair (colour, length, style), eyes, makeup, typical clothes and accessories, their style, and the settings they are usually in.
+        Text written on a collage, such as an age, a city or hobbies, may be included as given.
+        Never name or guess who the person is, even when you think you recognise them.
+        Plain prose in the third person, no markdown, no preamble, at most 80 words.
+        """;
+
+    public async Task<string?> DescribeLooksAsync(IReadOnlyList<ImagePart> pictures, CancellationToken ct = default)
+    {
+        if (pictures.Count == 0)
+            return null;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var openRouter = scope.ServiceProvider.GetRequiredService<IOpenRouterService>();
+            if (await RefusalAsync(openRouter, scope.ServiceProvider.GetRequiredService<ModelPolicy>()) is { } refusal)
+            {
+                logger.LogWarning("Looks left unwritten: {Reason}", refusal);
+                return null;
+            }
+
+            var request = new ChatMessage("user", "Describe how this person looks.") { Images = [.. pictures] };
+            var text = CleanLooks(await openRouter.GenerateResponseAsync(Model, 0.3, LooksPrompt, [request], ct));
+            logger.LogInformation("Wrote looks from {Count} reference pictures with {Model}", pictures.Count, Model);
+            return text;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Writing looks with {Model} failed", Model);
+            return null;
+        }
+    }
+
+    /// <summary>Trimmed and cut to the column's length; null when nothing is left.</summary>
+    public static string? CleanLooks(string? text)
+    {
+        var looks = (text ?? "").Trim();
+        if (looks.Length > Bot.MaxLooksLength)
+            looks = looks[..Bot.MaxLooksLength].TrimEnd();
+        return looks.Length == 0 ? null : looks;
+    }
 
     // One run per image for the life of the process: whoever asks first starts
     // it, everyone after waits on the same task. A failed run is not retried

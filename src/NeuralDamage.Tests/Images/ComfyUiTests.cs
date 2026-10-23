@@ -45,13 +45,65 @@ public class ComfyUiClientTests
     {
         await using var comfy = await FakeComfyUi.StartAsync();
 
-        await comfy.Client().RenderAsync(new RenderRequest(ImageWorkflows.Self, "this person cooking", 1024, 1024, 7, TestImages.Png(768, 768)));
+        await comfy.Client().RenderAsync(new RenderRequest(ImageWorkflows.Self, "this person cooking", 1024, 1024, 7, [TestImages.Png(768, 768)]));
 
         await Assert.That(comfy.Requests.First()).IsEqualTo("POST /upload/image");
         var uploaded = comfy.Uploads.Single();
         var graph = comfy.Graphs.Single();
         await Assert.That((string?)ImageWorkflows.Node(graph, "Reference")["inputs"]!["image"]).IsEqualTo(uploaded);
         await Assert.That((string?)ImageWorkflows.Node(graph, "Prompt")["inputs"]!["prompt"]).IsEqualTo("this person cooking");
+    }
+
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task TheSelfWorkflow_GetsEveryReference_AsImage1ToImage3(int count)
+    {
+        await using var comfy = await FakeComfyUi.StartAsync();
+        var references = Enumerable.Range(0, count).Select(_ => TestImages.Png(768, 768)).ToList();
+
+        await comfy.Client().RenderAsync(new RenderRequest(ImageWorkflows.Self, "this person at the beach", 1024, 1024, 7, references));
+
+        var uploaded = comfy.Uploads.ToList();
+        await Assert.That(uploaded.Count).IsEqualTo(count);
+        var graph = comfy.Graphs.Single();
+        var loaded = graph.Select(n => n.Value!.AsObject())
+            .Where(n => (string?)n["class_type"] == "LoadImage")
+            .Select(n => (string)n["inputs"]!["image"]!)
+            .ToList();
+        await Assert.That(loaded).IsEquivalentTo(uploaded);
+
+        var encoders = graph.Select(n => n.Value!.AsObject()).Where(n => (string?)n["class_type"] == "TextEncodeQwenImageEditPlus").ToList();
+        await Assert.That(encoders.Count).IsEqualTo(2);
+        foreach (var encoder in encoders)
+        {
+            var inputs = encoder["inputs"]!.AsObject();
+            for (var i = 1; i <= 3; i++)
+                await Assert.That(inputs.ContainsKey($"image{i}")).IsEqualTo(i <= count);
+            // Each slot loads its own picture, through its own scale node.
+            var images = Enumerable.Range(1, count).Select(i =>
+            {
+                var scale = graph[(string)inputs[$"image{i}"]![0]!]!;
+                var load = graph[(string)scale["inputs"]!["image"]![0]!]!;
+                return ((string?)scale["class_type"], (string)load["inputs"]!["image"]!);
+            }).ToList();
+            await Assert.That(images.Select(x => x.Item1).Distinct()).IsEquivalentTo(new string?[] { "ImageScaleToTotalPixels" });
+            await Assert.That(images.Select(x => x.Item2)).IsEquivalentTo(uploaded);
+        }
+        var ids = graph.Select(n => n.Key).ToHashSet();
+        var links = graph.SelectMany(n => n.Value!["inputs"]!.AsObject()).Select(i => i.Value).OfType<JsonArray>().Select(a => (string)a[0]!);
+        await Assert.That(links.All(ids.Contains)).IsTrue();
+    }
+
+    [Test]
+    public async Task TheSelfWorkflow_TakesNoMoreThanThree_AndNotNone()
+    {
+        var four = Enumerable.Range(0, 4).Select(i => $"ref{i}.png").ToList();
+        var request = new RenderRequest(ImageWorkflows.Self, "x", 1024, 1024, 1);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Task.FromResult(ImageWorkflows.Build(request, new ImageGenOptions(), four)));
+        await Assert.ThrowsAsync<ArgumentException>(() => Task.FromResult(ImageWorkflows.Build(request, new ImageGenOptions(), [])));
     }
 
     [Test]
@@ -121,7 +173,7 @@ public class ImageWorkflowTests
     [Test]
     public async Task TheSelf_TakesTheReferenceAndTheEditModels_ByDefault()
     {
-        var graph = ImageWorkflows.Build(new RenderRequest(ImageWorkflows.Self, "this person surfing", 1024, 1024, 5), new ImageGenOptions(), "ref.png");
+        var graph = ImageWorkflows.Build(new RenderRequest(ImageWorkflows.Self, "this person surfing", 1024, 1024, 5), new ImageGenOptions(), ["ref.png"]);
 
         await Assert.That((string?)ImageWorkflows.Node(graph, "Reference")["inputs"]!["image"]).IsEqualTo("ref.png");
         await Assert.That((string?)ImageWorkflows.Node(graph, "Model")["inputs"]!["unet_name"]).IsEqualTo("qwen-image-edit-2511-Q3_K_M.gguf");

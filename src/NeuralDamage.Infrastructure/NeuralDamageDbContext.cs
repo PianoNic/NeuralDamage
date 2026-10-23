@@ -8,6 +8,7 @@ public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> optio
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Bot> Bots => Set<Bot>();
+    public DbSet<BotReference> BotReferences => Set<BotReference>();
     public DbSet<Chat> Chats => Set<Chat>();
     public DbSet<ChatMember> ChatMembers => Set<ChatMember>();
     public DbSet<Message> Messages => Set<Message>();

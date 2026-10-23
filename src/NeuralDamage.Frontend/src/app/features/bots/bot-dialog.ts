@@ -11,7 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCamera, lucideChevronLeft, lucideChevronRight, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
+import { lucideCamera, lucideChevronLeft, lucideChevronRight, lucideImagePlus, lucideTriangleAlert, lucideX } from '@ng-icons/lucide';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
@@ -26,6 +26,7 @@ import { firstValueFrom } from 'rxjs';
 import { BotsService } from '../../api/api/bots.service';
 import { describeApiError } from '../../core/http-errors';
 import { BotPictureSuggestionDto } from '../../api/model/botPictureSuggestionDto';
+import { BotReferenceDto } from '../../api/model/botReferenceDto';
 import { BotDto } from '../../core/models';
 import {
   characterFields,
@@ -46,6 +47,7 @@ import {
 } from './bot-meta';
 import { ModelBrowser } from './model-browser';
 import { ModelCatalog } from './model-catalog';
+import { AvatarImages } from '../../shared/avatar-images';
 import { AVATAR_SIZE, cropAvatar } from '../../shared/crop-avatar';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { providerIconUrl } from '../../shared/provider-icon';
@@ -54,6 +56,12 @@ const DEFAULT_TEMPERATURE = 0.8;
 
 /** How long the name has to stay as it is before a picture is looked up for it. */
 export const PICTURE_LOOKUP_DELAY = 600;
+
+/** The most reference pictures a bot can have. */
+export const MAX_REFERENCES = 3;
+
+/** The most a bot's looks may hold. */
+export const MAX_LOOKS = 1000;
 
 /** Pictures offered for the bot's name, shown in the picture slot until one is used or they are refused. */
 interface PictureOffer {
@@ -86,7 +94,7 @@ interface PictureOffer {
     MemberAvatar,
     ModelBrowser,
   ],
-  providers: [provideIcons({ lucideCamera, lucideChevronLeft, lucideChevronRight, lucideTriangleAlert, lucideX })],
+  providers: [provideIcons({ lucideCamera, lucideChevronLeft, lucideChevronRight, lucideImagePlus, lucideTriangleAlert, lucideX })],
   template: `
     <hlm-dialog [state]="open() ? 'open' : 'closed'" (closed)="closed.emit()">
       <hlm-dialog-content
@@ -200,6 +208,104 @@ interface PictureOffer {
               </div>
             }
           </div>
+
+          <section class="flex flex-col gap-2" aria-labelledby="bot-references-label">
+            <div class="flex flex-col gap-0.5">
+              <span class="text-sm font-medium" id="bot-references-label">References</span>
+              <span class="text-muted-foreground text-xs">
+                @if (bot()) {
+                  Up to {{ maxReferences }} photos or collages of how it looks. Its pictures come out more like it. Only you see them.
+                } @else {
+                  Once the bot is created, add up to {{ maxReferences }} photos or collages of how it looks.
+                }
+              </span>
+            </div>
+            @if (bot()) {
+              <div class="flex flex-wrap items-center gap-2" role="list" aria-label="Reference pictures">
+                @for (reference of references(); track reference.id; let i = $index) {
+                  <div class="group relative size-16 shrink-0" role="listitem">
+                    @if (referenceSrc(reference.url); as src) {
+                      <img class="size-16 rounded-lg border object-cover" [src]="src" [alt]="'Reference ' + (i + 1)" />
+                    } @else {
+                      <div class="bg-muted size-16 animate-pulse rounded-lg border"></div>
+                    }
+                    <button
+                      hlmBtn
+                      type="button"
+                      variant="secondary"
+                      size="icon-xs"
+                      class="absolute -top-1.5 -right-1.5 rounded-full border shadow-sm"
+                      [attr.aria-label]="'Remove reference ' + (i + 1)"
+                      [disabled]="referenceBusy()"
+                      (click)="removeReference(reference.id)"
+                    >
+                      <ng-icon name="lucideX" size="12" />
+                    </button>
+                  </div>
+                }
+                @if (references().length < maxReferences) {
+                  <button
+                    type="button"
+                    class="border-input text-muted-foreground hover:text-foreground hover:bg-muted/50 focus-visible:ring-ring/50 flex size-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed text-xs outline-none focus-visible:ring-2 disabled:opacity-60"
+                    aria-label="Add a reference picture"
+                    [disabled]="referenceBusy()"
+                    (click)="referencePicker.click()"
+                  >
+                    @if (referenceBusy()) {
+                      <hlm-spinner />
+                    } @else {
+                      <ng-icon name="lucideImagePlus" size="18" />
+                      Add
+                    }
+                  </button>
+                }
+                <input
+                  #referencePicker
+                  type="file"
+                  class="hidden"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  (change)="pickReference(referencePicker)"
+                />
+              </div>
+
+              <div hlmField [attr.data-invalid]="looksTooLong() || null">
+                <div class="flex items-baseline justify-between gap-2">
+                  <label hlmFieldLabel for="bot-looks">Looks</label>
+                  <span
+                    class="text-xs tabular-nums"
+                    [class.text-muted-foreground]="!looksTooLong()"
+                    [class.text-destructive]="looksTooLong()"
+                    aria-hidden="true"
+                  >
+                    {{ looks().trim().length }}/{{ maxLooks }}
+                  </span>
+                </div>
+                <textarea
+                  hlmTextarea
+                  id="bot-looks"
+                  name="looks"
+                  rows="3"
+                  class="min-h-20 resize-y"
+                  [attr.aria-invalid]="looksTooLong() || null"
+                  [attr.aria-busy]="referenceBusy() || null"
+                  placeholder="e.g. Early twenties, long auburn hair, freckles, oversized sweaters, always in a café"
+                  [value]="looks()"
+                  (input)="looks.set($any($event.target).value)"
+                ></textarea>
+                @if (looksTooLong()) {
+                  <hlm-field-error forceShow>Keep it to {{ maxLooks }} characters.</hlm-field-error>
+                } @else {
+                  <p hlmFieldDescription>
+                    @if (referenceBusy()) {
+                      Writing it from the references…
+                    } @else {
+                      Written from the references, yours to edit. The bot knows it as how it looks, and its pictures use it.
+                    }
+                  </p>
+                }
+              </div>
+            }
+          </section>
 
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div hlmField [attr.data-invalid]="nameInvalid() || null">
@@ -414,6 +520,7 @@ interface PictureOffer {
 export class BotDialog {
   private readonly api = inject(BotsService);
   private readonly catalog = inject(ModelCatalog);
+  private readonly images = inject(AvatarImages);
 
   readonly open = input(false);
   /** The bot to edit; null makes a new one. */
@@ -447,6 +554,15 @@ export class BotDialog {
   protected readonly maxPostsPerDayLimit = MAX_POSTS_PER_DAY;
   protected readonly maxStoriesPerDay = signal(DEFAULT_STORIES_PER_DAY);
   protected readonly maxStoriesPerDayLimit = MAX_STORIES_PER_DAY;
+  /** The bot's reference pictures; they go up and away at once, not on save. */
+  protected readonly references = signal<BotReferenceDto[]>([]);
+  protected readonly maxReferences = MAX_REFERENCES;
+  /** What the bot looks like, as the describer wrote it or the creator edited it. */
+  protected readonly looks = signal('');
+  protected readonly maxLooks = MAX_LOOKS;
+  protected readonly looksTooLong = computed(() => this.looks().trim().length > MAX_LOOKS);
+  /** A reference is being uploaded (and the looks written) or removed. */
+  protected readonly referenceBusy = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   /** A picture picked but not uploaded yet: it goes up when the bot is saved. */
@@ -532,6 +648,10 @@ export class BotDialog {
         this.avatarRemoved.set(false);
         this.setOffer(null);
         this.refused.set(new Set());
+        this.references.set(bot?.references ?? []);
+        this.looks.set(bot?.looks ?? '');
+        this.referenceBusy.set(false);
+        if (bot) void this.refreshReferences(bot.id, bot.looks ?? '');
       });
     });
     // Once the name settles, look up a picture for it, as long as the bot has none.
@@ -663,6 +783,59 @@ export class BotDialog {
     this.offer.set(next);
   }
 
+  /** A reference picture through the API, with the token; null while it loads. */
+  protected referenceSrc(url: string): string | null {
+    return this.images.get(url)();
+  }
+
+  /**
+   * References change on the server at once, so a bot passed in from a list
+   * may be behind: the dialog reads them fresh. Looks typed meanwhile are kept.
+   */
+  private async refreshReferences(botId: string, looksBefore: string): Promise<void> {
+    try {
+      const fresh = await firstValueFrom(this.api.apiBotsBotIdGet(botId));
+      if (!this.open() || this.bot()?.id !== botId || this.referenceBusy()) return;
+      this.references.set(fresh.references ?? []);
+      if (this.looks() === looksBefore) this.looks.set(fresh.looks ?? '');
+    } catch {
+      // The bot as it was passed in is good enough.
+    }
+  }
+
+  protected async pickReference(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    input.value = '';
+    const bot = this.bot();
+    if (!file || !bot || this.referenceBusy()) return;
+    this.error.set(null);
+    this.referenceBusy.set(true);
+    try {
+      const result = await firstValueFrom(this.api.apiBotsBotIdReferencesPost(bot.id, file));
+      this.references.set(result.references);
+      if (result.looks) this.looks.set(result.looks);
+    } catch (error) {
+      this.error.set(describeApiError(error, { fallback: 'Could not add that picture.' }));
+    } finally {
+      this.referenceBusy.set(false);
+    }
+  }
+
+  protected async removeReference(referenceId: string): Promise<void> {
+    const bot = this.bot();
+    if (!bot || this.referenceBusy()) return;
+    this.error.set(null);
+    this.referenceBusy.set(true);
+    try {
+      await firstValueFrom(this.api.apiBotsBotIdReferencesReferenceIdDelete(bot.id, referenceId));
+      this.references.update((list) => list.filter((r) => r.id !== referenceId));
+    } catch (error) {
+      this.error.set(describeApiError(error, { fallback: 'Could not remove that picture.' }));
+    } finally {
+      this.referenceBusy.set(false);
+    }
+  }
+
   protected removeAvatar(): void {
     this.setNewAvatar(null);
     this.avatarRemoved.set(!!this.bot()?.avatarUrl);
@@ -694,6 +867,7 @@ export class BotDialog {
     const modelId = this.modelId();
     if (!this.name().trim() || !modelId || this.saving()) return;
     if (this.descriptionTooLong() && !this.descriptionLocked()) return;
+    if (this.looksTooLong()) return;
     if (!this.bot() && !this.description().trim()) return;
 
     this.saving.set(true);
@@ -713,6 +887,7 @@ export class BotDialog {
             maxStoriesPerDay: this.maxStoriesPerDay(),
             // Always sent, so clearing the field goes back to the server default.
             systemPrompt: this.character().trim(),
+            looks: this.looks().trim(),
           }),
         );
         await this.saveAvatar(bot.id, bot.avatarUrl);

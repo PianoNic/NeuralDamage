@@ -139,15 +139,19 @@ public static class BotPromptBuilder
     /// The text that opens the system prompt: the bot's character. A bot from
     /// before the short description existed kept its whole character in
     /// <see cref="Bot.Personality"/> and left the system prompt empty, so that
-    /// one still gets it, behind the line it always had.
+    /// one still gets it, behind the line it always had. The bot's
+    /// <see cref="Bot.Looks"/> follow, so it talks about itself consistently.
     /// </summary>
     public static string Character(Bot bot)
     {
-        if (!string.IsNullOrWhiteSpace(bot.SystemPrompt))
-            return bot.SystemPrompt.Trim();
-        return string.IsNullOrWhiteSpace(bot.Personality)
-            ? $"You are {bot.Name}."
-            : $"You are {bot.Name}.\n{bot.Personality.Trim()}";
+        var character = !string.IsNullOrWhiteSpace(bot.SystemPrompt)
+            ? bot.SystemPrompt.Trim()
+            : string.IsNullOrWhiteSpace(bot.Personality)
+                ? $"You are {bot.Name}."
+                : $"You are {bot.Name}.\n{bot.Personality.Trim()}";
+        return string.IsNullOrWhiteSpace(bot.Looks)
+            ? character
+            : $"{character}\n\nHow you look: {bot.Looks.Trim()}";
     }
 
     /// <summary>

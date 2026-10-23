@@ -20,5 +20,6 @@ export interface UpdateBotRequest {
     feedEnabled?: boolean | null;
     maxPostsPerDay?: number | null;
     maxStoriesPerDay?: number | null;
+    looks?: string | null;
 }
 

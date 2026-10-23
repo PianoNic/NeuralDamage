@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using NeuralDamage.Infrastructure.Services.Attachments;
+using SkiaSharp;
 
 namespace NeuralDamage.Tests.Helpers;
 
@@ -15,6 +16,29 @@ public static class TestImages
         BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(16), (uint)width);
         BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(20), (uint)height);
         return data;
+    }
+
+    /// <summary>A real, decodable PNG of a drawn cartoon face: no photo of anyone.</summary>
+    public static byte[] Face(SKColor hair, int width = 256, int height = 256)
+    {
+        using var bitmap = new SKBitmap(width, height);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(new SKColor(230, 236, 245));
+            float cx = width / 2f, cy = height / 2f, r = Math.Min(width, height) * 0.35f;
+            using var paint = new SKPaint { IsAntialias = true, Color = hair };
+            canvas.DrawCircle(cx, cy - r * 0.15f, r * 1.1f, paint);
+            paint.Color = new SKColor(240, 200, 170);
+            canvas.DrawCircle(cx, cy, r, paint);
+            paint.Color = SKColors.Black;
+            canvas.DrawCircle(cx - r * 0.35f, cy - r * 0.2f, r * 0.08f, paint);
+            canvas.DrawCircle(cx + r * 0.35f, cy - r * 0.2f, r * 0.08f, paint);
+            paint.Style = SKPaintStyle.Stroke;
+            paint.StrokeWidth = r * 0.06f;
+            canvas.DrawArc(SKRect.Create(cx - r * 0.4f, cy, r * 0.8f, r * 0.45f), 20, 140, false, paint);
+        }
+        using var data = SKImage.FromBitmap(bitmap).Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
     }
 
     public static byte[] Gif(int width, int height)
@@ -88,6 +112,25 @@ public sealed class InMemoryAttachmentStorage : IAttachmentStorage
         Task.FromResult(BotAvatars.TryGetValue(botId, out var data) ? data : null);
 
     public void DeleteBotAvatar(Guid botId) => BotAvatars.TryRemove(botId, out _);
+
+    public ConcurrentDictionary<(Guid Bot, Guid Id), byte[]> BotReferences { get; } = new();
+
+    public Task SaveBotReferenceAsync(Guid botId, Guid referenceId, byte[] data, CancellationToken ct = default)
+    {
+        BotReferences[(botId, referenceId)] = data;
+        return Task.CompletedTask;
+    }
+
+    public Task<byte[]?> ReadBotReferenceAsync(Guid botId, Guid referenceId, CancellationToken ct = default) =>
+        Task.FromResult(BotReferences.TryGetValue((botId, referenceId), out var data) ? data : null);
+
+    public void DeleteBotReference(Guid botId, Guid referenceId) => BotReferences.TryRemove((botId, referenceId), out _);
+
+    public void DeleteBotReferences(Guid botId)
+    {
+        foreach (var key in BotReferences.Keys.Where(k => k.Bot == botId))
+            BotReferences.TryRemove(key, out _);
+    }
 
     public ConcurrentDictionary<Guid, byte[]> Stickers { get; } = new();
 

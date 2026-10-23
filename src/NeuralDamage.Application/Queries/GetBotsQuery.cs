@@ -10,7 +10,8 @@ namespace NeuralDamage.Application.Queries;
 
 /// <summary>The active public bots, or only those <paramref name="CreatedById"/> made when set.</summary>
 /// <remarks>Private bots never appear here; they are only seen in their chat's member list.</remarks>
-public record GetBotsQuery(Guid? CreatedById = null) : IQuery<Result<List<BotDto>>>;
+/// <param name="ViewerId">Who is asking: their own bots come with their looks and reference pictures.</param>
+public record GetBotsQuery(Guid? CreatedById = null, Guid? ViewerId = null) : IQuery<Result<List<BotDto>>>;
 
 public class GetBotsHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy) : IQueryHandler<GetBotsQuery, Result<List<BotDto>>>
 {
@@ -22,7 +23,7 @@ public class GetBotsHandler(NeuralDamageDbContext db, IOpenRouterService openRou
 
         var bots = await query
             .OrderBy(b => b.Name)
-            .SelectDto(DateTime.UtcNow)
+            .SelectDto(DateTime.UtcNow, request.ViewerId)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 

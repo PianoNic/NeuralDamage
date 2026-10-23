@@ -123,6 +123,7 @@ builder.Services.AddSingleton<IAttachmentStorage>(new FileSystemAttachmentStorag
     Path.GetFullPath(attachmentOptions.Path, builder.Environment.ContentRootPath)));
 builder.Services.AddSingleton<ImageDescriber>();
 builder.Services.AddSingleton<IImageDescriber>(sp => sp.GetRequiredService<ImageDescriber>());
+builder.Services.AddSingleton<ILooksDescriber>(sp => sp.GetRequiredService<ImageDescriber>());
 builder.Services.AddSingleton(sp => new StickerDescribeQueue(
     sp.GetRequiredService<ImageDescriber>().DescribeStickerAsync,
     sp.GetRequiredService<ILogger<StickerDescribeQueue>>()));

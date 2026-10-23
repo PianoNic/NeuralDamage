@@ -19,6 +19,7 @@ public class BotConfiguration : IEntityTypeConfiguration<Bot>
         builder.Property(b => b.Temperature).HasDefaultValue(0.7);
         builder.Property(b => b.AvatarUrl).HasMaxLength(1024);
         builder.Property(b => b.Aliases).HasMaxLength(512);
+        builder.Property(b => b.Looks).HasMaxLength(Bot.MaxLooksLength);
         builder.Property(b => b.IsActive).HasDefaultValue(true);
         // The sentinel keeps an explicit false from being swapped for the column default on insert.
         builder.Property(b => b.IsPublic).HasDefaultValue(true).HasSentinel(true);
@@ -28,5 +29,16 @@ public class BotConfiguration : IEntityTypeConfiguration<Bot>
 
         builder.HasOne(b => b.CreatedBy).WithMany(u => u.CreatedBots).HasForeignKey(b => b.CreatedById).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(b => b.Chat).WithMany().HasForeignKey(b => b.ChatId).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+public class BotReferenceConfiguration : IEntityTypeConfiguration<BotReference>
+{
+    public void Configure(EntityTypeBuilder<BotReference> builder)
+    {
+        builder.HasKey(r => r.Id);
+        builder.Property(r => r.ContentType).HasMaxLength(64).IsRequired();
+        builder.HasOne(r => r.Bot).WithMany(b => b.References).HasForeignKey(r => r.BotId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(r => r.BotId);
     }
 }
