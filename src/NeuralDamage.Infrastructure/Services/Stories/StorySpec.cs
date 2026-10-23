@@ -43,7 +43,8 @@ public record StoryLayer(
 
 /// <summary>
 /// Where a story's picture comes from: <c>upload:&lt;id&gt;</c>, a picture the
-/// author uploaded for it, or <c>wiki:&lt;name&gt;</c> (optionally <c>#1</c> or
+/// author uploaded for it, <c>generated:&lt;id&gt;</c>, a picture the author had
+/// the image generator draw, or <c>wiki:&lt;name&gt;</c> (optionally <c>#1</c> or
 /// <c>#2</c> for the second or third), a picture from the Wikimedia lookup
 /// new bots get theirs from.
 /// </summary>
@@ -51,6 +52,7 @@ public abstract record StoryImageRef
 {
     public sealed record Upload(Guid Id) : StoryImageRef;
     public sealed record Wiki(string Name, int Index) : StoryImageRef;
+    public sealed record Generated(Guid Id) : StoryImageRef;
 
     public const int MaxWikiName = 80;
 
@@ -61,6 +63,8 @@ public abstract record StoryImageRef
         value = value.Trim();
         if (value.StartsWith("upload:", StringComparison.OrdinalIgnoreCase))
             return Guid.TryParse(value[7..], out var id) ? new Upload(id) : null;
+        if (value.StartsWith("generated:", StringComparison.OrdinalIgnoreCase))
+            return Guid.TryParse(value[10..], out var generated) ? new Generated(generated) : null;
         if (value.StartsWith("wiki:", StringComparison.OrdinalIgnoreCase))
         {
             var name = value[5..].Trim();

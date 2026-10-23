@@ -71,7 +71,8 @@ public sealed class FeedHarness : IDisposable
         services.AddSingleton(behaviorOptions);
         services.AddScoped(sp => new FeedPostWriter(sp.GetRequiredService<NeuralDamageDbContext>(), openRouter, configuration,
             NullLogger<FeedPostWriter>.Instance, feedOptions, clock));
-        services.AddSingleton<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>(new InMemoryAttachmentStorage());
+        var storage = new InMemoryAttachmentStorage();
+        services.AddSingleton<IAttachmentStorage>(storage);
         services.AddSingleton(Substitute.For<NeuralDamage.Infrastructure.Services.BotPictures.IBotPictureFinder>());
         services.AddSingleton(SharedRenderer);
         services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Stories.StoryPublisher(
@@ -81,10 +82,8 @@ public sealed class FeedHarness : IDisposable
         services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Stories.StoryWriter(
             sp.GetRequiredService<NeuralDamageDbContext>(), openRouter, sp.GetRequiredService<FeedPostWriter>(),
             sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>(),
-            NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryWriter>.Instance, clock));
+            NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryWriter>.Instance, clock, sp.GetService<ImageGenerator>()));
         jev.Engine()(services);
-        var storage = new InMemoryAttachmentStorage();
-        services.AddSingleton<IAttachmentStorage>(storage);
         if (renderer is not null)
         {
             var imageOptions = Options.Create(imageGen ?? new ImageGenOptions { BaseUrl = "http://comfyui.example.com/" });

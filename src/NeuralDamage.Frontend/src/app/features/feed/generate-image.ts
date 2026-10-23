@@ -26,6 +26,8 @@ export const MAX_PROMPT = 1000;
 export interface ImageRequest {
   prompt: string;
   faceBotId: string | null;
+  /** A story's 9:16 background rather than a square picture for a post. */
+  forStory?: boolean;
 }
 
 /**
@@ -48,7 +50,7 @@ export class ImageDraft {
   async generate(request: ImageRequest): Promise<void> {
     const previous = this.image();
     try {
-      const image = await firstValueFrom(this.api.apiImagesPost({ prompt: request.prompt, faceBotId: request.faceBotId }));
+      const image = await firstValueFrom(this.api.apiImagesPost({ prompt: request.prompt, faceBotId: request.faceBotId, forStory: request.forStory ?? false }));
       if (previous) void this.discardOnServer(previous.id);
       this.image.set(image);
       this.schedule(image.id);
@@ -127,18 +129,25 @@ export function generatedImageSrc(url: string): string {
   providers: [provideIcons({ lucideSparkles })],
   template: `
     <hlm-popover align="start" [sideOffset]="8">
-      <button
-        hlmPopoverTrigger
-        hlmBtn
-        variant="ghost"
-        size="icon-sm"
-        type="button"
-        aria-label="Generate image"
-        hlmTooltip="Generate image"
-        [disabled]="busy()"
-      >
-        <ng-icon name="lucideSparkles" />
-      </button>
+      @if (label(); as text) {
+        <button hlmPopoverTrigger hlmBtn variant="outline" type="button" class="w-full" [disabled]="busy()">
+          <ng-icon name="lucideSparkles" />
+          {{ text }}
+        </button>
+      } @else {
+        <button
+          hlmPopoverTrigger
+          hlmBtn
+          variant="ghost"
+          size="icon-sm"
+          type="button"
+          aria-label="Generate image"
+          hlmTooltip="Generate image"
+          [disabled]="busy()"
+        >
+          <ng-icon name="lucideSparkles" />
+        </button>
+      }
       <hlm-popover-content *hlmPopoverPortal="let ctx" class="flex w-80 flex-col gap-3 p-3">
         <div class="flex flex-col gap-1.5">
           <label hlmLabel [for]="promptId">Generate image</label>
@@ -181,6 +190,10 @@ export class GenerateImage {
   readonly bots = input<readonly BotDto[]>([]);
   /** A picture is already being drawn. */
   readonly busy = input(false);
+  /** A labelled button instead of the composer's icon. */
+  readonly label = input<string | null>(null);
+  /** For a story's background: 9:16. */
+  readonly forStory = input(false);
   readonly generate = output<ImageRequest>();
 
   private static nextId = 0;
@@ -198,7 +211,7 @@ export class GenerateImage {
   protected submit(ctx: { close: () => void }): void {
     const prompt = this.prompt().trim();
     if (!prompt) return;
-    this.generate.emit({ prompt, faceBotId: this.face() || null });
+    this.generate.emit({ prompt, faceBotId: this.face() || null, forStory: this.forStory() });
     this.prompt.set('');
     this.face.set('');
     ctx.close();

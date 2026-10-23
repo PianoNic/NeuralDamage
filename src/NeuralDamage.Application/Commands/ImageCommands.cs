@@ -7,15 +7,16 @@ using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Images;
+using NeuralDamage.Infrastructure.Services.Stories;
 
 namespace NeuralDamage.Application.Commands;
 
 /// <summary>
-/// Starts drawing a picture for a post the person is writing, optionally with
+/// Starts drawing a picture for a post or a story the person is making, optionally with
 /// a public bot in it, its face taken from its profile picture. It answers at
 /// once with the pending picture; the person polls it until it is ready.
 /// </summary>
-public record GenerateImageCommand(Guid UserId, string Prompt, Guid? FaceBotId = null) : ICommand<Result<GeneratedImageDto>>;
+public record GenerateImageCommand(Guid UserId, string Prompt, Guid? FaceBotId = null, bool ForStory = false) : ICommand<Result<GeneratedImageDto>>;
 
 public class GenerateImageHandler(NeuralDamageDbContext db, ImageGenerator generator) : ICommandHandler<GenerateImageCommand, Result<GeneratedImageDto>>
 {
@@ -25,7 +26,10 @@ public class GenerateImageHandler(NeuralDamageDbContext db, ImageGenerator gener
             && !await db.Bots.AnyAsync(b => b.Id == faceBotId && b.IsActive && b.IsPublic && b.AvatarUrl != null, cancellationToken))
             return Result.Failure<GeneratedImageDto>("That bot has no picture to take a face from.");
 
-        var started = await generator.StartAsync(new ImageAsk(request.Prompt, request.UserId, null, request.FaceBotId), cancellationToken);
+        var ask = request.ForStory
+            ? new ImageAsk(request.Prompt, request.UserId, null, request.FaceBotId, StoryWriter.PictureWidth, StoryWriter.PictureHeight)
+            : new ImageAsk(request.Prompt, request.UserId, null, request.FaceBotId);
+        var started = await generator.StartAsync(ask, cancellationToken);
         return started.IsSuccess
             ? Result.Success(GeneratedImages.ToDto(started.Value!.Image, generator.Waiting))
             : Result.Failure<GeneratedImageDto>(started.Error!);

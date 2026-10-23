@@ -1,4 +1,4 @@
-import { Component, computed, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, DestroyRef, effect, ElementRef, inject, signal, untracked, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -56,6 +56,9 @@ import {
   updateLayer,
 } from './story-model';
 import { StoryStore } from './story-store';
+import { AppConfig } from '../../core/app-config';
+import { BotDirectory } from '../bots/bot-directory';
+import { GenerateImage, ImageDraft } from '../feed/generate-image';
 
 /**
  * `/feed/story`: the story editor. A background colour or picture, text, stickers from the library
@@ -79,8 +82,10 @@ import { StoryStore } from './story-store';
     HlmToggleGroupImports,
     StickerImage,
     StickerPicker,
+    GenerateImage,
   ],
   providers: [
+    ImageDraft,
     provideIcons({
       lucideArrowDown,
       lucideArrowUp,
@@ -130,6 +135,22 @@ import { StoryStore } from './story-store';
               <ng-icon name="lucideImagePlus" />
               Background image
             </button>
+            @if (imageGeneration()) {
+              <app-generate-image
+                label="Generate background"
+                [forStory]="true"
+                [bots]="botList.bots()"
+                [busy]="picture.pending()"
+                (generate)="picture.generate($event)"
+              />
+              @if (picture.image(); as drawing) {
+                <div class="text-muted-foreground flex items-center gap-2 text-xs" role="status" data-testid="generating-background">
+                  <hlm-spinner class="size-4" />
+                  <span class="flex-1">Drawing the background{{ drawing.waiting > 1 ? ', ' + (drawing.waiting - 1) + ' ahead' : '' }}…</span>
+                  <button hlmBtn variant="ghost" size="sm" type="button" (click)="picture.discard()">Cancel</button>
+                </div>
+              }
+            }
             @if (draft().backgroundImage) {
               <button hlmBtn variant="ghost" size="sm" type="button" (click)="clearBackgroundImage()">Remove background image</button>
             }
@@ -348,6 +369,9 @@ import { StoryStore } from './story-store';
 })
 export class StoryEditor {
   private readonly store = inject(StoryStore);
+  protected readonly picture = inject(ImageDraft);
+  protected readonly botList = inject(BotDirectory);
+  protected readonly imageGeneration = inject(AppConfig).imageGeneration;
   private readonly bots = inject(BotsService);
   private readonly images = inject(AvatarImages);
   private readonly router = inject(Router);
@@ -384,6 +408,16 @@ export class StoryEditor {
   protected readonly remove = (id: string) => (d: StoryDraft) => removeLayer(d, id);
 
   constructor() {
+    void this.botList.load();
+    // A generated background goes in as soon as it is drawn.
+    effect(() => {
+      if (!this.picture.ready()) return;
+      untracked(() => {
+        const url = this.picture.image()?.url;
+        const id = this.picture.take();
+        if (id && url) this.apply((d) => ({ ...d, backgroundImage: { ref: `generated:${id}`, previewUrl: url } }));
+      });
+    });
     inject(DestroyRef).onDestroy(() => {
       this.objectUrls.forEach((u) => URL.revokeObjectURL(u));
       const preview = this.preview();

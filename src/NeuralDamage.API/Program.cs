@@ -101,7 +101,8 @@ builder.Services.AddScoped(sp => new StoryWriter(
     sp.GetRequiredService<FeedPostWriter>(),
     sp.GetRequiredService<StoryPublisher>(),
     sp.GetRequiredService<ILogger<StoryWriter>>(),
-    sp.GetRequiredService<BotClock>()));
+    sp.GetRequiredService<BotClock>(),
+    sp.GetRequiredService<ImageGenerator>()));
 builder.Services.AddHostedService<StorySweeper>();
 
 // Images

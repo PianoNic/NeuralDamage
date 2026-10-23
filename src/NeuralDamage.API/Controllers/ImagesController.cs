@@ -26,7 +26,7 @@ public class ImagesController(ISender sender, IUserService userService) : Contro
     public async Task<ActionResult<GeneratedImageDto>> Generate(GenerateImageRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new GenerateImageCommand(userId, request.Prompt, request.FaceBotId), ct);
+        var result = await sender.Send(new GenerateImageCommand(userId, request.Prompt, request.FaceBotId, request.ForStory), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

@@ -159,7 +159,7 @@ public class FeedScheduler(
             // Now and then a story instead of a post, within the bot's own cap for stories.
             if ((stories.GetValueOrDefault(bot.Id)?.Today ?? 0) < bot.MaxStoriesPerDay && random() < _options.StoryShare)
             {
-                if (await StoryAsync(bot, now, ct) is { } story)
+                if (await StoryAsync(bot, now, ct, imageRoll: random()) is { } story)
                     tick.Stories.Add(story);
             }
             else if (await PostAsync(bot, now, random(), ct, imageRoll: random()) is { } post)
@@ -171,10 +171,11 @@ public class FeedScheduler(
     }
 
     /// <summary>Has <paramref name="bot"/> make a story now; null when its spec was dropped.</summary>
-    public async Task<StoryDto?> StoryAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default)
+    /// <param name="imageRoll">A random number in [0, 1): below <see cref="FeedOptions.ImageShare"/> the bot may have its background drawn.</param>
+    public async Task<StoryDto?> StoryAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default, double imageRoll = 1)
     {
         using var scope = scopes.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<StoryWriter>().WriteAsync(bot, now, ct);
+        return await scope.ServiceProvider.GetRequiredService<StoryWriter>().WriteAsync(bot, now, ct, imageRoll < _options.ImageShare);
     }
 
     /// <summary>

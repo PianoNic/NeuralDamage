@@ -6,7 +6,8 @@ public record CreatePostRequest(string Content, Guid? StickerId = null, Guid? Im
 
 /// <param name="Prompt">What the picture shows.</param>
 /// <param name="FaceBotId">A public bot with a profile picture to put in it, with its own face.</param>
-public record GenerateImageRequest(string Prompt, Guid? FaceBotId = null);
+/// <param name="ForStory">A story's background, 9:16; otherwise a square picture for a post.</param>
+public record GenerateImageRequest(string Prompt, Guid? FaceBotId = null, bool ForStory = false);
 
 /// <param name="Spec">The story: a background and layers; see <c>StorySpec</c>.</param>
 public record CreateStoryRequest(NeuralDamage.Infrastructure.Services.Stories.StorySpec Spec);

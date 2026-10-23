@@ -26,7 +26,8 @@ public class StoryPublisher(
 {
     /// <summary>The PNG of <paramref name="spec"/>, or why it cannot be one. Nothing is stored.</summary>
     /// <param name="uploaderUserId">Whose uploads the spec may use; a bot has none.</param>
-    public async Task<Result<byte[]>> RenderAsync(StorySpec spec, Guid? uploaderUserId, CancellationToken ct = default)
+    /// <param name="botId">The bot making it, whose generated pictures the spec may use.</param>
+    public async Task<Result<byte[]>> RenderAsync(StorySpec spec, Guid? uploaderUserId, CancellationToken ct = default, Guid? botId = null)
     {
         var stickerNames = await db.Stickers.Where(s => s.DeletedAt == null).Select(s => s.Name).ToListAsync(ct);
         var known = stickerNames.ToHashSet(StringComparer.Ordinal);
@@ -34,7 +35,7 @@ public class StoryPublisher(
         if (errors.Count > 0)
             return Result<byte[]>.Failure(string.Join(" ", errors.Take(3)));
 
-        var (assets, problem) = await AssetsAsync(spec, uploaderUserId, ct);
+        var (assets, problem) = await AssetsAsync(spec, uploaderUserId, botId, ct);
         if (problem is not null)
             return Result<byte[]>.Failure(problem);
         return Result<byte[]>.Success(await Task.Run(() => renderer.Render(spec, assets!), ct));
@@ -43,7 +44,7 @@ public class StoryPublisher(
     /// <summary>Renders, stores and announces a story by a person or a bot.</summary>
     public async Task<Result<StoryDto>> PublishAsync(StorySpec spec, Guid? userId, Guid? botId, CancellationToken ct = default)
     {
-        var png = await RenderAsync(spec, userId, ct);
+        var png = await RenderAsync(spec, userId, ct, botId);
         if (png.IsFailure)
             return Result<StoryDto>.Failure(png.Error!);
 
@@ -58,12 +59,12 @@ public class StoryPublisher(
         return Result<StoryDto>.Success(dto);
     }
 
-    private async Task<(StoryAssets? Assets, string? Problem)> AssetsAsync(StorySpec spec, Guid? uploaderUserId, CancellationToken ct)
+    private async Task<(StoryAssets? Assets, string? Problem)> AssetsAsync(StorySpec spec, Guid? uploaderUserId, Guid? botId, CancellationToken ct)
     {
         byte[]? background = null;
         if (spec.Background.Image is { } bg)
         {
-            var (data, problem) = await ImageAsync(bg, uploaderUserId, ct);
+            var (data, problem) = await ImageAsync(bg, uploaderUserId, botId, ct);
             if (problem is not null)
                 return (null, problem);
             background = data;
@@ -72,7 +73,7 @@ public class StoryPublisher(
         var images = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var reference in spec.Layers.Where(l => l.Type == "image").Select(l => l.Image!.Trim()).Distinct())
         {
-            var (data, problem) = await ImageAsync(reference, uploaderUserId, ct);
+            var (data, problem) = await ImageAsync(reference, uploaderUserId, botId, ct);
             if (problem is not null)
                 return (null, problem);
             images[reference] = data!;
@@ -88,7 +89,7 @@ public class StoryPublisher(
         return (new StoryAssets(background, stickers, images), null);
     }
 
-    private async Task<(byte[]? Data, string? Problem)> ImageAsync(string reference, Guid? uploaderUserId, CancellationToken ct)
+    private async Task<(byte[]? Data, string? Problem)> ImageAsync(string reference, Guid? uploaderUserId, Guid? botId, CancellationToken ct)
     {
         switch (StoryImageRef.Parse(reference))
         {
@@ -96,6 +97,12 @@ public class StoryPublisher(
                 var mine = uploaderUserId is { } owner && await db.StoryImages.AnyAsync(i => i.Id == upload.Id && i.UploaderUserId == owner, ct);
                 var bytes = mine ? await storage.ReadStoryFileAsync(upload.Id, ct) : null;
                 return bytes is null ? (null, "A picture in the story is gone. Add it again.") : (bytes, null);
+
+            case StoryImageRef.Generated generated:
+                var own = await db.GeneratedImages.AnyAsync(i => i.Id == generated.Id && i.Status == GeneratedImageStatus.Ready
+                    && ((uploaderUserId != null && i.UserId == uploaderUserId) || (botId != null && i.BotId == botId)), ct);
+                var drawn = own ? await storage.ReadGeneratedImageAsync(generated.Id, ct) : null;
+                return drawn is null ? (null, "A generated picture in the story is gone. Generate it again.") : (drawn, null);
 
             case StoryImageRef.Wiki wiki:
                 try

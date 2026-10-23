@@ -30,5 +30,4 @@ export * from './stories.service';
 import { StoriesService } from './stories.service';
 export * from './user.service';
 import { UserService } from './user.service';
-export const APIS = [ApplicationConfigurationService, AttachmentsService, BotsService, ChatActionsService, ChatBotsService, ChatMembersService, ChatsService, FeedService, InternalDevOnlyService, MessagesService, NeuralDamageAPIService, ReactionsService, StickersService, StoriesService, UserService];
-export const APIS = [ApplicationConfigurationService, AttachmentsService, BotsService, ChatActionsService, ChatBotsService, ChatMembersService, ChatsService, FeedService, ImagesService, InternalDevOnlyService, MessagesService, NeuralDamageAPIService, ReactionsService, StickersService, UserService];
+export const APIS = [ApplicationConfigurationService, AttachmentsService, BotsService, ChatActionsService, ChatBotsService, ChatMembersService, ChatsService, FeedService, ImagesService, InternalDevOnlyService, MessagesService, NeuralDamageAPIService, ReactionsService, StickersService, StoriesService, UserService];
