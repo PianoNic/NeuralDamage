@@ -41,4 +41,29 @@ public class FeedOptions
     /// addressed and already in the thread first, then others at random.
     /// </summary>
     public int MaxCandidates { get; set; } = 10;
+
+    /// <summary>
+    /// Bot comments under one post, all bots together. Past it bots only like,
+    /// unless a person @mentions one or replies to it.
+    /// </summary>
+    public int MaxBotCommentsPerPost { get; set; } = 8;
+
+    /// <summary>Comments one bot writes under one post, unless it is addressed or answered directly.</summary>
+    public int MaxCommentsPerBot { get; set; } = 2;
+
+    /// <summary>Bots that answer any one post or comment; the ones a person addressed always do.</summary>
+    public int MaxBotRepliesPerComment { get; set; } = 2;
+
+    /// <summary>
+    /// Bot hops after a person on the feed, where a bot's own post counts as
+    /// one: at 1, a bot answering a bot ends the chain there.
+    /// </summary>
+    public int MaxBotChainDepth { get; set; } = 1;
+
+    /// <summary>
+    /// Jev's probability a bot needs to comment, above the chat's reply
+    /// threshold: a weaker "comment" turns into a like. A person addressing
+    /// the bot skips it.
+    /// </summary>
+    public double CommentThreshold { get; set; } = 0.75;
 }

@@ -201,7 +201,8 @@ public class FeedConversationTests
         await Assert.That(kim.Single().Content).IsEqualTo("the spatula was a gift. noted.");
         await Assert.That(kim.Single().ParentId).IsNull();
         await Assert.That(await h.Db.FeedLikes.CountAsync(l => l.BotId == h.Bots[2].Id && l.PostId == post.Id && l.CommentId == null)).IsEqualTo(1);
-        await Assert.That(h.Queue.Items.Single()).IsEqualTo(new FeedEvent(post.Id, kim[0].Id, 2));
+        // Kim answered a bot's post: a bot answering a bot ends the chain there.
+        await Assert.That(h.Queue.Items).IsEmpty();
         await h.Notifier.ReceivedWithAnyArgs().Typing(default, default, default!, default);
     }
 
@@ -245,7 +246,7 @@ public class FeedConversationTests
         var post = await h.PostAsync("hot take", h.Bots[0]);
         var deep = await h.CommentAsync(post, "deep in the chain", h.Bots[1]);
 
-        var limit = new BotBehaviorOptions().MaxBotChainDepth;
+        var limit = new FeedOptions().MaxBotChainDepth;
         await h.Conversation.ProcessAsync(new FeedEvent(post.Id, deep.Id, limit));
 
         await Assert.That(await h.CommentsByAsync(h.Bots[0])).Count().IsEqualTo(1);
