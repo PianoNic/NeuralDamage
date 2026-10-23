@@ -19,6 +19,9 @@ namespace NeuralDamage.Tests.Helpers;
 /// </summary>
 public sealed class FeedHarness : IDisposable
 {
+    /// <summary>One renderer for every test: it loads the fonts once.</summary>
+    public static readonly NeuralDamage.Infrastructure.Services.Stories.StoryRenderer SharedRenderer = new();
+
     public required NeuralDamageDbContext Db { get; init; }
     public required IFeedNotifier Notifier { get; init; }
     public required IOpenRouterService OpenRouter { get; init; }
@@ -62,6 +65,17 @@ public sealed class FeedHarness : IDisposable
         services.AddSingleton(behaviorOptions);
         services.AddScoped(sp => new FeedPostWriter(sp.GetRequiredService<NeuralDamageDbContext>(), openRouter, configuration,
             NullLogger<FeedPostWriter>.Instance, feedOptions, clock));
+        services.AddSingleton<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>(new InMemoryAttachmentStorage());
+        services.AddSingleton(Substitute.For<NeuralDamage.Infrastructure.Services.BotPictures.IBotPictureFinder>());
+        services.AddSingleton(SharedRenderer);
+        services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Stories.StoryPublisher(
+            sp.GetRequiredService<NeuralDamageDbContext>(), sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Attachments.IAttachmentStorage>(),
+            SharedRenderer, sp.GetRequiredService<NeuralDamage.Infrastructure.Services.BotPictures.IBotPictureFinder>(), notifier,
+            NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>.Instance));
+        services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Stories.StoryWriter(
+            sp.GetRequiredService<NeuralDamageDbContext>(), openRouter, sp.GetRequiredService<FeedPostWriter>(),
+            sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>(),
+            NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryWriter>.Instance, clock));
         jev.Engine()(services);
         var provider = services.BuildServiceProvider();
         var scopes = provider.GetRequiredService<IServiceScopeFactory>();

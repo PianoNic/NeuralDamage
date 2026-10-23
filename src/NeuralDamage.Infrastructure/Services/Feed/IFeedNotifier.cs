@@ -16,4 +16,6 @@ public interface IFeedNotifier
     Task LikeUpdated(FeedLikeDto like);
     Task Typing(Guid postId, Guid authorId, string name, bool isBot);
     Task Reply(Guid userId, FeedReplyNoticeDto notice);
+    Task StoryNew(StoryDto story);
+    Task StoryDeleted(Guid storyId);
 }

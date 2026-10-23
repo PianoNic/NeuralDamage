@@ -8,9 +8,14 @@ using Microsoft.Extensions.Options;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
+using NeuralDamage.Infrastructure.Services.Stories;
 
 namespace NeuralDamage.Infrastructure.BackgroundServices;
+
+/// <summary>What one scheduler tick made.</summary>
+public record FeedTick(List<Post> Posts, List<StoryDto> Stories);
 
 public class FeedQueue : IFeedQueue
 {
@@ -109,11 +114,11 @@ public class FeedScheduler(
     }
 
     /// <summary>One tick: the bots that are due, at most <see cref="FeedOptions.MaxPostsPerTick"/> of them, post.</summary>
-    /// <returns>The posts written.</returns>
-    public async Task<List<Post>> TickAsync(CancellationToken ct = default, Func<double>? random = null)
+    /// <returns>The posts and stories made.</returns>
+    public async Task<FeedTick> TickAsync(CancellationToken ct = default, Func<double>? random = null)
     {
         if (!_options.BotsPost)
-            return [];
+            return new FeedTick([], []);
         random ??= Random.Shared.NextDouble;
 
         var now = _time.GetUtcNow();
@@ -131,17 +136,44 @@ public class FeedScheduler(
             .Select(g => new { BotId = g.Key, Today = g.Count(p => p.CreatedAt >= startOfDay), Last = g.Max(p => p.CreatedAt) })
             .ToDictionaryAsync(g => g.BotId, ct);
 
+        var stories = await db.Stories
+            .Where(s => s.AuthorBotId != null && s.CreatedAt >= startOfDay)
+            .GroupBy(s => s.AuthorBotId!.Value)
+            .Select(g => new { BotId = g.Key, Today = g.Count(), Last = g.Max(s => s.CreatedAt) })
+            .ToDictionaryAsync(g => g.BotId, ct);
+
+        // Spacing counts stories too: a bot that just made one waits before posting.
+        DateTime? Last(Guid botId) =>
+            new[] { stats.GetValueOrDefault(botId)?.Last, stories.GetValueOrDefault(botId)?.Last }.Max();
+
         var due = bots
-            .Where(b => FeedSchedule.IsDue(b, stats.GetValueOrDefault(b.Id)?.Today ?? 0, stats.GetValueOrDefault(b.Id)?.Last, now, _clock, _options, random()))
+            .Where(b => FeedSchedule.IsDue(b, stats.GetValueOrDefault(b.Id)?.Today ?? 0, Last(b.Id), now, _clock, _options, random()))
             .OrderBy(_ => random())
             .Take(Math.Max(0, _options.MaxPostsPerTick))
             .ToList();
 
-        var posted = new List<Post>();
+        var tick = new FeedTick([], []);
         foreach (var bot in due)
-            if (await PostAsync(bot, now, random(), ct) is { } post)
-                posted.Add(post);
-        return posted;
+        {
+            // Now and then a story instead of a post, within the bot's own cap for stories.
+            if ((stories.GetValueOrDefault(bot.Id)?.Today ?? 0) < bot.MaxStoriesPerDay && random() < _options.StoryShare)
+            {
+                if (await StoryAsync(bot, now, ct) is { } story)
+                    tick.Stories.Add(story);
+            }
+            else if (await PostAsync(bot, now, random(), ct) is { } post)
+            {
+                tick.Posts.Add(post);
+            }
+        }
+        return tick;
+    }
+
+    /// <summary>Has <paramref name="bot"/> make a story now; null when its spec was dropped.</summary>
+    public async Task<StoryDto?> StoryAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default)
+    {
+        using var scope = scopes.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<StoryWriter>().WriteAsync(bot, now, ct);
     }
 
     /// <summary>Writes and publishes one post by <paramref name="bot"/> now, whatever the schedule says.</summary>

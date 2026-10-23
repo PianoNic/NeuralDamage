@@ -18,6 +18,9 @@ public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> optio
     public DbSet<Post> Posts => Set<Post>();
     public DbSet<PostComment> PostComments => Set<PostComment>();
     public DbSet<FeedLike> FeedLikes => Set<FeedLike>();
+    public DbSet<Story> Stories => Set<Story>();
+    public DbSet<StoryView> StoryViews => Set<StoryView>();
+    public DbSet<StoryImage> StoryImages => Set<StoryImage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(NeuralDamageDbContext).Assembly);
 

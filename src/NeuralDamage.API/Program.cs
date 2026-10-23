@@ -16,6 +16,7 @@ using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Stickers;
 using NeuralDamage.Infrastructure.Services.BotPictures;
 using NeuralDamage.Infrastructure.Services.Feed;
+using NeuralDamage.Infrastructure.Services.Stories;
 using Microsoft.Extensions.Options;
 using System.Text.Json.Serialization;
 
@@ -24,6 +25,17 @@ ValidationCulture.Pin();
 
 // Chat text is full of emoji, which a console left on its default code page logs as "??".
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+// The image's smoke test: renders a story with the bundled fonts and the native Skia libraries, then exits.
+if (args.Contains("--check-story-renderer"))
+{
+    using var renderer = new StoryRenderer();
+    var png = renderer.Render(
+        new StorySpec(new StoryBackground("#1f3a2b"), [new StoryLayer("text", 50, 50, 32, Text: "Story renderer works 🔥", Color: "#ffffff", Weight: 700)]),
+        StoryAssets.None);
+    Console.WriteLine($"Rendered a {StoryRenderer.Width}x{StoryRenderer.Height} story: {png.Length} bytes");
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
@@ -79,6 +91,18 @@ builder.Services.AddSingleton(sp => new FeedScheduler(
     sp.GetRequiredService<BotClock>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FeedScheduler>());
 
+// Stories: rendered with Skia from a spec, by people in the editor and by bots on their own.
+builder.Services.AddSingleton(_ => new StoryRenderer());
+builder.Services.AddScoped<StoryPublisher>();
+builder.Services.AddScoped(sp => new StoryWriter(
+    sp.GetRequiredService<NeuralDamageDbContext>(),
+    sp.GetRequiredService<IOpenRouterService>(),
+    sp.GetRequiredService<FeedPostWriter>(),
+    sp.GetRequiredService<StoryPublisher>(),
+    sp.GetRequiredService<ILogger<StoryWriter>>(),
+    sp.GetRequiredService<BotClock>()));
+builder.Services.AddHostedService<StorySweeper>();
+
 // Images
 var attachmentOptions = AttachmentOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(attachmentOptions);
@@ -113,8 +137,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<SendMessageValidator>(Servi
 builder.Services.AddToamaisutaaBearer(builder.Configuration);
 builder.Services.AddToamaisutaaAuthorization(builder.Configuration);
 builder.Services.AddToamaisutaaCurrentUser();
-builder.Services.AddUserSync();
-// SignalR
+builder.Services.AddUserSync();// SignalR
 builder.Services.AddSignalR();
 
 // API

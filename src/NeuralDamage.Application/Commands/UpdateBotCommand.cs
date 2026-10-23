@@ -8,7 +8,7 @@ using NeuralDamage.Infrastructure.Models;
 
 namespace NeuralDamage.Application.Commands;
 
-public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? Aliases, bool? IsActive, bool? FeedEnabled = null, int? MaxPostsPerDay = null) : ICommand<Result>;
+public record UpdateBotCommand(Guid BotId, Guid RequestingUserId, string? Name, string? ModelId, string? SystemPrompt, string? Personality, double? Temperature, string? Aliases, bool? IsActive, bool? FeedEnabled = null, int? MaxPostsPerDay = null, int? MaxStoriesPerDay = null) : ICommand<Result>;
 
 public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openRouter, ModelPolicy modelPolicy, IChatBotState botState) : ICommandHandler<UpdateBotCommand, Result>
 {
@@ -58,6 +58,7 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
         if (request.IsActive is not null) bot.IsActive = request.IsActive.Value;
         if (request.FeedEnabled is not null) bot.FeedEnabled = request.FeedEnabled.Value;
         if (request.MaxPostsPerDay is not null) bot.MaxPostsPerDay = request.MaxPostsPerDay.Value;
+        if (request.MaxStoriesPerDay is not null) bot.MaxStoriesPerDay = request.MaxStoriesPerDay.Value;
 
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success();

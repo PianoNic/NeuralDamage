@@ -114,6 +114,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(3);
 
+                    b.Property<int>("MaxStoriesPerDay")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("ModelId")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -561,6 +566,111 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.ToTable("Stickers");
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.Story", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorBotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Spec")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("AuthorBotId", "CreatedAt");
+
+                    b.ToTable("Stories");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.StoryImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UploaderUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("UploaderUserId");
+
+                    b.ToTable("StoryImages");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.StoryView", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("StoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("StoryId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("StoryViews");
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -876,6 +986,49 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("UploaderUser");
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.Story", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", "AuthorBot")
+                        .WithMany()
+                        .HasForeignKey("AuthorBotId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.User", "AuthorUser")
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("AuthorBot");
+
+                    b.Navigation("AuthorUser");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.StoryImage", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UploaderUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.StoryView", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Story", "Story")
+                        .WithMany("Views")
+                        .HasForeignKey("StoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NeuralDamage.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Story");
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.Bot", b =>
                 {
                     b.Navigation("ChatMembers");
@@ -909,6 +1062,11 @@ namespace NeuralDamage.Infrastructure.Migrations
             modelBuilder.Entity("NeuralDamage.Domain.PostComment", b =>
                 {
                     b.Navigation("Likes");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.Story", b =>
+                {
+                    b.Navigation("Views");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.User", b =>

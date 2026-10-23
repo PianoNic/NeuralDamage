@@ -32,5 +32,6 @@ export interface BotDto {
     modelStatusReason?: string | null;
     feedEnabled: boolean;
     maxPostsPerDay: number;
+    maxStoriesPerDay: number;
 }
 

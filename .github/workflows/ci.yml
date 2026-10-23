@@ -123,6 +123,11 @@ jobs:
             fi
           done
 
+      # Stories are rendered with Skia's native library and the bundled fonts, which the plain aspnet
+      # runtime image has neither of on its own.
+      - name: Render a story in the image
+        run: docker run --rm neuraldamage:ci --check-story-renderer
+
   # The frontend's wire types are generated from the API's OpenAPI document (bun run apigen). A contract
   # change without a regenerated client compiles on both sides and breaks at runtime, so regenerate and diff.
   openapi:

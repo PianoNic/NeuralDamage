@@ -29,7 +29,7 @@ public class BotsController(ISender sender, IUserService userService, Attachment
     public async Task<ActionResult<BotDto>> Create(CreateBotRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new CreateBotCommand(request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.Aliases, userId, request.IsPublic, request.ChatId, request.FeedEnabled, request.MaxPostsPerDay), ct);
+        var result = await sender.Send(new CreateBotCommand(request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.Aliases, userId, request.IsPublic, request.ChatId, request.FeedEnabled, request.MaxPostsPerDay, request.MaxStoriesPerDay), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
@@ -85,7 +85,7 @@ public class BotsController(ISender sender, IUserService userService, Attachment
     public async Task<IActionResult> Update(Guid botId, UpdateBotRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new UpdateBotCommand(botId, userId, request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.Aliases, request.IsActive, request.FeedEnabled, request.MaxPostsPerDay), ct);
+        var result = await sender.Send(new UpdateBotCommand(botId, userId, request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.Aliases, request.IsActive, request.FeedEnabled, request.MaxPostsPerDay, request.MaxStoriesPerDay), ct);
         return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 

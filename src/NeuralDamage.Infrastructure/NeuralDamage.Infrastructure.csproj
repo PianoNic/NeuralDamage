@@ -12,7 +12,18 @@
 		<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.21.0" />
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.10.0" />
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+		<PackageReference Include="SkiaSharp" Version="4.153.1" />
+		<PackageReference Include="SkiaSharp.HarfBuzz" Version="4.153.1" />
+		<!-- Stories are rendered with Skia. The API image is the plain aspnet runtime, so the Linux native
+		     libraries come without system dependencies (no fontconfig): the fonts are bundled below. -->
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
+		<PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="14.2.1.301" />
 		<PackageReference Include="Toamaisutaa.Abstractions" Version="0.7.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Inter and Noto Color Emoji, both under the SIL Open Font License (OFL-*.txt). -->
+		<None Include="Fonts\**" CopyToOutputDirectory="PreserveNewest" LinkBase="Fonts" />
 	</ItemGroup>
 
 	<ItemGroup>

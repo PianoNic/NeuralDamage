@@ -17,6 +17,7 @@ import { canDelete, formatAgo } from './feed-model';
 import { feedMembers, mentionNames } from './feed-members';
 import { FeedStore } from './feed-store';
 import { PostCard } from './post-card';
+import { StoriesRow } from '../stories/stories-row';
 
 /** One line of "Happening now". */
 export function activityLine(item: FeedActivityItemDto): string {
@@ -46,6 +47,7 @@ export function activityLine(item: FeedActivityItemDto): string {
     MemberAvatar,
     Composer,
     PostCard,
+    StoriesRow,
   ],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
@@ -57,6 +59,7 @@ export function activityLine(item: FeedActivityItemDto): string {
     <div #scroller class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto flex w-full max-w-5xl flex-wrap items-start justify-center gap-8 px-4 py-6 md:px-6">
         <div class="flex min-w-0 max-w-[620px] flex-[1_1_560px] flex-col gap-5">
+          <app-stories-row />
           <section hlmCard class="flex-row items-start gap-3 px-3.5" aria-label="New post">
             <app-member-avatar [name]="auth.displayName() || '?'" [avatarUrl]="auth.user()?.avatarUrl" [px]="40" />
             <app-composer

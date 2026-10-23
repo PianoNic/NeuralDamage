@@ -106,6 +106,7 @@ describe('visibility rules', () => {
       chatId: 'chat-1',
       feedEnabled: true,
       maxPostsPerDay: 3,
+      maxStoriesPerDay: 1,
     });
   });
 

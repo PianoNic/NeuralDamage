@@ -31,6 +31,7 @@ public record BotDto(
     string ModelStatus,
     string? ModelStatusReason,
     bool FeedEnabled,
-    int MaxPostsPerDay);
+    int MaxPostsPerDay,
+    int MaxStoriesPerDay);
 
 public record BotCreatorDto(Guid Id, string DisplayName);

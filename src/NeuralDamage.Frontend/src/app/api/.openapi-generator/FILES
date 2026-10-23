@@ -15,6 +15,7 @@ api/messages.service.ts
 api/neuralDamageAPI.service.ts
 api/reactions.service.ts
 api/stickers.service.ts
+api/stories.service.ts
 api/user.service.ts
 configuration.ts
 encoder.ts
@@ -37,6 +38,7 @@ model/createBotRequest.ts
 model/createChatRequest.ts
 model/createCommentRequest.ts
 model/createPostRequest.ts
+model/createStoryRequest.ts
 model/feedActivityDto.ts
 model/feedActivityItemDto.ts
 model/feedAuthorDto.ts
@@ -58,6 +60,14 @@ model/stickerImportFailureDto.ts
 model/stickerImportResultDto.ts
 model/stickerLibraryStatusDto.ts
 model/stickerPageDto.ts
+model/storyBackground.ts
+model/storyDto.ts
+model/storyImageUploadDto.ts
+model/storyLayer.ts
+model/storyReplyRequest.ts
+model/storyReplyResultDto.ts
+model/storyRingDto.ts
+model/storySpec.ts
 model/updateBotRequest.ts
 model/updateChatRequest.ts
 model/updateStickerRequest.ts

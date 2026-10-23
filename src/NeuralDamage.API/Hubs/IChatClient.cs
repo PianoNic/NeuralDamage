@@ -25,4 +25,6 @@ public interface IChatClient
     Task FeedLikeUpdated(FeedLikeDto like);
     Task FeedTyping(Guid postId, Guid authorId, string name, bool isBot);
     Task FeedReply(FeedReplyNoticeDto notice);
+    Task StoryNew(StoryDto story);
+    Task StoryDeleted(Guid storyId);
 }
