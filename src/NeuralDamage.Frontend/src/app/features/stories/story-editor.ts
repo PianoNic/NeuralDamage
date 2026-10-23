@@ -105,7 +105,7 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
   ],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
-    @if (mode() === 'story') {
+    @if (!isPost()) {
       <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
         <button hlmSidebarTrigger></button>
         <a routerLink="/feed" class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
@@ -119,7 +119,7 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
       <div class="mx-auto flex w-full max-w-6xl flex-wrap items-start justify-center gap-6 px-4 py-6">
         <!-- What can be added. -->
         <section aria-label="Add" class="flex min-w-[200px] flex-[0_1_230px] flex-col gap-4">
-          @if (mode() === 'story') {
+          @if (!isPost()) {
             <h1 class="text-lg font-semibold">New story</h1>
           } @else {
             <h2 class="text-lg font-semibold">Create image</h2>
@@ -378,7 +378,7 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
             <div class="flex items-start gap-3">
               <img
                 [src]="url"
-                [alt]="mode() === 'story' ? 'Rendered story' : 'Rendered picture'"
+                [alt]="!isPost() ? 'Rendered story' : 'Rendered picture'"
                 class="w-[108px] rounded-md border"
                 [style.aspect-ratio]="canvas().width + ' / ' + canvas().height"
                 data-testid="preview"
@@ -392,7 +392,7 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
             <p class="text-muted-foreground text-[13px]" role="status">{{ message }}</p>
           }
           <div class="flex gap-2">
-            @if (mode() === 'post') {
+            @if (isPost()) {
               <button hlmBtn variant="ghost" type="button" (click)="cancel.emit()">Cancel</button>
             }
             <button hlmBtn variant="outline" type="button" class="flex-1" [disabled]="!!problem() || busy()" (click)="renderPreview()">Preview</button>
@@ -400,7 +400,7 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
               @if (busy() || working()) {
                 <hlm-spinner />
               }
-              {{ mode() === 'story' ? 'Post story' : 'Use image' }}
+              {{ !isPost() ? 'Post story' : 'Use image' }}
             </button>
           </div>
         </section>
@@ -410,7 +410,12 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
 })
 export class StoryEditor implements OnInit {
   /** A story, posted from here; or a post's picture, handed back through `compose`. */
-  readonly mode = input<'story' | 'post'>('story');
+  readonly mode = input<'story' | 'post' | undefined>('story');
+  /**
+   * In the post composer. The route binds its own inputs and leaves `mode` undefined at
+   * `/feed/story`, so anything but "post" is a story.
+   */
+  protected readonly isPost = computed(() => this.mode() === 'post');
   /** The layers to start from, e.g. a post's picture opened again. */
   readonly initial = input<StoryDraft | null>(null);
   /** The page is saving what `compose` handed it. */
@@ -474,7 +479,7 @@ export class StoryEditor implements OnInit {
     });
     inject(DestroyRef).onDestroy(() => {
       // A post's picture can be opened again, so its uploads stay viewable for the page's life.
-      if (this.mode() === 'story') this.objectUrls.forEach((u) => URL.revokeObjectURL(u));
+      if (!this.isPost()) this.objectUrls.forEach((u) => URL.revokeObjectURL(u));
       const preview = this.preview();
       if (preview) URL.revokeObjectURL(preview);
     });
@@ -483,7 +488,7 @@ export class StoryEditor implements OnInit {
   ngOnInit(): void {
     const initial = this.initial();
     if (initial) this.draft.set(initial);
-    else if (this.mode() === 'post') this.draft.set(addText(emptyDraft('post-4x5'), 'Your text'));
+    else if (this.isPost()) this.draft.set(addText(emptyDraft('post-4x5'), 'Your text'));
   }
 
   protected setFormat(format: string | string[] | null | undefined): void {
@@ -628,7 +633,7 @@ export class StoryEditor implements OnInit {
   }
 
   protected async post(): Promise<void> {
-    if (this.mode() === 'post') {
+    if (this.isPost()) {
       this.compose.emit({ spec: toSpec(this.draft()), draft: this.draft() });
       return;
     }

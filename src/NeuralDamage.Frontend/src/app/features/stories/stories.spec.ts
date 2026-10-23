@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { of, Subject } from 'rxjs';
 import { BotsService } from '../../api/api/bots.service';
 import { StickersService } from '../../api/api/stickers.service';
@@ -221,6 +222,22 @@ describe('StoryViewer', () => {
 });
 
 describe('StoryEditor', () => {
+  it('is the story editor at its route, where the router leaves its inputs undefined', async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        ...providers({}),
+        provideRouter([{ path: 'feed/story', component: StoryEditor }], withComponentInputBinding()),
+      ],
+    }).compileComponents();
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/feed/story');
+    const el = harness.routeNativeElement as HTMLElement;
+
+    expect(el.querySelector('h1')?.textContent).toContain('New story');
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Post story')).toBe(true);
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Use image')).toBe(false);
+  });
+
   it('builds the spec from the stage and posts it', async () => {
     const post = vi.fn((req: { spec: unknown }) => of(story('new', { author: { id: 'me', name: 'Alice', avatarUrl: null, isBot: false, modelId: null } })));
     await TestBed.configureTestingModule({ imports: [StoryEditor], providers: providers({ apiStoriesPost: post }) }).compileComponents();
