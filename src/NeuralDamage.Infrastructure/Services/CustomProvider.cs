@@ -25,7 +25,48 @@ public record CustomProvider(string Name, string BaseUrl, string ApiKey, IReadOn
 
     public string Label => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 
-    /// <summary>Every <c>Providers:*</c> section with a BaseUrl. Models is a comma-separated list (or an array).</summary>
+    /// <summary>
+    /// <c>Providers:&lt;Name&gt;:ModelNames</c>: readable names by model id, e.g.
+    /// <c>my-model</c> to "My Model". Ids stay as they are.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ModelNames { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>What <paramref name="model"/> is called: its configured name, or the id itself.</summary>
+    public string ModelName(string model) => ModelNames.TryGetValue(model, out var name) ? name : model;
+
+    /// <summary>
+    /// <c>id=Display name</c> pairs separated by <c>;</c>. The first <c>=</c> splits
+    /// a pair, so a name may contain one; a pair without an id or a name is skipped,
+    /// and a later pair for the same id wins.
+    /// </summary>
+    public static Dictionary<string, string> ParseModelNames(string? value)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var pair in (value ?? "").Split(';'))
+        {
+            var equals = pair.IndexOf('=');
+            if (equals < 0)
+                continue;
+            var (id, name) = (pair[..equals].Trim(), pair[(equals + 1)..].Trim());
+            if (id.Length > 0 && name.Length > 0)
+                names[id] = name;
+        }
+        return names;
+    }
+
+    /// <summary>
+    /// The configured name of a custom <paramref name="modelId"/>
+    /// (<c>&lt;Name&gt;:&lt;model&gt;</c>), even when its provider no longer offers it;
+    /// the id itself otherwise.
+    /// </summary>
+    public static string NameOf(IConfiguration? configuration, string modelId) =>
+        configuration is not null && Split(modelId) is { } split
+            && FromConfiguration(configuration).FirstOrDefault(p => string.Equals(p.Name, split.Provider, StringComparison.OrdinalIgnoreCase)) is { } provider
+            && provider.ModelNames.TryGetValue(split.Model, out var name)
+            ? name
+            : modelId;
+
+    /// <summary>Every <c>Providers:*</c> section with a BaseUrl. Models is a comma-separated list (or an array), ModelNames <c>id=name;id=name</c>.</summary>
     public static List<CustomProvider> FromConfiguration(IConfiguration configuration) =>
         configuration.GetSection("Providers").GetChildren()
             .Where(section => !string.IsNullOrWhiteSpace(section["BaseUrl"]))
@@ -40,6 +81,7 @@ public record CustomProvider(string Name, string BaseUrl, string ApiKey, IReadOn
             {
                 ContextLength = int.TryParse(section["ContextLength"], out var length) && length > 0 ? length : null,
                 DisplayName = section["DisplayName"]?.Trim() is { Length: > 0 } displayName ? displayName : null,
+                ModelNames = ParseModelNames(section["ModelNames"]),
             })
             .ToList();
 

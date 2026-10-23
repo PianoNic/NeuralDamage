@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Services;
@@ -65,6 +67,27 @@ public class ModelStatusTests
         await Assert.That((await h.MessagesFromAsync(claude)).Count).IsEqualTo(2);
         await h.OpenRouter.DidNotReceive().GenerateResponseAsync(gpt.ModelId, Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>());
         await h.Notifications.Received(1).NotifySystemMessage(h.Chat.Id, $"GPT's model {gpt.ModelId} is no longer available. Edit the bot to pick another.");
+    }
+
+    [Test]
+    public async Task Orchestrator_NamesAGoneCustomModelByItsConfiguredName()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Providers:local:BaseUrl"] = "http://local.test/v1",
+            ["Providers:local:ModelNames"] = "my-model=My Model",
+        }).Build();
+        using var h = await OrchestratorHarness.CreateAsync(configure: s => s.AddSingleton<IConfiguration>(configuration));
+        var bot = h.Bots[0];
+        bot.ModelId = "local:my-model";
+        await h.Db.SaveChangesAsync();
+        // The provider now offers another model only.
+        h.OpenRouter.ListModelsAsync(Arg.Any<CancellationToken>()).Returns([new OpenRouterModel("local:other", "local: other", null, new ModelPricing(0, 0)) { IsCustom = true }]);
+        h.Respond(bot);
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, (await h.SayAsync("hey")).Id);
+
+        await h.Notifications.Received(1).NotifySystemMessage(h.Chat.Id, "GPT's model My Model is no longer available. Edit the bot to pick another.");
     }
 
     [Test]

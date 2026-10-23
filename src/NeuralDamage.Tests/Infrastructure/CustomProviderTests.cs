@@ -123,6 +123,59 @@ public class CustomProviderTests
     }
 
     [Test]
+    public async Task ParseModelNames_SplitsAtTheFirstEquals_TrimsAndSkipsBrokenPairs()
+    {
+        var names = CustomProvider.ParseModelNames(" my-model = My Model ;no-equals; =No id;empty=; qwen=Qwen = 3 ;;");
+
+        await Assert.That(names.Keys).IsEquivalentTo(["my-model", "qwen"]);
+        await Assert.That(names["my-model"]).IsEqualTo("My Model");
+        await Assert.That(names["qwen"]).IsEqualTo("Qwen = 3");
+        await Assert.That(CustomProvider.ParseModelNames(null).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ParseModelNames_LaterDuplicateWins()
+    {
+        var names = CustomProvider.ParseModelNames("my-model=Old;my-model=My Model");
+
+        await Assert.That(names.Count).IsEqualTo(1);
+        await Assert.That(names["my-model"]).IsEqualTo("My Model");
+    }
+
+    [Test]
+    public async Task ModelNames_NameTheModelsInTheList_ButNotTheirIds()
+    {
+        var (service, _, _) = Service("http://or-names.test/api/v1", new()
+        {
+            ["Providers:local:BaseUrl"] = "http://local-names.test/v1",
+            ["Providers:local:DisplayName"] = "Local Box",
+            ["Providers:local:Models"] = "my-model,other-model",
+            ["Providers:local:ModelNames"] = "my-model=My Model",
+        }, new() { ["http://or-names.test/api/v1/models"] = OpenRouterModels });
+
+        var models = await service.ListModelsAsync();
+
+        await Assert.That(models.Single(m => m.Id == "local:my-model").Name).IsEqualTo("Local Box: My Model");
+        // Without a mapping, the id stays the name.
+        await Assert.That(models.Single(m => m.Id == "local:other-model").Name).IsEqualTo("Local Box: other-model");
+    }
+
+    [Test]
+    public async Task NameOf_UsesTheConfiguredName_EvenForAModelNoLongerOffered()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Providers:local:BaseUrl"] = "http://local.test/v1",
+            ["Providers:local:ModelNames"] = "my-model=My Model",
+        }).Build();
+
+        await Assert.That(CustomProvider.NameOf(configuration, "local:my-model")).IsEqualTo("My Model");
+        await Assert.That(CustomProvider.NameOf(configuration, "local:gone-model")).IsEqualTo("local:gone-model");
+        await Assert.That(CustomProvider.NameOf(configuration, "deepseek/deepseek-chat")).IsEqualTo("deepseek/deepseek-chat");
+        await Assert.That(CustomProvider.NameOf(null, "local:my-model")).IsEqualTo("local:my-model");
+    }
+
+    [Test]
     public async Task CustomModel_GoesToItsProvider_WithoutPrefixOrOpenRouterExtras()
     {
         var (service, servers, _) = Service("http://or-route.test/api/v1", new()
