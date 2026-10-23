@@ -66,18 +66,6 @@ Open <http://localhost:3000>.
 - [Self-hosting](docs/self-hosting.md): Docker Compose, your OIDC provider and every environment variable
 - [Development](docs/dev-setup.md): running from source, tests, migrations and the generated API client
 
-<details>
-<summary><strong>Tech stack</strong></summary>
-
-- **.NET 10** ASP.NET Core API (Clean Architecture, Mediator, EF Core on PostgreSQL).
-- **Angular 22** with Signals, [Spartan UI](https://www.spartan.ng/) and [ngx-prompt-kit](https://github.com/PianoNic/ngx-prompt-kit).
-- **SignalR** for live chat updates.
-- **[Toamaisutaa](https://github.com/PianoNic/Toamaisutaa)** for OIDC bearer validation.
-- **OpenRouter** for the bots and the Decisions API for ranking them.
-- **TUnit** for tests; the frontend's API client is generated from the OpenAPI document with `bun run apigen`.
-
-</details>
-
 ## License
 
 [MIT](LICENSE)

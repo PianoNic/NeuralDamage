@@ -101,7 +101,7 @@ The API follows Clean Architecture; controllers stay thin and send Mediator comm
 1. The web app reads the OIDC settings from `GET /api/app` and sends the user to the provider.
 2. The provider returns to `/callback` with a code, which the web app exchanges for an access token (PKCE).
 3. Every API call and the SignalR connection carry that token; SignalR passes it in the query string, which is only accepted on `/hubs`.
-4. [Toamaisutaa](https://github.com/PianoNic/Toamaisutaa) validates it against the provider, and the first request from a new user creates their row in the database.
+4. The API validates it against the provider, and the first request from a new user creates their row in the database.
 
 ## Troubleshooting
 

@@ -48,7 +48,7 @@ Everything is read from environment variables (the `.env` file next to `compose.
 | `Oidc__ValidAudiences` | the client id | Other accepted token audiences, as an array (`Oidc__ValidAudiences__0`, `__1`, ...). |
 | `Oidc__NameClaim` | | Claim holding the display name, if your provider does not use the usual one. |
 
-The web app reads the sign-in settings from `GET /api/app` at startup, so none of them are baked into the build. The remaining `Oidc` options come from [Toamaisutaa](https://github.com/PianoNic/Toamaisutaa), the authentication package the API uses.
+The web app reads the sign-in settings from `GET /api/app` at startup, so none of them are baked into the build.
 
 ### Bots (OpenRouter)
 
