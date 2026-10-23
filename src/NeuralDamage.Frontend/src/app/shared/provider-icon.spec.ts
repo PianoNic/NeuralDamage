@@ -8,14 +8,14 @@ describe('providerIconUrl', () => {
   });
 
   it('finds a known vendor anywhere in a custom provider model id', () => {
-    expect(providerIconUrl({ id: 'gateway:sgl/deepseek' })).toBe('/model-icons/deepseek.svg');
-    expect(providerIconUrl({ id: 'gateway:qwen/qwen3-32b' })).toBe('/model-icons/qwen.svg');
+    expect(providerIconUrl({ id: 'vllm:deepseek-chat' })).toBe('/model-icons/deepseek.svg');
+    expect(providerIconUrl({ id: 'vllm:qwen/qwen3-32b' })).toBe('/model-icons/qwen.svg');
     expect(providerIconUrl({ id: 'local:gemma3:27b' })).toBe('/model-icons/gemma.svg');
-    expect(providerIconUrl({ id: 'gateway:sgl/bge-m3' })).toBe('/model-icons/unknown.svg');
+    expect(providerIconUrl({ id: 'vllm:bge-m3' })).toBe('/model-icons/unknown.svg');
   });
 
   it('tells custom model ids from OpenRouter ids', () => {
-    expect(customModelPart('gateway:sgl/deepseek')).toBe('sgl/deepseek');
+    expect(customModelPart('vllm:deepseek-chat')).toBe('deepseek-chat');
     expect(customModelPart('meta-llama/llama-3.3-70b-instruct:free')).toBeNull();
     expect(customModelPart('openai/gpt-5')).toBeNull();
   });

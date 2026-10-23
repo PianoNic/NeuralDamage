@@ -5,7 +5,7 @@ namespace NeuralDamage.Infrastructure.Services;
 /// <summary>
 /// An OpenAI-compatible endpoint next to OpenRouter, configured under
 /// <c>Providers:&lt;Name&gt;</c>. Its models are addressed as <c>&lt;Name&gt;:&lt;model&gt;</c>,
-/// e.g. <c>gateway:sgl/deepseek</c>. <see cref="Models"/> is what it offers;
+/// e.g. <c>vllm:deepseek-chat</c>. <see cref="Models"/> is what it offers;
 /// empty means whatever its <c>/models</c> lists.
 /// </summary>
 public record CustomProvider(string Name, string BaseUrl, string ApiKey, IReadOnlyList<string> Models)
@@ -18,8 +18,8 @@ public record CustomProvider(string Name, string BaseUrl, string ApiKey, IReadOn
     public int? ContextLength { get; init; }
 
     /// <summary>
-    /// <c>Providers:&lt;Name&gt;:DisplayName</c>, what the picker calls it ("AI Gateway"
-    /// for <c>gateway</c>); <see cref="Name"/> when unset. Model ids keep <see cref="Name"/>.
+    /// <c>Providers:&lt;Name&gt;:DisplayName</c>, what the picker calls it ("vLLM"
+    /// for <c>vllm</c>); <see cref="Name"/> when unset. Model ids keep <see cref="Name"/>.
     /// </summary>
     public string? DisplayName { get; init; }
 

@@ -69,15 +69,15 @@ Out of the box, bots can only use cheap models whose providers keep no data. A m
 
 ### Custom providers
 
-Bots can also run on any OpenAI-compatible endpoint next to OpenRouter, for example a gateway that hosts DeepSeek for free. Each provider gets a name of your choice, and its models are addressed as `<Name>:<model>`, e.g. `gateway:sgl/deepseek`. Several providers can be configured side by side.
+Bots can also run on any OpenAI-compatible endpoint next to OpenRouter, for example a self-hosted vLLM or Ollama, or a free hosted endpoint. Each provider gets a name of your choice, and its models are addressed as `<Name>:<model>`, e.g. `vllm:deepseek-chat`. Several providers can be configured side by side.
 
 | Variable | Default | Description |
 |---|---|---|
-| `Providers__<Name>__BaseUrl` | required | The endpoint's OpenAI-compatible base URL, e.g. `https://gateway.example.com/v1`. |
+| `Providers__<Name>__BaseUrl` | required | The endpoint's OpenAI-compatible base URL, e.g. `https://llm.example.com/v1`. |
 | `Providers__<Name>__ApiKey` | none | Sent as the bearer token. Leave it out for an endpoint that takes no key. |
-| `Providers__<Name>__Models` | everything `/models` lists | Comma-separated list of the models to offer, e.g. `sgl/deepseek`. Set it when the endpoint also lists embedding, reranking or speech models. Without it, the provider's `/models` is read once an hour; a provider that cannot be reached is left out of the picker (with a warning in the log) and tried again after five minutes. |
+| `Providers__<Name>__Models` | everything `/models` lists | Comma-separated list of the models to offer, e.g. `deepseek-chat`. Set it when the endpoint also lists embedding, reranking or speech models. Without it, the provider's `/models` is read once an hour; a provider that cannot be reached is left out of the picker (with a warning in the log) and tried again after five minutes. |
 | `Providers__<Name>__ContextLength` | see below | The context of the provider's models, in tokens. Without it, the `context_length` or `max_model_len` its `/models` gives is used, and failing that the app asks the model once (a request too long for it, with one token of output) and reads the limit from the refusal. When that says nothing, 32k is assumed. |
-| `App__DefaultModel` | the first custom model | The model a new bot starts on, e.g. `gateway:sgl/deepseek` or an OpenRouter id. Without it and without a custom provider, the picker starts empty. |
+| `App__DefaultModel` | the first custom model | The model a new bot starts on, e.g. `vllm:deepseek-chat` or an OpenRouter id. Without it and without a custom provider, the picker starts empty. |
 
 Custom models show in the model picker under the provider's name and as free. The OpenRouter policy above (price caps, ZDR, batch, reasoning) does not apply to them: whoever configured the provider chose it. Replies go to the provider with only the messages, temperature, token budget and `chat_template_kwargs: {"thinking": false, "enable_thinking": false}`, which keeps models that think by default (such as Qwen3) from reasoning; none of OpenRouter's extra fields. Nothing says whether a custom model can see, so its bots get image descriptions like any text-only bot. A bot whose custom model is no longer offered is flagged like one whose OpenRouter model disappeared. Jev and the image describer stay on OpenRouter.
 

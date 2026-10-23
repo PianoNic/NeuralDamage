@@ -34,7 +34,7 @@ public class ModelRecommendationTests
     }
 
     [Test]
-    public async Task FromConfiguration_ShippedDefaults_PutTheGatewayDeepSeekFirst()
+    public async Task FromConfiguration_ShippedDefaults_AreOpenRouterModelsWithHints()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (!File.Exists(Path.Combine(directory.FullName, "src", "NeuralDamage.API", "appsettings.json")))
@@ -42,8 +42,9 @@ public class ModelRecommendationTests
         var path = Path.Combine(directory.FullName, "src", "NeuralDamage.API", "appsettings.json");
         var recommendations = ModelRecommendation.FromConfiguration(new ConfigurationBuilder().AddJsonFile(path).Build());
 
-        await Assert.That(recommendations.Count).IsEqualTo(6);
-        await Assert.That(recommendations[0].Model).IsEqualTo("gateway:sgl/deepseek");
+        // Deployment-specific models (custom providers) are added in that deployment's own config.
+        await Assert.That(recommendations.Count).IsEqualTo(5);
+        await Assert.That(recommendations.All(r => !r.Model.Contains(':'))).IsTrue();
         await Assert.That(recommendations.All(r => r.Hint.Length > 0)).IsTrue();
     }
 
@@ -89,11 +90,11 @@ public class ModelRecommendationTests
     {
         var models = ModelRecommendation.Apply(
             [new ModelRecommendation("x/one", "One")],
-            [new OpenRouterModel("x/one", "One", null), new OpenRouterModel("gateway:m", "gateway: m", null)],
-            "gateway:m");
+            [new OpenRouterModel("x/one", "One", null), new OpenRouterModel("vllm:m", "vllm: m", null)],
+            "vllm:m");
 
-        await Assert.That(models.Single(m => m.Id == "gateway:m").RecommendationRank).IsEqualTo(0);
-        await Assert.That(models.Single(m => m.Id == "gateway:m").RecommendationHint).IsNull();
+        await Assert.That(models.Single(m => m.Id == "vllm:m").RecommendationRank).IsEqualTo(0);
+        await Assert.That(models.Single(m => m.Id == "vllm:m").RecommendationHint).IsNull();
         await Assert.That(models.Single(m => m.Id == "x/one").RecommendationRank).IsEqualTo(1);
     }
 }

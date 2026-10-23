@@ -63,7 +63,7 @@ public class CustomProviderTests
     }
 
     [Test]
-    [Arguments("gateway:sgl/deepseek", "gateway", "sgl/deepseek")]
+    [Arguments("vllm:deepseek-chat", "vllm", "deepseek-chat")]
     [Arguments("ollama:llama3", "ollama", "llama3")]
     [Arguments("local:org/model:latest", "local", "org/model:latest")]
     public async Task Split_CustomId_GivesProviderAndModel(string id, string provider, string model)
@@ -76,7 +76,7 @@ public class CustomProviderTests
     [Arguments("meta-llama/llama-3.3-70b-instruct:free")]
     [Arguments("cheap/model:batch")]
     [Arguments("~typesafe/jev-latest")]
-    [Arguments("gateway:")]
+    [Arguments("vllm:")]
     [Arguments(":model")]
     public async Task Split_OpenRouterId_IsNotCustom(string id)
     {
@@ -88,19 +88,19 @@ public class CustomProviderTests
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Providers:gateway:BaseUrl"] = "https://gw.test/v1/",
-            ["Providers:gateway:ApiKey"] = "k",
-            ["Providers:gateway:Models"] = " sgl/deepseek , other ,",
+            ["Providers:vllm:BaseUrl"] = "https://gw.test/v1/",
+            ["Providers:vllm:ApiKey"] = "k",
+            ["Providers:vllm:Models"] = " deepseek-chat , other ,",
             ["Providers:local:BaseUrl"] = "http://localhost:11434/v1",
             ["Providers:broken:ApiKey"] = "no url",
         }).Build();
 
         var providers = CustomProvider.FromConfiguration(configuration);
 
-        await Assert.That(providers.Select(p => p.Name)).IsEquivalentTo(["gateway", "local"]);
-        var gateway = providers.Single(p => p.Name == "gateway");
-        await Assert.That(gateway.BaseUrl).IsEqualTo("https://gw.test/v1");
-        await Assert.That(gateway.Models).IsEquivalentTo(["sgl/deepseek", "other"]);
+        await Assert.That(providers.Select(p => p.Name)).IsEquivalentTo(["vllm", "local"]);
+        var vllm = providers.Single(p => p.Name == "vllm");
+        await Assert.That(vllm.BaseUrl).IsEqualTo("https://gw.test/v1");
+        await Assert.That(vllm.Models).IsEquivalentTo(["deepseek-chat", "other"]);
         await Assert.That(providers.Single(p => p.Name == "local").Models.Count).IsEqualTo(0);
     }
 
@@ -109,16 +109,16 @@ public class CustomProviderTests
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Providers:gateway:BaseUrl"] = "https://gw.test/v1",
-            ["Providers:gateway:DisplayName"] = " AI Gateway ",
+            ["Providers:vllm:BaseUrl"] = "https://gw.test/v1",
+            ["Providers:vllm:DisplayName"] = " vLLM ",
             ["Providers:local:BaseUrl"] = "http://localhost:11434/v1",
         }).Build();
         var providers = CustomProvider.FromConfiguration(configuration);
 
-        var model = OpenRouterAgentService.CustomModel(providers.Single(p => p.Name == "gateway"), "sgl/deepseek", null, null);
-        await Assert.That(model.Id).IsEqualTo("gateway:sgl/deepseek");
-        await Assert.That(model.Provider).IsEqualTo("AI Gateway");
-        await Assert.That(model.Name).IsEqualTo("AI Gateway: sgl/deepseek");
+        var model = OpenRouterAgentService.CustomModel(providers.Single(p => p.Name == "vllm"), "deepseek-chat", null, null);
+        await Assert.That(model.Id).IsEqualTo("vllm:deepseek-chat");
+        await Assert.That(model.Provider).IsEqualTo("vLLM");
+        await Assert.That(model.Name).IsEqualTo("vLLM: deepseek-chat");
         await Assert.That(providers.Single(p => p.Name == "local").Label).IsEqualTo("local");
     }
 
@@ -127,12 +127,12 @@ public class CustomProviderTests
     {
         var (service, servers, _) = Service("http://or-route.test/api/v1", new()
         {
-            ["Providers:gateway:BaseUrl"] = "http://gw-route.test/v1",
-            ["Providers:gateway:ApiKey"] = "gw-key",
-            ["Providers:gateway:Models"] = "sgl/deepseek",
+            ["Providers:vllm:BaseUrl"] = "http://gw-route.test/v1",
+            ["Providers:vllm:ApiKey"] = "gw-key",
+            ["Providers:vllm:Models"] = "deepseek-chat",
         }, []);
 
-        var reply = await service.GenerateResponseAsync("gateway:sgl/deepseek", 0.7, "system",
+        var reply = await service.GenerateResponseAsync("vllm:deepseek-chat", 0.7, "system",
             [new ChatMessage("user", "[Alice]: look") { Images = [new ImagePart("image/png", [1, 2, 3])] }]);
 
         await Assert.That(reply).IsEqualTo("hello");
@@ -140,7 +140,7 @@ public class CustomProviderTests
         await Assert.That(call.Url).IsEqualTo("http://gw-route.test/v1/chat/completions");
         await Assert.That(call.Authorization).IsEqualTo("Bearer gw-key");
         using var body = JsonDocument.Parse(call.Body!);
-        await Assert.That(body.RootElement.GetProperty("model").GetString()).IsEqualTo("sgl/deepseek");
+        await Assert.That(body.RootElement.GetProperty("model").GetString()).IsEqualTo("deepseek-chat");
         foreach (var openRouterOnly in new[] { "provider", "reasoning", "session_id" })
             await Assert.That(body.RootElement.TryGetProperty(openRouterOnly, out _)).IsFalse();
         await Assert.That(call.Body!).Contains("data:image/png;base64,AQID");
@@ -151,8 +151,8 @@ public class CustomProviderTests
     {
         var (service, servers, _) = Service("http://or-keep.test/api/v1", new()
         {
-            ["Providers:gateway:BaseUrl"] = "http://gw-keep.test/v1",
-            ["Providers:gateway:Models"] = "sgl/deepseek",
+            ["Providers:vllm:BaseUrl"] = "http://gw-keep.test/v1",
+            ["Providers:vllm:Models"] = "deepseek-chat",
         }, new() { ["http://or-keep.test/api/v1/models"] = OpenRouterModels });
 
         await service.GenerateResponseAsync("deepseek/deepseek-chat", 0.7, "system", [new ChatMessage("user", "[Alice]: hi")]);
@@ -173,7 +173,7 @@ public class CustomProviderTests
         var (service, servers, logger) = Service("http://or-merge.test/api/v1", new()
         {
             ["Providers:listed:BaseUrl"] = "http://listed-merge.test/v1",
-            ["Providers:listed:Models"] = "sgl/deepseek",
+            ["Providers:listed:Models"] = "deepseek-chat",
             ["Providers:fetched:BaseUrl"] = "http://fetched-merge.test/v1",
             ["Providers:down:BaseUrl"] = "http://down-merge.test/v1",
         }, new()
@@ -184,11 +184,11 @@ public class CustomProviderTests
 
         var models = await service.ListModelsAsync();
 
-        await Assert.That(models.Select(m => m.Id)).IsEquivalentTo(["deepseek/deepseek-chat", "listed:sgl/deepseek", "fetched:qwen/qwen3"]);
-        var listed = models.Single(m => m.Id == "listed:sgl/deepseek");
+        await Assert.That(models.Select(m => m.Id)).IsEquivalentTo(["deepseek/deepseek-chat", "listed:deepseek-chat", "fetched:qwen/qwen3"]);
+        var listed = models.Single(m => m.Id == "listed:deepseek-chat");
         await Assert.That(listed.IsCustom).IsTrue();
         await Assert.That(listed.Provider).IsEqualTo("listed");
-        await Assert.That(listed.Name).IsEqualTo("listed: sgl/deepseek");
+        await Assert.That(listed.Name).IsEqualTo("listed: deepseek-chat");
         await Assert.That(listed.Pricing).IsEqualTo(new ModelPricing(0, 0));
         await Assert.That(listed.Capabilities).DoesNotContain(ModelMetadata.Vision);
         var fetched = models.Single(m => m.Id == "fetched:qwen/qwen3");
@@ -202,7 +202,7 @@ public class CustomProviderTests
         await Assert.That(servers.Requests.Count(r => r.Url.StartsWith("http://down-merge.test", StringComparison.Ordinal))).IsEqualTo(1);
     }
 
-    private static readonly OpenRouterModel Custom = new("gateway:sgl/deepseek", "gateway: sgl/deepseek", null, new ModelPricing(0, 0)) { IsCustom = true };
+    private static readonly OpenRouterModel Custom = new("vllm:deepseek-chat", "vllm: deepseek-chat", null, new ModelPricing(0, 0)) { IsCustom = true };
     private static readonly OpenRouterModel Pricey = new("openai/gpt-5", "OpenAI: GPT-5", 400000, new ModelPricing(1.25m, 10m));
 
     private static IOpenRouterService Catalogue(params OpenRouterModel[] models)
@@ -232,8 +232,8 @@ public class CustomProviderTests
         var policy = new ModelPolicy(0, 0);
         var openRouter = Catalogue(Custom);
 
-        await Assert.That(await policy.CheckModelAsync(openRouter, "gateway:gone")).Contains("not offered by provider 'gateway'");
-        await Assert.That((await policy.StatusLookupAsync(openRouter))("gateway:gone").Status).IsEqualTo(ModelStatus.Missing);
+        await Assert.That(await policy.CheckModelAsync(openRouter, "vllm:gone")).Contains("not offered by provider 'vllm'");
+        await Assert.That((await policy.StatusLookupAsync(openRouter))("vllm:gone").Status).IsEqualTo(ModelStatus.Missing);
     }
 
     [Test]
