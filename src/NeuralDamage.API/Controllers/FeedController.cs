@@ -33,7 +33,7 @@ public class FeedController(ISender sender, IUserService userService) : Controll
     public async Task<ActionResult<PostDto>> CreatePost(CreatePostRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new CreatePostCommand(userId, request.Content, request.StickerId), ct);
+        var result = await sender.Send(new CreatePostCommand(userId, request.Content, request.StickerId, request.ImageId), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

@@ -30,6 +30,7 @@ public class UnsentAttachmentSweeper(
                 try
                 {
                     await SweepAsync(DateTime.UtcNow, stoppingToken);
+                    await SweepGeneratedAsync(DateTime.UtcNow, stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -64,6 +65,31 @@ public class UnsentAttachmentSweeper(
             storage.Delete(attachment.ChatId, attachment.Id);
 
         logger.LogInformation("Swept {Count} image(s) uploaded but never sent", stale.Count);
+        return stale.Count;
+    }
+
+    /// <summary>Generated pictures stay this long for the post they were made for; then unused ones go.</summary>
+    public static readonly TimeSpan GeneratedMaxAge = TimeSpan.FromDays(1);
+
+    /// <summary>Deletes generated pictures older than <see cref="GeneratedMaxAge"/> that no post took, and returns how many.</summary>
+    public async Task<int> SweepGeneratedAsync(DateTime now, CancellationToken ct = default)
+    {
+        var cutoff = now - GeneratedMaxAge;
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
+
+        var stale = await db.GeneratedImages
+            .Where(i => i.CreatedAt < cutoff && !db.Posts.Any(p => p.ImageId == i.Id))
+            .ToListAsync(ct);
+        if (stale.Count == 0)
+            return 0;
+
+        db.GeneratedImages.RemoveRange(stale);
+        await db.SaveChangesAsync(ct);
+        foreach (var image in stale)
+            storage.DeleteGeneratedImage(image.Id);
+
+        logger.LogInformation("Swept {Count} generated picture(s) no post used", stale.Count);
         return stale.Count;
     }
 }

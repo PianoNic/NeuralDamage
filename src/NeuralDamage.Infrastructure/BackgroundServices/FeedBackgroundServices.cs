@@ -11,6 +11,7 @@ using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Stories;
+using NeuralDamage.Infrastructure.Services.Images;
 
 namespace NeuralDamage.Infrastructure.BackgroundServices;
 
@@ -158,10 +159,10 @@ public class FeedScheduler(
             // Now and then a story instead of a post, within the bot's own cap for stories.
             if ((stories.GetValueOrDefault(bot.Id)?.Today ?? 0) < bot.MaxStoriesPerDay && random() < _options.StoryShare)
             {
-                if (await StoryAsync(bot, now, ct) is { } story)
+                if (await StoryAsync(bot, now, ct, imageRoll: random()) is { } story)
                     tick.Stories.Add(story);
             }
-            else if (await PostAsync(bot, now, random(), ct) is { } post)
+            else if (await PostAsync(bot, now, random(), ct, imageRoll: random()) is { } post)
             {
                 tick.Posts.Add(post);
             }
@@ -170,26 +171,37 @@ public class FeedScheduler(
     }
 
     /// <summary>Has <paramref name="bot"/> make a story now; null when its spec was dropped.</summary>
-    public async Task<StoryDto?> StoryAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default)
+    /// <param name="imageRoll">A random number in [0, 1): below <see cref="FeedOptions.ImageShare"/> the bot may have its background drawn.</param>
+    public async Task<StoryDto?> StoryAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default, double imageRoll = 1)
     {
         using var scope = scopes.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<StoryWriter>().WriteAsync(bot, now, ct);
+        return await scope.ServiceProvider.GetRequiredService<StoryWriter>().WriteAsync(bot, now, ct, imageRoll < _options.ImageShare);
     }
 
-    /// <summary>Writes and publishes one post by <paramref name="bot"/> now, whatever the schedule says.</summary>
-    public async Task<Post?> PostAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default)
+    /// <summary>
+    /// Writes and publishes one post by <paramref name="bot"/> now, whatever the schedule says.
+    /// When the bot asks for a picture, the post waits for it, and goes out without one when it fails.
+    /// </summary>
+    /// <param name="imageRoll">A random number in [0, 1): below <see cref="FeedOptions.ImageShare"/> the bot is offered a picture.</param>
+    public async Task<Post?> PostAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, double imageRoll = 1)
     {
         using var scope = scopes.CreateScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<NeuralDamageDbContext>();
         var writer = services.GetRequiredService<FeedPostWriter>();
+        var images = services.GetService<ImageGenerator>();
+        var offerImage = images is { IsEnabled: true } && imageRoll < _options.ImageShare;
 
-        var draft = await writer.WriteAsync(bot, now, roll, ct);
+        var draft = await writer.WriteAsync(bot, now, roll, ct, offerImage);
         if (draft is null)
         {
             logger.LogInformation("Bot {BotName} had nothing to post", bot.Name);
             return null;
         }
+
+        Guid? imageId = null;
+        if (draft.Image is { } ask && images is { IsEnabled: true })
+            imageId = await PictureAsync(images, bot, ask, ct);
 
         var post = new Post
         {
@@ -197,6 +209,7 @@ public class FeedScheduler(
             Content = draft.Content,
             StickerId = draft.Sticker?.Id,
             SourceChatId = draft.SourceChatId,
+            ImageId = imageId,
         };
         db.Posts.Add(post);
         await db.SaveChangesAsync(ct);
@@ -207,5 +220,25 @@ public class FeedScheduler(
         if (services.GetService<IFeedQueue>() is { } queue)
             await queue.EnqueueAsync(new FeedEvent(post.Id, null, Depth: 1), ct);
         return post;
+    }
+
+    /// <summary>
+    /// Draws the picture the bot asked for, with its own face when it wants to
+    /// be in it; the picture's id when it turned out, null otherwise.
+    /// </summary>
+    private async Task<Guid?> PictureAsync(ImageGenerator images, Bot bot, PostImageAsk ask, CancellationToken ct)
+    {
+        var started = await images.StartAsync(new ImageAsk(ask.Prompt, null, bot.Id, ask.IncludeMe ? bot.Id : null), ct);
+        if (started.IsFailure)
+        {
+            logger.LogInformation("Bot {BotName} posts without its picture: {Error}", bot.Name, started.Error);
+            return null;
+        }
+        var ticket = started.Value!;
+        if (await ticket.Done.WaitAsync(ct))
+            return ticket.Image.Id;
+
+        logger.LogInformation("Bot {BotName} posts without its picture, which failed", bot.Name);
+        return null;
     }
 }

@@ -17,6 +17,7 @@ using NeuralDamage.Infrastructure.Services.Stickers;
 using NeuralDamage.Infrastructure.Services.BotPictures;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Stories;
+using NeuralDamage.Infrastructure.Services.Images;
 using Microsoft.Extensions.Options;
 using System.Text.Json.Serialization;
 
@@ -100,7 +101,8 @@ builder.Services.AddScoped(sp => new StoryWriter(
     sp.GetRequiredService<FeedPostWriter>(),
     sp.GetRequiredService<StoryPublisher>(),
     sp.GetRequiredService<ILogger<StoryWriter>>(),
-    sp.GetRequiredService<BotClock>()));
+    sp.GetRequiredService<BotClock>(),
+    sp.GetRequiredService<ImageGenerator>()));
 builder.Services.AddHostedService<StorySweeper>();
 
 // Images
@@ -116,6 +118,19 @@ builder.Services.AddSingleton(sp => new StickerDescribeQueue(
 builder.Services.AddSingleton<IStickerDescribeQueue>(sp => sp.GetRequiredService<StickerDescribeQueue>());
 builder.Services.AddHostedService<StickerDescribeService>();
 builder.Services.AddHostedService<UnsentAttachmentSweeper>();
+
+// Generated pictures, from a self-hosted ComfyUI (ImageGen:BaseUrl); off without one.
+builder.Services.Configure<ImageGenOptions>(builder.Configuration.GetSection(ImageGenOptions.SectionName));
+builder.Services.AddHttpClient<IImageRenderer, ComfyUiClient>((sp, client) =>
+    ComfyUiClient.Configure(client, sp.GetRequiredService<IOptions<ImageGenOptions>>().Value));
+builder.Services.AddSingleton<ImageQueue>();
+builder.Services.AddSingleton(sp => new ImageGenerator(
+    sp.GetRequiredService<IServiceScopeFactory>(),
+    sp.GetRequiredService<ImageQueue>(),
+    sp.GetRequiredService<IAttachmentStorage>(),
+    sp.GetRequiredService<IOptions<ImageGenOptions>>(),
+    sp.GetRequiredService<ILogger<ImageGenerator>>(),
+    sp.GetRequiredService<BotClock>()));
 
 // Picture suggestions for new bots, from Wikimedia. Redirects are followed by hand, only to allowed hosts.
 builder.Services.AddMemoryCache();

@@ -10,6 +10,7 @@ api/chatBots.service.ts
 api/chatMembers.service.ts
 api/chats.service.ts
 api/feed.service.ts
+api/images.service.ts
 api/internalDevOnly.service.ts
 api/messages.service.ts
 api/neuralDamageAPI.service.ts
@@ -42,8 +43,12 @@ model/createStoryRequest.ts
 model/feedActivityDto.ts
 model/feedActivityItemDto.ts
 model/feedAuthorDto.ts
+model/feedImageDto.ts
 model/feedLikeDto.ts
 model/feedPageDto.ts
+model/generateImageRequest.ts
+model/generatedImageDto.ts
+model/generatedImageStatus.ts
 model/messageDto.ts
 model/messageStickerDto.ts
 model/modelPricing.ts

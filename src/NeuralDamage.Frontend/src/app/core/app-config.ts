@@ -22,8 +22,13 @@ export class AppConfig {
   /** The release the server was built as, e.g. "0.1.1"; null until `/api/app` has answered. */
   readonly version = this.serverVersion.asReadonly();
 
-  apply(config: Partial<Pick<AppConfigurationDto, 'attachments' | 'version'>>): void {
+  private readonly imageGenerationOn = signal(false);
+  /** Pictures can be generated (`ImageGen:BaseUrl` is set on the server). */
+  readonly imageGeneration = this.imageGenerationOn.asReadonly();
+
+  apply(config: Partial<Pick<AppConfigurationDto, 'attachments' | 'version' | 'imageGeneration'>>): void {
     if (config.attachments) this.limits.set(config.attachments);
     if (config.version) this.serverVersion.set(config.version);
+    if (config.imageGeneration !== undefined) this.imageGenerationOn.set(config.imageGeneration);
   }
 }

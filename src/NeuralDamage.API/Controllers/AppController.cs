@@ -2,7 +2,9 @@ using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NeuralDamage.Infrastructure.Dtos;
+using Microsoft.Extensions.Options;
 using NeuralDamage.Infrastructure.Services.Attachments;
+using NeuralDamage.Infrastructure.Services.Images;
 using Toamaisutaa.AspNetCore;
 
 namespace NeuralDamage.API.Controllers;
@@ -16,7 +18,7 @@ namespace NeuralDamage.API.Controllers;
 [Route("api/app")]
 [AllowAnonymous]
 [Tags("Application Configuration")]
-public class AppController(IToamaisutaaClientConfigurationProvider oidc, AttachmentOptions attachments) : ControllerBase
+public class AppController(IToamaisutaaClientConfigurationProvider oidc, AttachmentOptions attachments, IOptions<ImageGenOptions> imageGen) : ControllerBase
 {
     [HttpGet(Name = "appConfiguration")]
     [ProducesResponseType<AppConfigurationDto>(StatusCodes.Status200OK)]
@@ -30,7 +32,8 @@ public class AppController(IToamaisutaaClientConfigurationProvider oidc, Attachm
             config.PostLogoutRedirectUri,
             config.Scope,
             attachments.Limits(),
-            Version));
+            Version,
+            imageGen.Value.Enabled));
     }
 
     /// <summary>

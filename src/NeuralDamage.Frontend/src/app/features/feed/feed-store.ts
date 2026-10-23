@@ -119,8 +119,8 @@ export class FeedStore {
     await firstValueFrom(this.api.apiFeedSeenPost()).catch(() => undefined);
   }
 
-  async post(content: string, stickerId: string | null = null): Promise<void> {
-    const post = await firstValueFrom(this.api.apiFeedPostsPost({ content, stickerId }));
+  async post(content: string, stickerId: string | null = null, imageId: string | null = null): Promise<void> {
+    const post = await firstValueFrom(this.api.apiFeedPostsPost({ content, stickerId, imageId }));
     this.posts.update((list) => mergePosts(list, [post]));
   }
 

@@ -1,17 +1,20 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideEllipsis, lucideHeart, lucideMessageCircle, lucideTrash2 } from '@ng-icons/lucide';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmCard } from '@spartan-ng/helm/card';
+import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
+import { PkAuthImage } from '@prompt-kit/auth-image';
 import { PostDto } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { ChatList } from '../chat/chat-list';
 import { StickerImage } from '../stickers/sticker-image';
 import { formatAgo } from './feed-model';
 import { FeedText } from './feed-text';
+import { generatedImageSrc } from './generate-image';
 
 /**
  * One post: who wrote it and when, the chat it came out of (only for those in that chat), its text
@@ -19,7 +22,7 @@ import { FeedText } from './feed-text';
  */
 @Component({
   selector: 'app-post-card',
-  imports: [RouterLink, NgIcon, HlmBadge, HlmButton, HlmCard, HlmDropdownMenuImports, MemberAvatar, StickerImage, FeedText],
+  imports: [RouterLink, NgIcon, PkAuthImage, HlmBadge, HlmButton, HlmCard, HlmDialogImports, HlmDropdownMenuImports, MemberAvatar, StickerImage, FeedText],
   providers: [provideIcons({ lucideEllipsis, lucideHeart, lucideMessageCircle, lucideTrash2 })],
   host: { class: 'block' },
   template: `
@@ -57,6 +60,25 @@ import { FeedText } from './feed-text';
 
       @if (post().content) {
         <app-feed-text class="leading-normal" [class.text-[15px]]="!large()" [class.text-base]="large()" [text]="post().content" [names]="names()" />
+      }
+      @if (post().image; as image) {
+        <button
+          type="button"
+          class="bg-muted focus-visible:ring-ring/50 block w-full overflow-hidden rounded-xl outline-none focus-visible:ring-2"
+          [style.aspect-ratio]="image.width && image.height ? image.width + ' / ' + image.height : '1 / 1'"
+          [attr.aria-label]="'Open the picture: ' + image.prompt"
+          data-testid="post-image"
+          (click)="imageOpen.set(true)"
+        >
+          <pk-auth-image [url]="imageSrc()" [alt]="image.prompt" class="size-full" imgClass="size-full object-cover" />
+        </button>
+        <hlm-dialog [state]="imageOpen() ? 'open' : 'closed'" (closed)="imageOpen.set(false)">
+          <hlm-dialog-content *hlmDialogPortal="let ctx" class="w-fit max-w-[calc(100vw-2rem)] p-2 sm:max-w-[min(90vw,72rem)]">
+            <h2 hlmDialogTitle class="sr-only">Picture from {{ post().author.name }}</h2>
+            <pk-auth-image [url]="imageSrc()" [alt]="image.prompt" class="min-h-40 min-w-40 rounded-lg" imgClass="max-h-[85vh] max-w-full object-contain" />
+            <p hlmDialogDescription class="text-muted-foreground line-clamp-3 w-0 min-w-full px-1 pb-1 text-xs">{{ image.prompt }}</p>
+          </hlm-dialog-content>
+        </hlm-dialog>
       }
       @if (post().sticker; as sticker) {
         <app-sticker-image [url]="sticker.url" [alt]="sticker.description || 'Sticker: ' + sticker.name" [px]="160" />
@@ -127,6 +149,8 @@ export class PostCard {
   readonly remove = output<void>();
 
   protected readonly ago = computed(() => formatAgo(this.post().createdAt, this.now()));
+  protected readonly imageOpen = signal(false);
+  protected readonly imageSrc = computed(() => generatedImageSrc(this.post().image?.url ?? ''));
   /** Only the chat's members know its name; everyone else sees no source at all. */
   protected readonly sourceChat = computed(() => {
     const id = this.post().sourceChatId;

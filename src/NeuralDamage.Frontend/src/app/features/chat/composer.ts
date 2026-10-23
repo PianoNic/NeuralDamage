@@ -229,6 +229,9 @@ export interface Suggestion {
         </ul>
       }
 
+      <!-- Something else going out with the text, such as a generated picture on the feed. -->
+      <ng-content select="[composerAttachment]" />
+
       @if (replyingTo(); as reply) {
         <div class="bg-muted flex items-center gap-2 rounded-lg py-1 ps-2 pe-1 text-xs">
           <ng-icon name="lucideReply" class="text-muted-foreground shrink-0" />
@@ -367,6 +370,7 @@ export interface Suggestion {
             <app-sticker-picker (pick)="sendSticker.emit($event); ctx.close()" />
           </hlm-popover-content>
         </hlm-popover>
+        <ng-content select="[composerTool]" />
 
         <span class="flex-1"></span>
 
@@ -431,6 +435,11 @@ export class Composer {
   readonly feed = input(false);
   /** The longest text it sends. */
   readonly limit = input(MAX_MESSAGE_LENGTH);
+  /**
+   * A projected attachment (`composerAttachment`): `busy` holds sending back until it is done,
+   * `ready` lets it go out without any text.
+   */
+  readonly attachment = input<'none' | 'busy' | 'ready'>('none');
   protected readonly maxLength = MAX_MESSAGE_LENGTH;
   private readonly limits = inject(AppConfig).uploadLimits;
   protected readonly imageTypes = computed(() => this.limits().contentTypes.join(','));
@@ -472,7 +481,10 @@ export class Composer {
   private readonly uploading = computed(() => this.images().some((i) => !i.id));
   readonly canSend = computed(
     () =>
-      (!!this.content().trim() || this.images().length > 0) && !this.tooLong() && !this.uploading(),
+      (!!this.content().trim() || this.images().length > 0 || this.attachment() === 'ready') &&
+      !this.tooLong() &&
+      !this.uploading() &&
+      this.attachment() !== 'busy',
   );
 
   /** The emoji dataset, once its lazy chunk has loaded (on the first `:`). */

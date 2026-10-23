@@ -12,5 +12,6 @@
 export interface CreatePostRequest { 
     content: string;
     stickerId?: string | null;
+    imageId?: string | null;
 }
 

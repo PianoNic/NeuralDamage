@@ -18,5 +18,6 @@ export interface AppConfigurationDto {
     scope: string;
     attachments: AttachmentLimitsDto;
     version: string;
+    imageGeneration: boolean;
 }
 

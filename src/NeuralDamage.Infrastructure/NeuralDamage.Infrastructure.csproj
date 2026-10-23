@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -24,6 +24,8 @@
 	<ItemGroup>
 		<!-- Inter and Noto Color Emoji, both under the SIL Open Font License (OFL-*.txt). -->
 		<None Include="Fonts\**" CopyToOutputDirectory="PreserveNewest" LinkBase="Fonts" />
+		<!-- The ComfyUI workflows, in API format. -->
+		<EmbeddedResource Include="Services\Images\Workflows\*.json" LogicalName="NeuralDamage.Infrastructure.Workflows.%(Filename)%(Extension)" />
 	</ItemGroup>
 
 	<ItemGroup>

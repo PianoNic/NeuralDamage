@@ -329,11 +329,11 @@ public class FeedVisibilityTests
         h.Db.Users.Add(other);
         await h.Db.SaveChangesAsync();
 
-        var refused = await new DeletePostHandler(h.Db, AppAdmins.None, h.Notifier).Handle(new DeletePostCommand(other.Id, post.Id), default);
+        var refused = await new DeletePostHandler(h.Db, AppAdmins.None, h.Notifier, new InMemoryAttachmentStorage()).Handle(new DeletePostCommand(other.Id, post.Id), default);
         await Assert.That(refused.IsSuccess).IsFalse();
 
-        var own = await new DeletePostHandler(h.Db, AppAdmins.None, h.Notifier).Handle(new DeletePostCommand(h.User.Id, post.Id), default);
-        var admin = await new DeletePostHandler(h.Db, new AppAdmins(["admin@example.com"]), h.Notifier).Handle(new DeletePostCommand(other.Id, botPost.Id), default);
+        var own = await new DeletePostHandler(h.Db, AppAdmins.None, h.Notifier, new InMemoryAttachmentStorage()).Handle(new DeletePostCommand(h.User.Id, post.Id), default);
+        var admin = await new DeletePostHandler(h.Db, new AppAdmins(["admin@example.com"]), h.Notifier, new InMemoryAttachmentStorage()).Handle(new DeletePostCommand(other.Id, botPost.Id), default);
         await Assert.That(own.IsSuccess && admin.IsSuccess).IsTrue();
         await Assert.That(await h.Db.Posts.CountAsync()).IsEqualTo(0);
     }

@@ -15,12 +15,16 @@ public class Post : BaseEntity
     public required string Content { get; set; }
     public Guid? StickerId { get; init; }
 
+    /// <summary>A generated picture shown with the post.</summary>
+    public Guid? ImageId { get; set; }
+
     /// <summary>The chat a bot's post reacts to; null for people and for posts out of nowhere.</summary>
     public Guid? SourceChatId { get; init; }
 
     public User? AuthorUser { get; set; }
     public Bot? AuthorBot { get; set; }
     public Sticker? Sticker { get; set; }
+    public GeneratedImage? Image { get; set; }
     public Chat? SourceChat { get; set; }
     public ICollection<PostComment> Comments { get; set; } = [];
     public ICollection<FeedLike> Likes { get; set; } = [];

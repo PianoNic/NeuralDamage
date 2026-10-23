@@ -4,6 +4,9 @@ import { provideRouter } from '@angular/router';
 import { of, Subject } from 'rxjs';
 import { BotsService } from '../../api/api/bots.service';
 import { StickersService } from '../../api/api/stickers.service';
+import { ImagesService } from '../../api/api/images.service';
+import { AppConfig } from '../../core/app-config';
+import { ImageDraft } from '../feed/generate-image';
 import { StoriesService } from '../../api/api/stories.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { StoryDto, StoryRingDto } from '../../core/models';
@@ -59,12 +62,13 @@ const settle = async (fixture: { whenStable(): Promise<unknown>; detectChanges()
   }
 };
 
-function providers(api: Partial<Record<keyof StoriesService, unknown>>) {
+function providers(api: Partial<Record<keyof StoriesService, unknown>>, images: Partial<Record<keyof ImagesService, unknown>> = {}) {
   return [
     provideRouter([{ path: 'feed', children: [] }]),
     { provide: StoriesService, useValue: api },
     { provide: BotsService, useValue: { apiBotsPictureSuggestionsGet: () => of([]) } },
     { provide: StickersService, useValue: {} },
+    { provide: ImagesService, useValue: images },
     { provide: AvatarImages, useValue: { get: (url: string) => signal(`blob:${url}`) } },
     { provide: AuthService, useValue: { user: signal({ id: 'me', displayName: 'Alice', email: 'a@example.com' }), displayName: signal('Alice') } },
     {
@@ -209,5 +213,24 @@ describe('StoryEditor', () => {
     expect(spec.background).toEqual({ color: '#1d3347' });
     expect(spec.layers[0]).toMatchObject({ type: 'text', text: 'Hello from my story' });
     expect(editor.draft().layers.length).toBe(1);
+  });
+});
+
+describe('StoryEditor with image generation', () => {
+  it('puts a generated picture in as the background', async () => {
+    const generate = vi.fn(() => of({ id: 'img1', status: 'Ready', prompt: 'a beach', waiting: 0, url: '/api/images/img1/file', width: 768, height: 1344 }));
+    await TestBed.configureTestingModule({ imports: [StoryEditor], providers: providers({}, { apiImagesPost: generate }) }).compileComponents();
+    TestBed.inject(AppConfig).apply({ imageGeneration: true });
+    const fixture = TestBed.createComponent(StoryEditor);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent?.includes('Generate background'))).toBe(true);
+
+    await fixture.debugElement.injector.get(ImageDraft).generate({ prompt: 'a beach', faceBotId: null, forStory: true });
+    await settle(fixture);
+
+    expect(generate).toHaveBeenCalledWith({ prompt: 'a beach', faceBotId: null, forStory: true });
+    const json = toSpec(fixture.componentInstance.draft()) as { background: unknown };
+    expect(json.background).toEqual({ color: expect.any(String), image: 'generated:img1', fit: 'cover' });
   });
 });

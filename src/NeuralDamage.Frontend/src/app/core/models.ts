@@ -21,6 +21,8 @@ export type {
   FeedActivityDto,
   FeedActivityItemDto,
   FeedAuthorDto,
+  FeedImageDto,
+  GeneratedImageDto,
   FeedLikeDto,
   FeedPageDto,
   MessageDto,

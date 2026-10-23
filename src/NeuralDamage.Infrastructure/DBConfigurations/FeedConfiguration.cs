@@ -20,6 +20,29 @@ public class PostConfiguration : IEntityTypeConfiguration<Post>
         builder.HasOne(p => p.Sticker).WithMany().HasForeignKey(p => p.StickerId).OnDelete(DeleteBehavior.Restrict);
         // The post stays when its chat is deleted; it only loses the link.
         builder.HasOne(p => p.SourceChat).WithMany().HasForeignKey(p => p.SourceChatId).OnDelete(DeleteBehavior.SetNull);
+        // One picture per post, and a picture on one post only.
+        builder.HasOne(p => p.Image).WithMany().HasForeignKey(p => p.ImageId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(p => p.ImageId).IsUnique();
+    }
+}
+
+public class GeneratedImageConfiguration : IEntityTypeConfiguration<GeneratedImage>
+{
+    public void Configure(EntityTypeBuilder<GeneratedImage> builder)
+    {
+        builder.HasKey(i => i.Id);
+        builder.HasIndex(i => i.CreatedAt);
+        builder.HasIndex(i => new { i.UserId, i.Status });
+
+        builder.Property(i => i.Prompt).HasMaxLength(GeneratedImage.MaxPromptLength).IsRequired();
+        builder.Property(i => i.Error).HasMaxLength(300);
+        builder.Property(i => i.ContentType).HasMaxLength(64).IsRequired();
+        builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(16);
+
+        // A person's or a bot's pictures go with them; a face only loses its link.
+        builder.HasOne<User>().WithMany().HasForeignKey(i => i.UserId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Bot>().WithMany().HasForeignKey(i => i.BotId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Bot>().WithMany().HasForeignKey(i => i.FaceBotId).OnDelete(DeleteBehavior.SetNull);
     }
 }
 
