@@ -38,8 +38,8 @@ public class BotsController(ISender sender, IUserService userService, Attachment
     [ProducesResponseType<List<BotDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<List<BotDto>>> GetAll([FromQuery] bool mine = false, CancellationToken ct = default)
     {
-        Guid? createdById = mine ? await userService.GetCurrentUserIdAsync(ct) : null;
-        var result = await sender.Send(new GetBotsQuery(createdById), ct);
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetBotsQuery(mine ? userId : null, userId), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
@@ -85,7 +85,7 @@ public class BotsController(ISender sender, IUserService userService, Attachment
     public async Task<IActionResult> Update(Guid botId, UpdateBotRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new UpdateBotCommand(botId, userId, request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.Aliases, request.IsActive, request.FeedEnabled, request.MaxPostsPerDay, request.MaxStoriesPerDay), ct);
+        var result = await sender.Send(new UpdateBotCommand(botId, userId, request.Name, request.ModelId, request.SystemPrompt, request.Personality, request.Temperature, request.Aliases, request.IsActive, request.FeedEnabled, request.MaxPostsPerDay, request.MaxStoriesPerDay, request.Looks), ct);
         return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
@@ -131,6 +131,58 @@ public class BotsController(ISender sender, IUserService userService, Attachment
             return NotFound(result.Error);
 
         // Every upload gets a new ?v= in the bot's avatar URL, so this one never changes.
+        Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+        Response.Headers.Vary = "Authorization";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    /// <summary>
+    /// Adds a reference picture of what the bot looks like (at most three), and
+    /// has its looks written again from them. Only its creator can, and only
+    /// its creator ever sees them.
+    /// </summary>
+    [HttpPost("{botId:guid}/references")]
+    [EnableRateLimiting(RateLimitExtensions.Uploads)]
+    [RequestSizeLimit(MaxAvatarRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxAvatarRequestBytes)]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<BotReferencesDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<BotReferencesDto>> AddReference(Guid botId, IFormFile file, CancellationToken ct)
+    {
+        if (file.Length > attachmentOptions.MaxBytes)
+            return BadRequest($"Images can be at most {attachmentOptions.MaxBytes / (1024 * 1024.0):0.#} MB.");
+
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        using var buffer = new MemoryStream((int)file.Length);
+        await file.CopyToAsync(buffer, ct);
+
+        var result = await sender.Send(new AddBotReferenceCommand(botId, userId, buffer.ToArray()), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    [HttpDelete("{botId:guid}/references/{referenceId:guid}")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> RemoveReference(Guid botId, Guid referenceId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new RemoveBotReferenceCommand(botId, userId, referenceId), ct);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+    }
+
+    /// <summary>One reference picture, for the bot's creator only.</summary>
+    [HttpGet("{botId:guid}/references/{referenceId:guid}")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK, "image/png", "image/jpeg", "image/webp", "image/gif")]
+    [ProducesResponseType<string>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetReference(Guid botId, Guid referenceId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetBotReferenceQuery(botId, referenceId, userId), ct);
+        if (result.IsFailure)
+            return NotFound(result.Error);
+
+        // A reference never changes under its id; it is only ever removed.
         Response.Headers.CacheControl = "private, max-age=31536000, immutable";
         Response.Headers.Vary = "Authorization";
         Response.Headers.XContentTypeOptions = "nosniff";

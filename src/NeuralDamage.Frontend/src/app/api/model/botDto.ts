@@ -7,6 +7,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { BotReferenceDto } from './botReferenceDto';
 import { BotCreatorDto } from './botCreatorDto';
 
 
@@ -33,5 +34,7 @@ export interface BotDto {
     feedEnabled: boolean;
     maxPostsPerDay: number;
     maxStoriesPerDay: number;
+    looks?: string | null;
+    references: Array<BotReferenceDto>;
 }
 

@@ -67,7 +67,7 @@ public class CreateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
             await notifications.NotifyMemberAdded(member.ChatId, member.ToDto());
         }
 
-        var dto = await db.Bots.Where(b => b.Id == bot.Id).SelectDto(DateTime.UtcNow).FirstAsync(cancellationToken);
+        var dto = await db.Bots.Where(b => b.Id == bot.Id).SelectDto(DateTime.UtcNow, request.CreatedById).FirstAsync(cancellationToken);
         return Result<BotDto>.Success(dto);
     }
 }

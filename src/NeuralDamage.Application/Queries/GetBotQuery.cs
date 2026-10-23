@@ -20,7 +20,7 @@ public class GetBotHandler(NeuralDamageDbContext db, IOpenRouterService openRout
             .Where(b => b.IsPublic
                 || b.CreatedById == request.RequestingUserId
                 || db.ChatMembers.Any(cm => cm.ChatId == b.ChatId && cm.UserId == request.RequestingUserId))
-            .SelectDto(DateTime.UtcNow)
+            .SelectDto(DateTime.UtcNow, request.RequestingUserId)
             .AsNoTracking()
             .FirstOrDefaultAsync(cancellationToken);
 

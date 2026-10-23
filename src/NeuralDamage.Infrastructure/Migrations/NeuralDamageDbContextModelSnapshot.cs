@@ -109,6 +109,10 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("Looks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<int>("MaxPostsPerDay")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -151,6 +155,36 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.HasIndex("CreatedById");
 
                     b.ToTable("Bots");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.BotReference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BotId");
+
+                    b.ToTable("BotReferences");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.BotSilence", b =>
@@ -843,6 +877,17 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("CreatedBy");
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.BotReference", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", "Bot")
+                        .WithMany("References")
+                        .HasForeignKey("BotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bot");
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.BotSilence", b =>
                 {
                     b.HasOne("NeuralDamage.Domain.Bot", null)
@@ -1141,6 +1186,8 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("Messages");
 
                     b.Navigation("Reactions");
+
+                    b.Navigation("References");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.Chat", b =>

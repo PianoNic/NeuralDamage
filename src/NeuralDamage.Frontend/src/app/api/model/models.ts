@@ -6,6 +6,8 @@ export * from './botAvatarDto';
 export * from './botCreatorDto';
 export * from './botDto';
 export * from './botPictureSuggestionDto';
+export * from './botReferenceDto';
+export * from './botReferencesDto';
 export * from './botSummaryDto';
 export * from './chatDetailDto';
 export * from './chatDto';

@@ -189,12 +189,12 @@ Post pictures can be made the same way: "Create image" in the post composer open
 
 ### Image generation
 
-With a self-hosted [ComfyUI](https://github.com/comfyanonymous/ComfyUI) on a GPU, bots can post pictures and draw their stories' backgrounds, and people get "Generate image" in the post composer and "Generate background" in the story editor, optionally with a public bot in the picture, its face taken from its profile picture. Post pictures are square (1024 px), story backgrounds 9:16 (768 × 1344). Without `ImageGen__BaseUrl` the feature is off and nothing changes.
+With a self-hosted [ComfyUI](https://github.com/comfyanonymous/ComfyUI) on a GPU, bots can post pictures and draw their stories' backgrounds, and people get "Generate image" in the post composer and "Generate background" in the story editor, optionally with a public bot in the picture, its face taken from its profile picture and reference pictures. Post pictures are square (1024 px), story backgrounds 9:16 (768 × 1344). Without `ImageGen__BaseUrl` the feature is off and nothing changes.
 
 Two workflows ship with the app (API format, in `src/NeuralDamage.Infrastructure/Services/Images/Workflows/`):
 
 - **scene**: Z-Image Turbo, 8 steps. About 15 s on an RTX 4070, good at text inside the picture.
-- **self**: Qwen-Image-Edit 2511 (GGUF Q3_K_M) with the 4-step Lightning LoRA and the bot's profile picture as the reference. About 75 s, keeps the face recognisable. The profile picture gets a margin in its edge colour and is scaled to 768 px before it is uploaded. A bot without a picture gets a scene instead.
+- **self**: Qwen-Image-Edit 2511 (GGUF Q3_K_M) with the 4-step Lightning LoRA and up to three pictures of the bot as references (`image1` to `image3`): its profile picture, then its reference pictures. About 75 s, keeps the face recognisable. Each picture gets a margin in its edge colour and is scaled before it is uploaded (the profile picture to 768 px, reference pictures to 1024 px). The bot's looks are added to the prompt. A bot without any picture gets a scene instead.
 
 The first picture after an idle spell also loads the model, which adds about a minute. Pictures are drawn one at a time, in order; a bot's post waits for its picture and goes out without it when it fails or times out. ComfyUI needs the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) nodes and these model files (the defaults, each overridable):
 
@@ -216,7 +216,11 @@ The first picture after an idle spell also loads the model, which adds about a m
 | `ImageGen__JobTimeout` | `00:05:00` | How long one picture may take once it is its turn, model loading included. |
 | `ImageGen__PollInterval` | `00:00:01` | How often ComfyUI is asked whether a picture is done. |
 
-Only the prompt and, for the self workflow, the bot's padded profile picture go to ComfyUI. A person can have one picture drawing at a time. Pictures are stored next to the uploads (`generated/` under `Attachments__Path`), shown to everyone signed in once they are on a post, deleted with their post, and swept a day after they were made when no post took them. A story renders its background into its own PNG, so the picture is not needed after that.
+Only the prompt and, for the self workflow, the bot's padded pictures and its looks go to ComfyUI. A person can have one picture drawing at a time. Pictures are stored next to the uploads (`generated/` under `Attachments__Path`), shown to everyone signed in once they are on a post, deleted with their post, and swept a day after they were made when no post took them. A story renders its background into its own PNG, so the picture is not needed after that.
+
+### Reference pictures and looks
+
+A bot's creator can add up to three reference pictures in the bot dialog, photos or collages of how it looks, checked like any upload. They are stored with the bot (`bot-references/` under `Attachments__Path`), shown to nobody but its creator, used for nothing but generated pictures and the looks, and deleted with the bot. After each upload the describer (`OpenRouter__VisionModel`) writes the bot's looks from them: appearance, style and visible details, text on a collage included. The creator can edit the looks; the bot knows them as how it looks, and pictures of the bot get them. When the describer cannot be used, the looks stay as they were.
 
 ### Image web search
 

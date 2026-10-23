@@ -3,8 +3,8 @@ using SkiaSharp;
 namespace NeuralDamage.Infrastructure.Services.Images;
 
 /// <summary>
-/// Turns a bot's profile picture into the reference the "self" workflow
-/// needs. Profile pictures are tight crops of the face, and the edit model
+/// Turns a bot's profile picture, or one of its reference pictures, into a
+/// reference the "self" workflow takes. Profile pictures are tight crops of the face, and the edit model
 /// keeps a face far better with some room around it, so the picture gets a
 /// margin in the colour of its own edge and is scaled to a fixed size.
 /// </summary>
@@ -16,15 +16,19 @@ public static class ReferenceImage
     /// <summary>The longer side of the result.</summary>
     public const int Size = 768;
 
+    /// <summary>The longer side for a reference picture: about a megapixel, which ComfyUI scales to anyway.</summary>
+    public const int LargeSize = 1024;
+
+    /// <param name="size">The longer side of the result.</param>
     /// <returns>A PNG.</returns>
     /// <exception cref="ImageGenerationException">The picture cannot be read.</exception>
-    public static byte[] Prepare(byte[] picture)
+    public static byte[] Prepare(byte[] picture, int size = Size)
     {
-        using var bitmap = Decode(picture) ?? throw new ImageGenerationException("The profile picture cannot be read.");
+        using var bitmap = Decode(picture) ?? throw new ImageGenerationException("The picture cannot be read.");
         var pad = (int)Math.Round(Math.Max(bitmap.Width, bitmap.Height) * Margin);
         var paddedWidth = bitmap.Width + 2 * pad;
         var paddedHeight = bitmap.Height + 2 * pad;
-        var scale = (float)Size / Math.Max(paddedWidth, paddedHeight);
+        var scale = (float)size / Math.Max(paddedWidth, paddedHeight);
         var width = Math.Max(1, (int)Math.Round(paddedWidth * scale));
         var height = Math.Max(1, (int)Math.Round(paddedHeight * scale));
 

@@ -22,8 +22,9 @@ public record ImageTicket(GeneratedImage Image, Task<bool> Done);
 /// <summary>
 /// Makes pictures: checks the daily cap, records the picture as pending,
 /// queues it for the one GPU (<see cref="ImageQueue"/>) and stores it like an
-/// upload when it is ready, or marks it failed. A face asked for without a
-/// profile picture to take it from becomes a plain scene.
+/// upload when it is ready, or marks it failed. A face is taken from the
+/// bot's profile picture and reference pictures, with its looks added to the
+/// prompt; one asked for without any picture to take it from becomes a plain scene.
 /// </summary>
 public class ImageGenerator(
     IServiceScopeFactory scopes,
@@ -99,13 +100,11 @@ public class ImageGenerator(
         var faceUsed = false;
         try
         {
-            var reference = ask.FaceBotId is { } face && await storage.ReadBotAvatarAsync(face) is { } avatar
-                ? ReferenceImage.Prepare(avatar)
-                : null;
-            faceUsed = reference is not null;
-            var request = reference is null
-                ? new RenderRequest(ImageWorkflows.Scene, ask.Prompt, ask.Width, ask.Height, Seed())
-                : new RenderRequest(ImageWorkflows.Self, ImageWorkflows.SelfPrompt(ask.Prompt), ask.Width, ask.Height, Seed(), reference);
+            var (references, looks) = ask.FaceBotId is { } face ? await FaceOfAsync(face) : ([], null);
+            faceUsed = references.Count > 0;
+            var request = faceUsed
+                ? new RenderRequest(ImageWorkflows.Self, ImageWorkflows.SelfPrompt(ask.Prompt, references.Count, looks), ask.Width, ask.Height, Seed(), references)
+                : new RenderRequest(ImageWorkflows.Scene, ask.Prompt, ask.Width, ask.Height, Seed());
             png = await queue.EnqueueAsync(async token =>
             {
                 // A fresh client per picture, so the HTTP handler is rotated as the factory intends.
@@ -166,6 +165,41 @@ public class ImageGenerator(
             logger.LogError(ex, "Storing picture {ImageId} failed", imageId);
             return false;
         }
+    }
+
+    /// <summary>
+    /// The pictures to take a bot's face from, padded: its profile picture,
+    /// then its reference pictures, oldest first, as many as the workflow
+    /// takes. And its looks, for the prompt.
+    /// </summary>
+    private async Task<(List<byte[]> References, string? Looks)> FaceOfAsync(Guid botId)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
+        var looks = await db.Bots.Where(b => b.Id == botId).Select(b => b.Looks).FirstOrDefaultAsync();
+        var referenceIds = await db.BotReferences.Where(r => r.BotId == botId)
+            .OrderBy(r => r.CreatedAt).ThenBy(r => r.Id).Select(r => r.Id).ToListAsync();
+
+        var pictures = new List<byte[]>();
+        if (await storage.ReadBotAvatarAsync(botId) is { } avatar)
+            pictures.Add(ReferenceImage.Prepare(avatar));
+        foreach (var id in referenceIds)
+        {
+            if (pictures.Count == ImageWorkflows.MaxReferences)
+                break;
+            if (await storage.ReadBotReferenceAsync(botId, id) is not { } picture)
+                continue;
+            try
+            {
+                // Collages carry more detail than a face crop, so they keep about a megapixel.
+                pictures.Add(ReferenceImage.Prepare(picture, ReferenceImage.LargeSize));
+            }
+            catch (ImageGenerationException)
+            {
+                logger.LogWarning("Reference picture {ReferenceId} of bot {BotId} cannot be read; drawing without it", id, botId);
+            }
+        }
+        return (pictures, looks);
     }
 
     private static long Seed() => Random.Shared.NextInt64(0, 1L << 48);

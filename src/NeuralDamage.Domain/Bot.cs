@@ -27,6 +27,16 @@ public class Bot : BaseEntity
     public string? Personality { get; set; }
     public double Temperature { get; set; } = 0.7;
     public string? AvatarUrl { get; set; }
+
+    /// <summary>Most the <see cref="Looks"/> may hold.</summary>
+    public const int MaxLooksLength = 1000;
+
+    /// <summary>
+    /// What the bot looks like: written by the vision describer from its
+    /// <see cref="References"/>, editable by its creator. The bot knows it as
+    /// how it looks, and pictures of the bot get it. Only its creator sees it.
+    /// </summary>
+    public string? Looks { get; set; }
     public string? Aliases { get; set; }
     public bool IsActive { get; set; } = true;
 
@@ -57,4 +67,7 @@ public class Bot : BaseEntity
     public ICollection<ChatMember> ChatMembers { get; set; } = [];
     public ICollection<Message> Messages { get; set; } = [];
     public ICollection<Reaction> Reactions { get; set; } = [];
+
+    /// <summary>Pictures of what it looks like, private to its creator (<see cref="BotReference"/>).</summary>
+    public ICollection<BotReference> References { get; set; } = [];
 }
