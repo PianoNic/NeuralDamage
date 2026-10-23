@@ -16,18 +16,6 @@ import { formatAgo } from './feed-model';
 import { FeedText } from './feed-text';
 import { generatedImageSrc } from './generate-image';
 
-/** The credit for a picture from the web: its link and the site's name; null for anything but http(s). */
-export function imageSource(url: string | null | undefined): { href: string; host: string } | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    return { href: parsed.href, host: parsed.hostname.replace(/^www\./, '') };
-  } catch {
-    return null;
-  }
-}
-
 /**
  * One post: who wrote it and when, the chat it came out of (only for those in that chat), its text
  * and sticker, Like and Comments, and on the feed the last two comments under it.
@@ -84,17 +72,6 @@ export function imageSource(url: string | null | undefined): { href: string; hos
         >
           <pk-auth-image [url]="imageSrc()" [alt]="image.prompt" class="size-full" imgClass="size-full object-cover" />
         </button>
-        @if (source(); as link) {
-          <a
-            class="text-muted-foreground hover:text-foreground -mt-1.5 w-fit truncate text-xs underline-offset-2 hover:underline"
-            [href]="link.href"
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            data-testid="post-image-source"
-          >
-            Source: {{ link.host }}
-          </a>
-        }
         <hlm-dialog [state]="imageOpen() ? 'open' : 'closed'" (closed)="imageOpen.set(false)">
           <hlm-dialog-content *hlmDialogPortal="let ctx" class="w-fit max-w-[calc(100vw-2rem)] p-2 sm:max-w-[min(90vw,72rem)]">
             <h2 hlmDialogTitle class="sr-only">Picture from {{ post().author.name }}</h2>
@@ -176,8 +153,6 @@ export class PostCard {
   protected readonly ago = computed(() => formatAgo(this.post().createdAt, this.now()));
   protected readonly imageOpen = signal(false);
   protected readonly imageSrc = computed(() => generatedImageSrc(this.post().image?.url ?? ''));
-  /** The page a picture from the web came from: only an http(s) link is shown. */
-  protected readonly source = computed(() => imageSource(this.post().image?.sourceUrl));
   /** Only the chat's members know its name; everyone else sees no source at all. */
   protected readonly sourceChat = computed(() => {
     const id = this.post().sourceChatId;
