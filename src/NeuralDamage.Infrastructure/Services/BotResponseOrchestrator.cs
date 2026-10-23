@@ -475,7 +475,7 @@ public class BotResponseOrchestrator(
     private static async Task<Dictionary<Guid, ImagePart>> LoadImagesAsync(IAttachmentStorage storage, List<Message> window, Guid answeringId, CancellationToken ct)
     {
         var images = new Dictionary<Guid, ImagePart>();
-        foreach (var attachment in window.Where(m => m.Id == answeringId).SelectMany(m => m.Attachments))
+        foreach (var attachment in window.Where(m => m.Id == answeringId && !m.IsStoryReply).SelectMany(m => m.Attachments))
             if (await storage.ReadAllAsync(attachment.ChatId, attachment.Id, ct) is { } data)
                 images[attachment.Id] = new ImagePart(attachment.ContentType, data);
         return images;

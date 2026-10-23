@@ -13,6 +13,9 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
 
         builder.Property(m => m.Content).IsRequired();
         builder.Property(m => m.Mentions).HasMaxLength(2048);
+        builder.Property(m => m.StoryAuthorName).HasMaxLength(256);
+        builder.Property(m => m.StoryText).HasMaxLength(Message.MaxStoryTextLength);
+        builder.Ignore(m => m.IsStoryReply);
 
         builder.HasOne(m => m.Chat).WithMany(c => c.Messages).HasForeignKey(m => m.ChatId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(m => m.SenderUser).WithMany(u => u.Messages).HasForeignKey(m => m.SenderUserId).OnDelete(DeleteBehavior.Restrict);

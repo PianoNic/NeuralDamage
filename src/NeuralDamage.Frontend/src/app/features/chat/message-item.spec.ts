@@ -18,6 +18,7 @@ function message(content: string): Message {
     reactions: [],
     attachments: [],
     sticker: null,
+    story: null,
     replyTo: null,
     createdAt: new Date(2026, 8, 30, 12).toISOString(),
   };
@@ -66,5 +67,33 @@ describe('MessageItem mentions', () => {
 
     el.querySelector<HTMLElement>('pk-markdown')!.click();
     expect(opened.length).toBe(2);
+  });
+});
+
+describe('MessageItem story replies', () => {
+  async function label(msg: Message, currentUserId: string) {
+    await TestBed.configureTestingModule({ imports: [MessageItem] }).compileComponents();
+    const fixture = TestBed.createComponent(MessageItem);
+    fixture.componentRef.setInput('message', msg);
+    fixture.componentRef.setInput('currentUserId', currentUserId);
+    await fixture.whenStable();
+    return (fixture.nativeElement as HTMLElement).querySelector('[data-testid="story-label"]')?.textContent?.trim() ?? null;
+  }
+
+  const storyReply = (authorUserId: string | null): Message => ({
+    ...message('💀'),
+    story: { storyId: 's1', authorName: 'Kim', authorUserId, authorBotId: null, text: 'Beach day' },
+  });
+
+  it('says whose story it replied to', async () => {
+    expect(await label(storyReply('kim'), 'u1')).toBe("Replied to Kim's story");
+  });
+
+  it('says "your story" to the one who posted it', async () => {
+    expect(await label(storyReply('me'), 'me')).toBe('Replied to your story');
+  });
+
+  it('shows nothing on an ordinary message', async () => {
+    expect(await label(message('hi'), 'u1')).toBeNull();
   });
 });

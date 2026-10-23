@@ -274,14 +274,15 @@ public class BotDecisionEngine(
     }
 
     /// <summary>
-    /// The bots a person's message is directed at: those it @mentions and the
-    /// one it replies to. Empty for a bot's message, since every bot reply
-    /// links what it answered and bots follow up on each other through Jev.
+    /// The bots a person's message is directed at: those it @mentions, the
+    /// one it replies to, and the one whose story it answers. Empty for a
+    /// bot's message, since every bot reply links what it answered and bots
+    /// follow up on each other through Jev.
     /// </summary>
     public static HashSet<Bot> Addressed(Message message, IEnumerable<Bot> bots) =>
         message.SenderBotId is not null
             ? []
-            : bots.Where(bot => IsMentioned(message.Content, bot) || message.ReplyTo?.SenderBotId == bot.Id).ToHashSet();
+            : bots.Where(bot => IsMentioned(message.Content, bot) || message.ReplyTo?.SenderBotId == bot.Id || message.StoryAuthorBotId == bot.Id).ToHashSet();
 
     /// <summary>"@Rex", or "@" and one of the bot's aliases, as a whole word.</summary>
     public static bool IsMentioned(string content, Bot bot)
@@ -346,7 +347,7 @@ public class BotDecisionEngine(
         return new DecisionState(
             chatName ?? "",
             recent.Select(Said).ToList(),
-            Said(message) with { ReplyTo = message.ReplyTo is { } target ? SenderName(target) : null },
+            Said(message) with { ReplyTo = message.ReplyTo is { } target ? SenderName(target) : message.StoryAuthorName },
             await FlowAsync(chatId, ct),
             keyed.ToDictionary(k => k.Key, k => new DecisionBot(k.Bot.Name, Persona(k.Bot))));
     }

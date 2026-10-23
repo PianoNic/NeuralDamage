@@ -217,6 +217,7 @@ describe('a sticker message', () => {
       replyTo: null,
       attachments: [],
       sticker: { id: 's1', name: 'cat-lol', url: '/api/stickers/s1/image', animated: false, description: 'cat crying with laughter' },
+      story: null,
       createdAt: '2026-10-12T10:00:00Z',
     };
     fixture.componentRef.setInput('message', message);

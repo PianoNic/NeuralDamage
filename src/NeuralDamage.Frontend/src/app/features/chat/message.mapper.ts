@@ -32,6 +32,7 @@ export function toMessage(dto: MessageDto): Message {
     replyTo: dto.replyTo ?? null,
     attachments: dto.attachments ?? [],
     sticker: dto.sticker ?? null,
+    story: dto.story ?? null,
     createdAt: dto.createdAt,
   };
 }

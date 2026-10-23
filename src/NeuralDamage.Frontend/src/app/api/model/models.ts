@@ -49,6 +49,7 @@ export * from './storyBackground';
 export * from './storyDto';
 export * from './storyImageUploadDto';
 export * from './storyLayer';
+export * from './storyReplyDto';
 export * from './storyReplyRequest';
 export * from './storyReplyResultDto';
 export * from './storyRingDto';

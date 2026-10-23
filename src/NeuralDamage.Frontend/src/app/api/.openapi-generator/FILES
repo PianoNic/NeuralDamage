@@ -74,6 +74,7 @@ model/storyBackground.ts
 model/storyDto.ts
 model/storyImageUploadDto.ts
 model/storyLayer.ts
+model/storyReplyDto.ts
 model/storyReplyRequest.ts
 model/storyReplyResultDto.ts
 model/storyRingDto.ts

@@ -9,6 +9,7 @@ using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotPictures;
@@ -229,6 +230,35 @@ public class StoryFlowTests
         await Assert.That(attachment.Description).Contains("kimchi day");
         await w.Sender.Received(1).Send(Arg.Is<SendMessageCommand>(c => c.ChatId == chat.Id && c.Content == "looks great" && c.AttachmentIds!.Count == 1), Arg.Any<CancellationToken>());
         await w.ChatNotifications.Received(1).NotifyUserChatCreated(w.H.User.Id, Arg.Any<ChatDto>());
+    }
+
+    [Test]
+    public async Task AReply_KeepsWhatTheStorySaid_AfterTheStoryIsGone()
+    {
+        using var w = await CreateAsync();
+        var bot = w.H.Bots[0];
+        var story = (await w.Publisher.PublishAsync(Spec("kimchi day"), null, bot.Id)).Value!;
+        var send = new SendMessageHandler(w.H.Db, w.ChatNotifications, Substitute.For<IBotResponseOrchestrator>(), Substitute.For<IBotResponseQueue>(), Substitute.For<ISender>(), new ChatBotState());
+        w.Sender.Send(Arg.Any<SendMessageCommand>(), Arg.Any<CancellationToken>()).Returns(call => send.Handle(call.Arg<SendMessageCommand>(), default));
+
+        var replied = await new ReplyToStoryHandler(w.H.Db, w.Storage, w.ChatNotifications, w.Sender)
+            .Handle(new ReplyToStoryCommand(w.H.User.Id, story.Id, "💀"), default);
+        await Assert.That(replied.IsSuccess).IsTrue();
+
+        // The story expires and is swept away, file and all.
+        w.H.Db.Stories.Remove(await w.H.Db.Stories.SingleAsync(s => s.Id == story.Id));
+        await w.H.Db.SaveChangesAsync();
+        w.Storage.DeleteStoryFile(story.Id);
+        w.H.Db.ChangeTracker.Clear();
+
+        var message = await w.H.Db.Messages.Include(m => m.SenderUser).Include(m => m.Attachments).SingleAsync(m => m.ChatId == replied.Value!.ChatId);
+        await Assert.That(message.StoryId).IsEqualTo(story.Id);
+        await Assert.That(message.StoryAuthorBotId).IsEqualTo(bot.Id);
+        await Assert.That(message.StoryText).IsEqualTo("kimchi day / [sticker red-square]");
+        await Assert.That(message.Attachments).HasSingleItem();
+        await Assert.That(message.ToDto().Story!.AuthorName).IsEqualTo(bot.Name);
+        await Assert.That(BotPromptBuilder.BuildHistory([message], bot.Id).Single().Content)
+            .IsEqualTo("[Alice replied to your story (\"kimchi day / [sticker red-square]\")] (you're answering this): 💀");
     }
 
     [Test]

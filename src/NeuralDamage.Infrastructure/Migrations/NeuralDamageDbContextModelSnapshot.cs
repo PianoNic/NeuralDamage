@@ -453,6 +453,23 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<Guid?>("StickerId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("StoryAuthorBotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StoryAuthorName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("StoryAuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("StoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StoryText")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 

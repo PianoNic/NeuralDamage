@@ -9,7 +9,10 @@ using NeuralDamage.Domain;
 
 namespace NeuralDamage.Application.Commands;
 
-public record SendMessageCommand(Guid ChatId, Guid SenderUserId, string Content, Guid? ReplyToId = null, IReadOnlyList<Guid>? AttachmentIds = null, Guid? StickerId = null) : ICommand<Result>;
+public record SendMessageCommand(Guid ChatId, Guid SenderUserId, string Content, Guid? ReplyToId = null, IReadOnlyList<Guid>? AttachmentIds = null, Guid? StickerId = null, StoryReference? Story = null) : ICommand<Result>;
+
+/// <summary>The story a message replies to, as it was when the reply was sent.</summary>
+public record StoryReference(Guid StoryId, Guid? AuthorUserId, Guid? AuthorBotId, string AuthorName, string Text);
 
 public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationService notifications, IBotResponseOrchestrator botOrchestrator, IBotResponseQueue botQueue, ISender sender, IChatBotState botState) : ICommandHandler<SendMessageCommand, Result>
 {
@@ -61,6 +64,11 @@ public class SendMessageHandler(NeuralDamageDbContext db, IChatNotificationServi
             Content = request.Content,
             ReplyToId = request.ReplyToId,
             StickerId = sticker?.Id,
+            StoryId = request.Story?.StoryId,
+            StoryAuthorUserId = request.Story?.AuthorUserId,
+            StoryAuthorBotId = request.Story?.AuthorBotId,
+            StoryAuthorName = request.Story?.AuthorName,
+            StoryText = request.Story?.Text,
         };
         db.Messages.Add(message);
         foreach (var attachment in attachments)

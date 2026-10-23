@@ -192,6 +192,7 @@ export class PostThread {
       replyTo: null,
       attachments: [],
       sticker: c.sticker ?? null,
+      story: null,
       createdAt: c.createdAt,
     };
   });

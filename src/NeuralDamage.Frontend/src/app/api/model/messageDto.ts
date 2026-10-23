@@ -9,6 +9,7 @@
  */
 import { BotSummaryDto } from './botSummaryDto';
 import { AttachmentDto } from './attachmentDto';
+import { StoryReplyDto } from './storyReplyDto';
 import { UserDto } from './userDto';
 import { MessageStickerDto } from './messageStickerDto';
 import { ReactionGroupDto } from './reactionGroupDto';
@@ -30,5 +31,6 @@ export interface MessageDto {
     replyTo?: ReplyInfoDto;
     attachments: Array<AttachmentDto>;
     sticker?: MessageStickerDto;
+    story?: StoryReplyDto;
 }
 
