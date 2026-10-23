@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -207,7 +208,7 @@ public class BotResponseOrchestrator(
             if (!botState.TryMarkModelNotice(chatId, bot.Id))
                 continue;
             logger.LogInformation("Bot {BotName} skipped in chat {ChatId}: {Reason}", bot.Name, chatId, status.Reason);
-            await notifications.NotifySystemMessage(chatId, $"{bot.Name}'s model {bot.ModelId} is no longer available. Edit the bot to pick another.");
+            await notifications.NotifySystemMessage(chatId, $"{bot.Name}'s model {CustomProvider.NameOf(services.GetService<IConfiguration>(), bot.ModelId)} is no longer available. Edit the bot to pick another.");
         }
         return working;
     }
