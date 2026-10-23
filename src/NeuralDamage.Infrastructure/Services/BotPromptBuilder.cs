@@ -126,6 +126,14 @@ public static class BotPromptBuilder
         return new ChatMessage(ChatMessage.Note, $"(It is {when}.{who} Don't bring up the time or day unless it matters. {answerIn}{extra})");
     }
 
+    /// <summary>
+    /// How long a chat reply is, sent in the note of every chat reply (not on the feed). The
+    /// house rule alone loses to characters written to ramble; the last line before the
+    /// answer does not.
+    /// </summary>
+    public const string ChatLength =
+        "Keep it short, like a real text: one or two short sentences, often just a few words, even if your character usually talks at length. No paragraphs.";
+
     /// <summary>"You are Rex: a grumpy pirate who hates landlubbers. Stay fully in character."</summary>
     public static string Reminder(Bot bot)
     {
