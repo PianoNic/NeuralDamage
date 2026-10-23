@@ -1,4 +1,4 @@
-﻿using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Services;
 
@@ -20,7 +20,7 @@ public static class BotMapper
         return bots.Select(b => new BotDto(
             b.Id, b.Name, b.ModelId, b.SystemPrompt, b.Personality, b.Temperature, b.AvatarUrl, b.Aliases,
             b.CreatedById, b.IsActive, b.CreatedAt, b.IsPublic, b.ChatId,
-            new BotCreatorDto(b.CreatedBy.Id, b.CreatedBy.DisplayName),
+            new BotCreatorDto(b.CreatedBy.Id, b.CreatedBy.DisplayName, b.CreatedBy.AvatarUrl),
             b.ChatMembers.Count(),
             b.Messages.Count(m => m.CreatedAt >= today),
             b.Messages.Count(m => m.CreatedAt >= weekAgo),

@@ -12,5 +12,6 @@
 export interface BotCreatorDto { 
     id: string;
     displayName: string;
+    avatarUrl?: string | null;
 }
 

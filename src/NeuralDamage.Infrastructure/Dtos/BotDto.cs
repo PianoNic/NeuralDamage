@@ -38,4 +38,4 @@ public record BotDto(
     string? Looks,
     List<BotReferenceDto> References);
 
-public record BotCreatorDto(Guid Id, string DisplayName);
+public record BotCreatorDto(Guid Id, string DisplayName, string? AvatarUrl = null);

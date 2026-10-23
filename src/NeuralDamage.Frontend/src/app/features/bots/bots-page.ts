@@ -165,7 +165,7 @@ type Filter = 'all' | 'mine';
                     </td>
                     <td hlmTd class="hidden md:table-cell">
                       <span class="flex min-w-0 items-center gap-2">
-                        <app-member-avatar [name]="bot.createdBy.displayName" [px]="22" />
+                        <app-member-avatar [name]="bot.createdBy.displayName" [avatarUrl]="bot.createdBy.avatarUrl" [px]="22" />
                         <span class="truncate text-sm">{{ mine(bot) ? 'You' : bot.createdBy.displayName }}</span>
                       </span>
                     </td>
