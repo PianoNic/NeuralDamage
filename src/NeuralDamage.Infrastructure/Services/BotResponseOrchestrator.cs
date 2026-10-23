@@ -83,9 +83,10 @@ public class BotResponseOrchestrator(
 
             var decided = await decisionEngine.DecideAsync(chatId, message, bots, cts.Token);
 
-            // Reactions land on their own timing, alongside the replies.
+            // Reactions land on their own timing, alongside the replies; a
+            // replying bot may react too.
             reactions = Task.WhenAll(decided
-                .Where(d => d.Action == BotAction.React && d.Emoji is not null)
+                .Where(d => d.Reacts)
                 .Select(d => ReactAsync(chatId, message.Id, d.Bot, d.Emoji!, cts.Token)));
 
             var responders = decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot).ToList();

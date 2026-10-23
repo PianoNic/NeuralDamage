@@ -65,6 +65,22 @@ public class BotReactionOrchestrationTests
     }
 
     [Test]
+    public async Task ABotThatReplies_CanReactToo()
+    {
+        var jev = new FakeJev(_ => FakeJev.With(new() { [Reply] = 0.62, [ReactDead] = 0.25, [ReactLaugh] = 0.1, [Quiet] = 0.03 }));
+        using var h = await OrchestratorHarness.CreateAsync(configure: jev.Engine());
+        h.Reply("i'm deceased");
+        var message = await h.SayAsync("my cat just filed my taxes");
+
+        await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, message.Id);
+
+        await Assert.That((await h.MessagesFromAsync(h.Bots[0])).Select(m => m.Content)).IsEquivalentTo(["i'm deceased"]);
+        var reaction = await h.Db.Reactions.AsNoTracking().SingleAsync();
+        await Assert.That(reaction.MessageId).IsEqualTo(message.Id);
+        await Assert.That(reaction.Emoji).IsEqualTo("💀");
+    }
+
+    [Test]
     public async Task QuietOrUnsure_NoReaction()
     {
         var jev = new FakeJev(name => name == "GPT" ? FakeJev.Chose(Quiet, 0.9) : FakeJev.Chose(ReactLaugh, 0.3));

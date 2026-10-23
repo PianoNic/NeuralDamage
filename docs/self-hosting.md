@@ -135,9 +135,11 @@ A person who @mentions bots, or replies to a bot's message, is directing it: onl
 | `BotRanking__Model` | `~typesafe/jev-latest` | Decision model. |
 | `BotRanking__Endpoint` | `https://openrouter.ai/api/alpha/decisions` | Decisions API endpoint. |
 | `BotRanking__ReplyThreshold` | `0.6` | Lowest probability of `reply` for a bot to write. |
-| `BotRanking__ReactThreshold` | `0.5` | Lowest probability of the chosen reaction for a bot to react. |
+| `BotRanking__ReactThreshold` | `0.5` | Lowest probability of all the reactions together for a bot that doesn't reply to react, with its likeliest emoji. Jev spreads a reaction over the emojis that fit, so they count as one. |
+| `BotRanking__ReplyAndReactThreshold` | `0.3` | The same for a bot that replies to also react. A reply already takes at least `ReplyThreshold`, so this sits below what is left. |
+| `BotRanking__MaxReactionsPerMessage` | `3` | Most bot reactions on one chat message, counting those already there; the likeliest react. |
 | `BotRanking__MaxReplies` | `5` | Safety cap on bots replying to one message, the likeliest first. Guards cost in chats with many bots. |
-| `BotRanking__Emojis__react_laugh` / `__react_love` / `__react_wow` / `__react_thumbs` | `😂` / `❤️` / `😮` / `👍` | The emoji each reaction puts on the message. |
+| `BotRanking__Emojis__react_laugh` / `__react_love` / `__react_wow` / `__react_thumbs` / `__react_dead` / `__react_fire` / `__react_sob` | `😂` / `❤️` / `😮` / `👍` / `💀` / `🔥` / `😭` | The emoji each reaction puts on the message. |
 | `BotRanking__CautiousHealth` | `0.5` | From this conversation health score, bots answering a bot need `CautiousReplyThreshold` and at most `CautiousMaxReplies` of them reply. |
 | `BotRanking__CautiousReplyThreshold` | `0.85` | Reply threshold in that band. |
 | `BotRanking__CautiousMaxReplies` | `1` | Most bots replying to a bot in that band. |

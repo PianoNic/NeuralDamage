@@ -38,12 +38,23 @@ public sealed class FakeJev(Func<string, DecisionAnswer?>? answer = null) : IDec
         return Task.FromResult<DecisionsResponse?>(new DecisionsResponse("gen-test", "jev", answers, null));
     }
 
-    /// <summary>Jev choosing <paramref name="choice"/> with probability <paramref name="p"/>.</summary>
+    /// <summary>
+    /// Jev choosing <paramref name="choice"/> with probability <paramref name="p"/>.
+    /// The rest goes to <c>quiet</c> (to <c>reply</c> when quiet is the choice),
+    /// so it never adds up to a reaction of its own.
+    /// </summary>
     public static DecisionAnswer Chose(string choice, double p)
     {
-        var rest = (1 - p) / 5;
-        var probabilities = BotDecisionEngine.Criteria.Keys.ToDictionary(k => k, k => k == choice ? p : rest);
+        var rest = choice == BotDecisionEngine.Quiet ? BotDecisionEngine.Reply : BotDecisionEngine.Quiet;
+        var probabilities = BotDecisionEngine.Criteria.Keys.ToDictionary(k => k, k => k == choice ? p : k == rest ? 1 - p : 0);
         return new DecisionAnswer("choice", null, choice, p, probabilities);
+    }
+
+    /// <summary>Jev's answer with these probabilities; the likeliest option is the choice.</summary>
+    public static DecisionAnswer With(Dictionary<string, double> probabilities)
+    {
+        var top = probabilities.MaxBy(kv => kv.Value);
+        return new DecisionAnswer("choice", null, top.Key, top.Value, probabilities);
     }
 
     /// <summary>A health answer with expected level <paramref name="score"/>.</summary>

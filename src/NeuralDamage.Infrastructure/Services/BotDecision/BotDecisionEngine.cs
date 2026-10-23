@@ -28,9 +28,15 @@ public class BotDecisionEngine(
     public const string ReactLove = "react_love";
     public const string ReactWow = "react_wow";
     public const string ReactThumbs = "react_thumbs";
+    public const string ReactDead = "react_dead";
+    public const string ReactFire = "react_fire";
+    public const string ReactSob = "react_sob";
     public const string Quiet = "quiet";
 
-    /// <summary>The six options every bot is asked about, and what each means.</summary>
+    /// <summary>
+    /// The options every bot is asked about, and what each means. The react
+    /// options count together: Jev spreads a reaction over the emojis that fit.
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, string> Criteria = new Dictionary<string, string>
     {
         [Reply] = "They have something to say about it, or it is addressed to them.",
@@ -38,6 +44,9 @@ public class BotDecisionEngine(
         [ReactLove] = "They like it or agree, without writing anything.",
         [ReactWow] = "It surprises or impresses them.",
         [ReactThumbs] = "A quick acknowledgement is enough.",
+        [ReactDead] = "It is outrageously funny, or a roast lands.",
+        [ReactFire] = "Hype, or a great line.",
+        [ReactSob] = "Crying laughing, or it is so sad.",
         [Quiet] = "It doesn't concern them; they scroll past.",
     };
 
@@ -54,13 +63,15 @@ public class BotDecisionEngine(
 
         var keyed = bots.Select((bot, i) => (Key: $"bot_{i}", Bot: bot)).ToList();
         var state = await BuildStateAsync(chatId, message, keyed, ct);
+        var botReactions = await db.Reactions.CountAsync(r => r.MessageId == message.Id && r.BotId != null, ct);
         return await DecideAsync(new DecisionRound(
             GroupChat,
             $"message {message.Id}",
             state,
             FromBot: message.SenderBotId is not null,
             Addressed(message, bots).Select(b => b.Id).ToHashSet(),
-            (repliers, token) => RepliesLastMinuteAsync(chatId, repliers, token)), keyed, ct);
+            (repliers, token) => RepliesLastMinuteAsync(chatId, repliers, token),
+            ReactionRoom: ranking.MaxReactionsPerMessage - botReactions), keyed, ct);
     }
 
     /// <summary>Where the bots are, for the questions: "this group chat".</summary>
@@ -141,8 +152,37 @@ public class BotDecisionEngine(
             logger.LogInformation("Reply cap of {Max} reached ({BotMessages} bot messages since a person wrote, health {Band}); {Count} bot(s) stay quiet",
                 max, state.Flow.BotMessagesSinceLastHuman, band, capped.Count);
 
+        // A capped bot that would also have reacted still does.
+        decided = decided
+            .Select(d => capped.Contains(d.Bot.Id) ? WithoutReply(d) : d)
+            .ToList();
+
+        return CapReactions(round, decided);
+    }
+
+    private static BotVerdict WithoutReply(BotVerdict d) =>
+        d.Emoji is null ? d with { Action = BotAction.Quiet } : d with { Action = BotAction.React };
+
+    /// <summary>
+    /// At most <see cref="DecisionRound.ReactionRoom"/> bots react, the most
+    /// likely reactions first, and each one that does is logged.
+    /// </summary>
+    private List<BotVerdict> CapReactions(DecisionRound round, List<BotVerdict> decided)
+    {
+        var reacting = decided.Where(d => d.Reacts).OrderByDescending(d => d.ReactProbability).ToList();
+        var room = Math.Max(0, round.ReactionRoom ?? int.MaxValue);
+        var dropped = reacting.Skip(room).Select(d => d.Bot.Id).ToHashSet();
+        if (dropped.Count > 0)
+            logger.LogInformation("Reaction cap reached for {Subject}; {Count} bot(s) don't react", round.Subject, dropped.Count);
+
+        foreach (var d in reacting.Take(room))
+            logger.LogInformation("Bot {Bot} reacts to {Subject} with {Emoji} (react total {Total})",
+                d.Bot.Name, round.Subject, d.Emoji, d.ReactProbability.ToString("F2", CultureInfo.InvariantCulture));
+
         return decided
-            .Select(d => capped.Contains(d.Bot.Id) ? d with { Action = BotAction.Quiet, Emoji = null } : d)
+            .Select(d => !dropped.Contains(d.Bot.Id) ? d
+                : d.Action == BotAction.React ? d with { Action = BotAction.Quiet, Emoji = null }
+                : d with { Emoji = null })
             .ToList();
     }
 
@@ -182,32 +222,41 @@ public class BotDecisionEngine(
     }
 
     /// <summary>
-    /// The chosen option, if its probability clears the threshold for its kind.
-    /// A bot that may not reply and chose to anyway takes its likeliest
-    /// reaction instead, if that clears the react threshold, and stays quiet otherwise.
+    /// A bot replies when Jev chose <c>reply</c> above the reply threshold, and
+    /// it may. The react options count together, since Jev spreads a reaction
+    /// over the emojis that fit: a bot that doesn't reply reacts when their sum
+    /// clears <see cref="BotRankingOptions.ReactThreshold"/>, and one that
+    /// replies also reacts when it clears <see cref="BotRankingOptions.ReplyAndReactThreshold"/>,
+    /// both with the likeliest emoji.
     /// </summary>
     private BotVerdict Map(Bot bot, DecisionAnswer? answer, double replyThreshold, bool mayReply = true)
     {
         if (answer?.Choice is not { } choice)
             return new BotVerdict(bot, BotAction.Quiet);
 
-        if (choice == Reply && !mayReply)
-        {
-            var best = (answer.Probabilities ?? new Dictionary<string, double>())
-                .Where(kv => ranking.Emojis.ContainsKey(kv.Key))
-                .OrderByDescending(kv => kv.Value)
-                .FirstOrDefault();
-            return best.Key is not null && best.Value >= ranking.ReactThreshold
-                ? new BotVerdict(bot, BotAction.React, ranking.Emojis[best.Key], best.Value)
-                : new BotVerdict(bot, BotAction.Quiet);
-        }
-
         var p = answer.Probabilities?.GetValueOrDefault(choice) ?? answer.Confidence ?? 0;
-        if (choice == Reply && p >= replyThreshold)
-            return new BotVerdict(bot, BotAction.Reply, Probability: p);
-        if (ranking.Emojis.TryGetValue(choice, out var emoji) && p >= ranking.ReactThreshold)
-            return new BotVerdict(bot, BotAction.React, emoji, p);
-        return new BotVerdict(bot, BotAction.Quiet, Probability: p);
+        var (emoji, reactTotal) = Reaction(answer, p);
+
+        if (choice == Reply && mayReply && p >= replyThreshold)
+            return new BotVerdict(bot, BotAction.Reply, reactTotal >= ranking.ReplyAndReactThreshold ? emoji : null, p, reactTotal);
+        if (emoji is not null && reactTotal >= ranking.ReactThreshold)
+            return new BotVerdict(bot, BotAction.React, emoji, reactTotal, reactTotal);
+        return new BotVerdict(bot, BotAction.Quiet, Probability: p, ReactProbability: reactTotal);
+    }
+
+    /// <summary>
+    /// The likeliest emoji and the probabilities of all the react options
+    /// together. Without probabilities only the choice itself is known.
+    /// </summary>
+    private (string? Emoji, double Total) Reaction(DecisionAnswer answer, double p)
+    {
+        if (answer.Probabilities is not { Count: > 0 } probabilities)
+            return ranking.Emojis.TryGetValue(answer.Choice!, out var chosen) ? (chosen, p) : (null, 0);
+
+        var reacts = probabilities.Where(kv => ranking.Emojis.ContainsKey(kv.Key) && kv.Value > 0).ToList();
+        if (reacts.Count == 0)
+            return (null, 0);
+        return (ranking.Emojis[reacts.MaxBy(kv => kv.Value).Key], reacts.Sum(kv => kv.Value));
     }
 
     /// <summary>
@@ -260,7 +309,7 @@ public class BotDecisionEngine(
             if (d.Action != BotAction.Reply || counts.GetValueOrDefault(d.Bot.Id) < _options.MaxRepliesPerMinute)
                 return d;
             logger.LogInformation("Bot {Bot}: rate capped ({Count} replies in the last minute)", d.Bot.Name, counts[d.Bot.Id]);
-            return d with { Action = BotAction.Quiet };
+            return WithoutReply(d);
         }).ToList();
     }
 
@@ -348,10 +397,13 @@ public class BotDecisionEngine(
     private static string Trim(string? text, int max) =>
         text is null ? string.Empty : text.Length > max ? text[..max] + "..." : text;
 
-    private static string Describe(Bot bot, DecisionAnswer? answer) =>
+    private string Describe(Bot bot, DecisionAnswer? answer) =>
         answer?.Choice is { } choice
-            ? $"{bot.Name}={choice} {answer.Probabilities?.GetValueOrDefault(choice) ?? answer.Confidence ?? 0:F2}"
+            ? $"{bot.Name}={choice} {answer.Probabilities?.GetValueOrDefault(choice) ?? answer.Confidence ?? 0:F2} react {ReactTotal(answer):F2}"
             : $"{bot.Name}=no answer";
+
+    private double ReactTotal(DecisionAnswer answer) =>
+        answer.Probabilities?.Where(kv => ranking.Emojis.ContainsKey(kv.Key)).Sum(kv => kv.Value) ?? 0;
 }
 
 /// <summary>One decision: what Jev reads and what the rules around it need.</summary>
@@ -360,13 +412,15 @@ public class BotDecisionEngine(
 /// <param name="FromBot">The new message is a bot's, so the conversation health may hold the bots back.</param>
 /// <param name="Addressed">The bots a person's @mention or reply directs it at; only they may reply.</param>
 /// <param name="RepliesLastMinute">How many replies each of the given bots wrote here in the last minute, for the rate cap.</param>
+/// <param name="ReactionRoom">How many more bots may react to the message; null for no cap.</param>
 public record DecisionRound(
     string Place,
     string Subject,
     DecisionState State,
     bool FromBot,
     IReadOnlySet<Guid> Addressed,
-    Func<IReadOnlyCollection<Guid>, CancellationToken, Task<Dictionary<Guid, int>>> RepliesLastMinute);
+    Func<IReadOnlyCollection<Guid>, CancellationToken, Task<Dictionary<Guid, int>>> RepliesLastMinute,
+    int? ReactionRoom = null);
 
 /// <summary>The <c>state</c> Jev reads, in the order it is sent.</summary>
 public record DecisionState(
