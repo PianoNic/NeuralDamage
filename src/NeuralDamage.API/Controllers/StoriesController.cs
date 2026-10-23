@@ -54,6 +54,18 @@ public class StoriesController(ISender sender, IUserService userService, Attachm
         return result.IsSuccess ? File(result.Value!, "image/png") : BadRequest(result.Error);
     }
 
+    /// <summary>What the layout check finds in the spec (overlaps, cut-off layers, small text, low contrast): hints for the editor.</summary>
+    [HttpPost("layout")]
+    [EnableRateLimiting(RateLimitExtensions.Uploads)]
+    [ProducesResponseType<List<LayoutIssueDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<List<LayoutIssueDto>>> CheckLayout(CreateStoryRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new CheckLayoutCommand(userId, request.Spec), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     /// <summary>Uploads a picture for a story being made; the spec names it by the returned <c>ref</c>.</summary>
     [HttpPost("images")]
     [EnableRateLimiting(RateLimitExtensions.Uploads)]

@@ -37,6 +37,8 @@ export interface TextLayer extends LayerBase {
   text: string;
   color: string;
   weight: number;
+  /** A soft dark shadow behind the letters, for text on a busy picture. */
+  shadow?: boolean;
 }
 
 export interface StickerLayer extends LayerBase {
@@ -62,7 +64,7 @@ export type Layer = TextLayer | StickerLayer | ImageLayer;
 type NewLayer = Omit<TextLayer, 'id'> | Omit<StickerLayer, 'id'> | Omit<ImageLayer, 'id'>;
 
 /** What the settings panel can change on a layer. */
-export type LayerChange = Partial<{ x: number; y: number; size: number; text: string; color: string; weight: number; rotation: number }>;
+export type LayerChange = Partial<{ x: number; y: number; size: number; text: string; color: string; weight: number; rotation: number; shadow: boolean }>;
 
 export interface StoryDraft {
   /** Missing on a story's draft. */
@@ -146,7 +148,7 @@ export function toSpec(draft: StoryDraft): StorySpec {
     layers: draft.layers.map((l) => {
       switch (l.type) {
         case 'text':
-          return { type: 'text', text: l.text, x: l.x, y: l.y, size: l.size, color: l.color, weight: l.weight };
+          return { type: 'text', text: l.text, x: l.x, y: l.y, size: l.size, color: l.color, weight: l.weight, ...(l.shadow ? { shadow: true } : {}) };
         case 'sticker':
           return { type: 'sticker', name: l.name, x: l.x, y: l.y, size: l.size, ...(l.rotation ? { rotation: l.rotation } : {}) };
         case 'image':
@@ -163,6 +165,26 @@ export function draftProblem(draft: StoryDraft): string | null {
   if (text.some((l) => !l.text.trim())) return 'A text layer is empty.';
   if (text.some((l) => l.text.length > MAX_TEXT_LENGTH)) return `Text layers can hold ${MAX_TEXT_LENGTH} characters.`;
   return null;
+}
+
+/**
+ * A layout hint from the server as a person reads it: its layer ids (t1, s1, i1 by type and order)
+ * become what the layers show, and the spec's "shadow" key becomes the Shadow button.
+ */
+export function layoutHint(message: string, layers: readonly Layer[]): string {
+  const names = new Map<string, string>();
+  const counts = { t: 0, s: 0, i: 0 };
+  for (const layer of layers) {
+    const key = layer.type === 'text' ? 't' : layer.type === 'sticker' ? 's' : 'i';
+    counts[key]++;
+    const name =
+      layer.type === 'text' ? `"${layer.text.length > 24 ? `${layer.text.slice(0, 23)}…` : layer.text}"` : layer.type === 'sticker' ? `"${layer.name}"` : `#${counts.i}`;
+    names.set(`${key}${counts[key]}`, name);
+  }
+  return message
+    .replace(/\b(text|sticker|image) ([tsi]\d+)\b/g, (whole, kind: string, id: string) => (names.has(id) ? `${kind} ${names.get(id)}` : whole))
+    .replace(/\b([tsi]\d+)\b/g, (id: string) => names.get(id) ?? id)
+    .replace(/a shadow \("shadow": true\)/g, 'the Shadow button');
 }
 
 /** "Text: Hello", "Sticker: swole-doge", "Picture", for the layer list. */

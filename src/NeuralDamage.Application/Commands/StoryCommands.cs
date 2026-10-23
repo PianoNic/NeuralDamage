@@ -31,6 +31,20 @@ public class PreviewStoryHandler(StoryPublisher publisher) : ICommandHandler<Pre
         await publisher.RenderAsync(request.Spec, request.UserId, cancellationToken);
 }
 
+/// <summary>The layout report of a spec, for the editor's hints: the same checks bots get.</summary>
+public record CheckLayoutCommand(Guid UserId, StorySpec Spec) : ICommand<Result<List<LayoutIssueDto>>>;
+
+public class CheckLayoutHandler(StoryPublisher publisher) : ICommandHandler<CheckLayoutCommand, Result<List<LayoutIssueDto>>>
+{
+    public async ValueTask<Result<List<LayoutIssueDto>>> Handle(CheckLayoutCommand request, CancellationToken cancellationToken)
+    {
+        var report = await publisher.CheckLayoutAsync(request.Spec, request.UserId, cancellationToken);
+        return report.IsSuccess
+            ? Result.Success(report.Value!.Issues.Select(i => new LayoutIssueDto(i.Kind, [.. i.Layers], i.Message)).ToList())
+            : Result.Failure<List<LayoutIssueDto>>(report.Error!);
+    }
+}
+
 /// <summary>A picture for a story being made: its background or an image layer.</summary>
 public record UploadStoryImageCommand(Guid UserId, byte[] Data) : ICommand<Result<StoryImageUploadDto>>;
 

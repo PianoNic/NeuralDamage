@@ -20,5 +20,6 @@ export interface StoryLayer {
     name?: string | null;
     image?: string | null;
     rotation?: number | null;
+    shadow?: boolean | null;
 }
 

@@ -41,6 +41,21 @@ public class StoryPublisher(
         return Result<byte[]>.Success(await Task.Run(() => renderer.Render(spec, assets!), ct));
     }
 
+    /// <summary>The layout report of <paramref name="spec"/> (<see cref="LayoutChecker"/>), or why it cannot be rendered.</summary>
+    public async Task<Result<LayoutReport>> CheckLayoutAsync(StorySpec spec, Guid? uploaderUserId, CancellationToken ct = default, Guid? botId = null)
+    {
+        var stickerNames = await db.Stickers.Where(s => s.DeletedAt == null).Select(s => s.Name).ToListAsync(ct);
+        var known = stickerNames.ToHashSet(StringComparer.Ordinal);
+        var errors = StorySpecRules.Validate(spec, known.Contains);
+        if (errors.Count > 0)
+            return Result<LayoutReport>.Failure(string.Join(" ", errors.Take(3)));
+
+        var (assets, problem) = await AssetsAsync(spec, uploaderUserId, botId, ct);
+        if (problem is not null)
+            return Result<LayoutReport>.Failure(problem);
+        return Result<LayoutReport>.Success(await Task.Run(() => renderer.CheckLayout(spec, assets!), ct));
+    }
+
     /// <summary>Renders, stores and announces a story by a person or a bot.</summary>
     public async Task<Result<StoryDto>> PublishAsync(StorySpec spec, Guid? userId, Guid? botId, CancellationToken ct = default)
     {

@@ -63,38 +63,112 @@ public sealed class StoryRenderer : IDisposable
         // Skia objects are not shared across threads; one story at a time is plenty.
         lock (_gate)
         {
-            var (width, height) = StoryFormats.Canvas(StoryFormats.Of(spec));
-            var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
-            using var surface = SKSurface.Create(info);
-            var canvas = surface.Canvas;
-            canvas.Clear(ParseColor(spec.Background.Color, SKColors.Black));
-
-            if (assets.Background is { } bg && Decode(bg) is { } background)
-                using (background)
-                    DrawCover(canvas, background, width, height);
-
-            foreach (var layer in spec.Layers)
-            {
-                var x = (float)(layer.X / 100 * width);
-                var y = (float)(layer.Y / 100 * height);
-                switch (layer.Type)
-                {
-                    case "text":
-                        DrawText(canvas, layer, x, y, width);
-                        break;
-                    case "sticker" when layer.Name is not null && assets.Stickers.TryGetValue(layer.Name.Trim(), out var sticker):
-                        DrawPicture(canvas, sticker, x, y, (float)layer.Size * Scale, (float)(layer.Rotation ?? 0), square: true);
-                        break;
-                    case "image" when layer.Image is not null && assets.Images.TryGetValue(layer.Image.Trim(), out var image):
-                        DrawPicture(canvas, image, x, y, (float)layer.Size * Scale, (float)(layer.Rotation ?? 0), square: false);
-                        break;
-                }
-            }
-
-            using var snapshot = surface.Snapshot();
+            using var snapshot = Draw(spec, assets, glyphs: true);
             using var data = snapshot.Encode(SKEncodedImageFormat.Png, 100);
             return data.ToArray();
         }
+    }
+
+    /// <summary>
+    /// What a person or a bot should know about the layout of <paramref name="spec"/>
+    /// (<see cref="LayoutChecker"/>): every layer's box as it is really drawn,
+    /// text measured with the same shaping and wrapping as the render, and the
+    /// rendered pixels under the text, drawn without the letters themselves
+    /// but with their shadows.
+    /// </summary>
+    public LayoutReport CheckLayout(StorySpec spec, StoryAssets assets)
+    {
+        lock (_gate)
+        {
+            var boxes = Measure(spec, assets);
+            using var backdrop = Draw(spec, assets, glyphs: false);
+            using var pixels = SKBitmap.FromImage(backdrop);
+            return LayoutChecker.Check(spec, boxes, pixels);
+        }
+    }
+
+    /// <summary>The canvas with everything on it; with <paramref name="glyphs"/> off, text is left out but its shadows are not.</summary>
+    private SKImage Draw(StorySpec spec, StoryAssets assets, bool glyphs)
+    {
+        var (width, height) = StoryFormats.Canvas(StoryFormats.Of(spec));
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info);
+        var canvas = surface.Canvas;
+        canvas.Clear(ParseColor(spec.Background.Color, SKColors.Black));
+
+        if (assets.Background is { } bg && Decode(bg) is { } background)
+            using (background)
+                DrawCover(canvas, background, width, height);
+
+        foreach (var layer in spec.Layers)
+        {
+            var x = (float)(layer.X / 100 * width);
+            var y = (float)(layer.Y / 100 * height);
+            switch (layer.Type)
+            {
+                case "text":
+                    DrawText(canvas, layer, x, y, width, glyphs);
+                    break;
+                case "sticker" when layer.Name is not null && assets.Stickers.TryGetValue(layer.Name.Trim(), out var sticker):
+                    DrawPicture(canvas, sticker, x, y, (float)layer.Size * Scale, (float)(layer.Rotation ?? 0), square: true);
+                    break;
+                case "image" when layer.Image is not null && assets.Images.TryGetValue(layer.Image.Trim(), out var image):
+                    DrawPicture(canvas, image, x, y, (float)layer.Size * Scale, (float)(layer.Rotation ?? 0), square: false);
+                    break;
+            }
+        }
+        return surface.Snapshot();
+    }
+
+    /// <summary>Every layer's box on the canvas, in pixels, as it is drawn: text from its shaped and wrapped lines, pictures from their real shape and turn.</summary>
+    private List<LayerBox> Measure(StorySpec spec, StoryAssets assets)
+    {
+        var (width, height) = StoryFormats.Canvas(StoryFormats.Of(spec));
+        var ids = LayoutChecker.Ids(spec);
+        var boxes = new List<LayerBox>();
+        for (var i = 0; i < spec.Layers.Count; i++)
+        {
+            var layer = spec.Layers[i];
+            var x = (float)(layer.X / 100 * width);
+            var y = (float)(layer.Y / 100 * height);
+            SKRect? rect = layer.Type switch
+            {
+                "text" => TextBox(layer, x, y, width),
+                "sticker" when layer.Name is not null && assets.Stickers.TryGetValue(layer.Name.Trim(), out var sticker)
+                    => PictureBox(sticker, x, y, (float)layer.Size * Scale, (float)(layer.Rotation ?? 0), square: true),
+                "image" when layer.Image is not null && assets.Images.TryGetValue(layer.Image.Trim(), out var image)
+                    => PictureBox(image, x, y, (float)layer.Size * Scale, (float)(layer.Rotation ?? 0), square: false),
+                _ => null,
+            };
+            if (rect is { } r)
+                boxes.Add(new LayerBox(i, ids[i], layer.Type, r, layer));
+        }
+        return boxes;
+    }
+
+    /// <summary>The box around a picture's corners once it is scaled, centred and turned; null when it does not decode.</summary>
+    private static SKRect? PictureBox(byte[] bytes, float x, float y, float size, float rotation, bool square)
+    {
+        int w0, h0;
+        try
+        {
+            using var codec = SKCodec.Create(new SKMemoryStream(bytes));
+            if (codec is null)
+                return null;
+            (w0, h0) = (codec.Info.Width, codec.Info.Height);
+        }
+        catch
+        {
+            return null;
+        }
+        if (w0 <= 0 || h0 <= 0)
+            return null;
+        var scale = square ? Math.Min(size / w0, size / h0) : size / w0;
+        var (w, h) = (w0 * scale, h0 * scale);
+        var radians = rotation * Math.PI / 180;
+        var (cos, sin) = ((float)Math.Abs(Math.Cos(radians)), (float)Math.Abs(Math.Sin(radians)));
+        var (bw, bh) = (w * cos + h * sin, w * sin + h * cos);
+        return SKRect.Create(x - bw / 2, y - bh / 2, bw, bh);
     }
 
     /// <summary>Fills the canvas, centred, cutting what sticks out.</summary>
@@ -143,38 +217,75 @@ public sealed class StoryRenderer : IDisposable
         }
     }
 
-    /// <summary>Centred lines at (x, y), wrapped at 85% of the width, emoji in colour.</summary>
-    private void DrawText(SKCanvas canvas, StoryLayer layer, float x, float y, int canvasWidth)
+    private SKTypeface TypefaceOf(StoryLayer layer) => (layer.Weight ?? 400) switch
     {
-        var size = (float)layer.Size * Scale;
-        var typeface = (layer.Weight ?? 400) switch
-        {
-            >= 650 => _bold,
-            >= 550 => _semiBold,
-            _ => _regular,
-        };
-        using var font = new SKFont(typeface, size) { Subpixel = true, Edging = SKFontEdging.Antialias };
-        using var emojiFont = new SKFont(_emoji, size) { Edging = SKFontEdging.Antialias };
-        using var paint = new SKPaint { IsAntialias = true, Color = ParseColor(layer.Color, SKColors.White) };
+        >= 650 => _bold,
+        >= 550 => _semiBold,
+        _ => _regular,
+    };
 
+    /// <summary>A text layer's lines as they are drawn: the runs of each, its width, and where its baseline sits.</summary>
+    private (List<(List<TextRun> Runs, float Width, float Baseline)> Lines, float Ascent, float Descent) LayOut(StoryLayer layer, SKFont font, SKFont emojiFont, float y, int canvasWidth)
+    {
+        var size = font.Size;
         var lines = Wrap(layer.Text ?? "", font, emojiFont, canvasWidth * TextWidthShare);
         var lineHeight = size * LineHeight;
         var metrics = font.Metrics;
         // Centre each line's box (ascent to descent) on its slot.
         var baselineShift = -(metrics.Ascent + metrics.Descent) / 2;
+        var laid = new List<(List<TextRun>, float, float)>();
         for (var i = 0; i < lines.Count; i++)
         {
-            var lineY = y + (i - (lines.Count - 1) / 2f) * lineHeight + baselineShift;
             var runs = Runs(lines[i]);
-            var width = runs.Sum(r => Measure(r, font, emojiFont));
-            var at = x - width / 2;
-            foreach (var run in runs)
-            {
-                var runFont = run.Emoji ? emojiFont : font;
-                canvas.DrawShapedText(Shaper(runFont.Typeface), run.Text, at, lineY, SKTextAlign.Left, runFont, paint);
-                at += Measure(run, font, emojiFont);
-            }
+            laid.Add((runs, runs.Sum(r => Measure(r, font, emojiFont)), y + (i - (lines.Count - 1) / 2f) * lineHeight + baselineShift));
         }
+        return (laid, metrics.Ascent, metrics.Descent);
+    }
+
+    /// <summary>The box the letters of a text layer cover: the widest line across, the first line's ascent to the last's descent.</summary>
+    private SKRect TextBox(StoryLayer layer, float x, float y, int canvasWidth)
+    {
+        var size = (float)layer.Size * Scale;
+        using var font = new SKFont(TypefaceOf(layer), size) { Subpixel = true };
+        using var emojiFont = new SKFont(_emoji, size);
+        var (lines, ascent, descent) = LayOut(layer, font, emojiFont, y, canvasWidth);
+        var widest = lines.Count == 0 ? 0 : lines.Max(l => l.Width);
+        var top = lines.Count == 0 ? y : lines[0].Baseline + ascent;
+        var bottom = lines.Count == 0 ? y : lines[^1].Baseline + descent;
+        return new SKRect(x - widest / 2, top, x + widest / 2, bottom);
+    }
+
+    /// <summary>Centred lines at (x, y), wrapped at 85% of the width, emoji in colour, with a soft shadow when the layer asks for one.</summary>
+    private void DrawText(SKCanvas canvas, StoryLayer layer, float x, float y, int canvasWidth, bool glyphs = true)
+    {
+        var size = (float)layer.Size * Scale;
+        using var font = new SKFont(TypefaceOf(layer), size) { Subpixel = true, Edging = SKFontEdging.Antialias };
+        using var emojiFont = new SKFont(_emoji, size) { Edging = SKFontEdging.Antialias };
+        using var paint = new SKPaint { IsAntialias = true, Color = ParseColor(layer.Color, SKColors.White) };
+        using var shadow = new SKPaint
+        {
+            IsAntialias = true,
+            Color = new SKColor(0, 0, 0, 170),
+            MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Math.Max(2f, size * 0.12f)),
+        };
+
+        var (lines, _, _) = LayOut(layer, font, emojiFont, y, canvasWidth);
+        var passes = new List<(SKPaint Paint, float Dy)>();
+        if (layer.Shadow == true)
+            passes.Add((shadow, size * 0.04f));
+        if (glyphs)
+            passes.Add((paint, 0));
+        foreach (var (pass, dy) in passes)
+            foreach (var (runs, width, baseline) in lines)
+            {
+                var at = x - width / 2;
+                foreach (var run in runs)
+                {
+                    var runFont = run.Emoji ? emojiFont : font;
+                    canvas.DrawShapedText(Shaper(runFont.Typeface), run.Text, at, baseline + dy, SKTextAlign.Left, runFont, pass);
+                    at += Measure(run, font, emojiFont);
+                }
+            }
     }
 
     private SKShaper Shaper(SKTypeface typeface)

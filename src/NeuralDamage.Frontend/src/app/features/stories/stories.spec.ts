@@ -21,6 +21,7 @@ import {
   addText,
   draftProblem,
   emptyDraft,
+  layoutHint,
   MAX_LAYERS,
   moveLayer,
   removeLayer,
@@ -340,5 +341,50 @@ describe('StoryEditor with web image search', () => {
     const fixture = TestBed.createComponent(StoryEditor);
     await settle(fixture);
     expect((fixture.nativeElement as HTMLElement).querySelector('#web-picture-search')).toBeNull();
+  });
+});
+
+describe('layout hints', () => {
+  it('name layers by what they show for people', () => {
+    let d = addText(emptyDraft(), 'Productivity is up');
+    d = addSticker(d, 'swole-doge', '/x');
+    expect(layoutHint('text t1 overlaps sticker s1 at y 58–66%; move t1 to y ≥ 70%, or shrink it to size 21.', d.layers)).toBe(
+      'text "Productivity is up" overlaps sticker "swole-doge" at y 58–66%; move "Productivity is up" to y ≥ 70%, or shrink it to size 21.',
+    );
+    expect(layoutHint('text t1 has contrast 1.8:1; use a dark text colour, a shadow ("shadow": true), or move it.', d.layers)).toContain('the Shadow button');
+  });
+
+  it('shows the check after a preview, one by one dismissible, and a shadow goes into the spec', async () => {
+    const created = URL.createObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:preview');
+    URL.revokeObjectURL = vi.fn();
+    const layout = vi.fn(() =>
+      of([
+        { kind: 'lowContrast', layers: ['t1'], message: 'text t1 has contrast 1.6:1 on what is behind it; use a dark text colour.' },
+        { kind: 'smallText', layers: ['t1'], message: 'text t1 is size 12, hard to read on a phone; use at least 20.' },
+      ]),
+    );
+    await TestBed.configureTestingModule({
+      imports: [StoryEditor],
+      providers: providers({ apiStoriesPreviewPost: () => of(new Blob(['png'])), apiStoriesLayoutPost: layout }),
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StoryEditor);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Shadow off')!.click();
+    await settle(fixture);
+    [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Preview')!.click();
+    await settle(fixture);
+
+    expect(layout).toHaveBeenCalled();
+    const sent = (layout.mock.calls[0] as unknown as [{ spec: { layers: { shadow?: boolean }[] } }])[0].spec;
+    expect(sent.layers[0].shadow).toBe(true);
+    expect(el.querySelectorAll('[data-testid=layout-hint]').length).toBe(2);
+    expect(el.querySelector('[data-testid=layout-hints]')?.textContent).toContain('"Hello from my story" has contrast 1.6:1');
+    (el.querySelector('button[aria-label="Dismiss hint"]') as HTMLButtonElement).click();
+    await settle(fixture);
+    expect(el.querySelectorAll('[data-testid=layout-hint]').length).toBe(1);
+    URL.createObjectURL = created;
   });
 });

@@ -49,6 +49,7 @@ import {
   reorderLayer,
   FORMATS,
   formatOf,
+  layoutHint,
   STAGE_WIDTH,
   StoryDraft,
   TEXT_COLORS,
@@ -61,6 +62,7 @@ import { AppConfig } from '../../core/app-config';
 import { BotDirectory } from '../bots/bot-directory';
 import { GenerateImage, ImageDraft } from '../feed/generate-image';
 import { WebImagePick, WebImageSearch } from './web-image-search';
+import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
 
 /**
  * The layer editor. A background colour or picture, text, stickers from the library and pictures
@@ -277,6 +279,7 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
                       [style.font-size.px]="layer.size"
                       [style.font-weight]="layer.weight"
                       [style.color]="layer.color"
+                      [style.text-shadow]="layer.shadow ? '0 1px 6px rgba(0, 0, 0, 0.7)' : null"
                     >{{ layer.text }}</p>
                   }
                   @case ('sticker') {
@@ -353,6 +356,18 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
                   <button hlmToggleGroupItem value="regular" class="px-3">Regular</button>
                   <button hlmToggleGroupItem value="bold" class="px-3 font-bold">Bold</button>
                 </hlm-toggle-group>
+                <button
+                  hlmBtn
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  class="w-fit"
+                  [attr.aria-pressed]="!!layer.shadow"
+                  [class.bg-accent]="layer.shadow"
+                  (click)="change(layer.id, { shadow: !layer.shadow })"
+                >
+                  Shadow {{ layer.shadow ? 'on' : 'off' }}
+                </button>
               }
               <span class="text-muted-foreground text-xs" id="layer-size-label">Size {{ layer.size }}</span>
               <hlm-slider
@@ -386,6 +401,22 @@ import { WebImagePick, WebImageSearch } from './web-image-search';
               <p class="text-muted-foreground text-[13px]">
                 This is the PNG that gets posted, rendered by the server at {{ canvas().width }} × {{ canvas().height }}.
               </p>
+            </div>
+          }
+          @if (hints().length) {
+            <div hlmCard class="gap-2 px-3.5" size="sm" data-testid="layout-hints">
+              <div class="flex items-center justify-between">
+                <h2 class="text-sm font-semibold">Layout hints</h2>
+                <button hlmBtn variant="ghost" size="sm" type="button" (click)="hints.set([])">Dismiss all</button>
+              </div>
+              @for (hint of hints(); track hint.message) {
+                <div class="flex items-start gap-1" data-testid="layout-hint">
+                  <p class="text-muted-foreground flex-1 text-[13px] leading-snug">{{ hintText(hint) }}</p>
+                  <button hlmBtn variant="ghost" size="icon-xs" type="button" aria-label="Dismiss hint" (click)="dismissHint(hint)">
+                    <ng-icon name="lucideX" />
+                  </button>
+                </div>
+              }
             </div>
           }
           @if (problem(); as message) {
@@ -447,6 +478,8 @@ export class StoryEditor implements OnInit {
   protected readonly uploading = signal(false);
   protected readonly busy = signal(false);
   protected readonly preview = signal<string | null>(null);
+  /** What the layout check found at the last preview; gentle, and each can be dismissed. */
+  protected readonly hints = signal<LayoutIssueDto[]>([]);
   protected readonly query = signal('');
   protected readonly searching = signal(false);
   protected readonly found = signal<(BotPictureSuggestionDto & { name: string })[]>([]);
@@ -499,6 +532,16 @@ export class StoryEditor implements OnInit {
   apply(change: (draft: StoryDraft) => StoryDraft): void {
     this.draft.update(change);
     this.clearPreview();
+    this.hints.set([]);
+  }
+
+  protected dismissHint(hint: LayoutIssueDto): void {
+    this.hints.update((h) => h.filter((x) => x !== hint));
+  }
+
+  /** A hint as a person reads it: layers by what they show rather than by id. */
+  protected hintText(hint: LayoutIssueDto): string {
+    return layoutHint(hint.message, this.draft().layers);
   }
 
   protected change(id: string, change: LayerChange): void {
@@ -622,8 +665,10 @@ export class StoryEditor implements OnInit {
   protected async renderPreview(): Promise<void> {
     this.busy.set(true);
     try {
-      const png = await this.store.preview(toSpec(this.draft()));
+      const spec = toSpec(this.draft());
+      const [png, hints] = await Promise.all([this.store.preview(spec), this.store.checkLayout(spec).catch(() => [])]);
       this.clearPreview();
+      this.hints.set(hints);
       this.preview.set(URL.createObjectURL(png));
     } catch (error) {
       toast.error(await this.reason(error));
