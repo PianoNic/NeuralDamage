@@ -55,8 +55,8 @@ public class GenerationSettingsTests
             ["OpenRouter:ApiKey"] = "or-key",
             ["OpenRouter:BaseUrl"] = $"http://or-{host}.test/api/v1",
             ["OpenRouter:RetryDelay"] = "00:00:00.001",
-            ["Providers:gateway:BaseUrl"] = $"http://gw-{host}.test/v1",
-            ["Providers:gateway:Models"] = "sgl/deepseek",
+            ["Providers:vllm:BaseUrl"] = $"http://gw-{host}.test/v1",
+            ["Providers:vllm:Models"] = "deepseek-chat",
         }).Build();
         var servers = new FakeServers(catalogue);
         var factory = Substitute.For<IHttpClientFactory>();
@@ -76,7 +76,7 @@ public class GenerationSettingsTests
 
     [Test]
     [Arguments("a/reasons")]
-    [Arguments("gateway:sgl/deepseek")]
+    [Arguments("vllm:deepseek-chat")]
     public async Task ABotSavedAt2_IsSent1Point5_AndItIsLogged(string modelId)
     {
         var (service, servers, logger) = Service($"clamp-{modelId.Replace('/', '-').Replace(':', '-')}");
@@ -114,7 +114,7 @@ public class GenerationSettingsTests
     {
         var (service, servers, _) = Service("custom");
 
-        var body = await SentAsync(service, servers, "gateway:sgl/deepseek", 0.7);
+        var body = await SentAsync(service, servers, "vllm:deepseek-chat", 0.7);
 
         var kwargs = body.GetProperty("chat_template_kwargs");
         await Assert.That(kwargs.GetProperty("thinking").GetBoolean()).IsFalse();

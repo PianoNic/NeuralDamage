@@ -86,7 +86,7 @@ public class FeedScheduleTests
         var posted = (await h.Scheduler.TickAsync(random: () => 0)).Posts;
 
         await Assert.That(posted.Select(p => p.AuthorBotId)).IsEquivalentTo(new Guid?[] { h.Bots[0].Id });
-        await h.OpenRouter.Received(1).GenerateResponseAsync("gateway:free", Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>());
+        await h.OpenRouter.Received(1).GenerateResponseAsync("vllm:free", Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>());
         await h.Notifier.Received(1).PostNew(Arg.Is<PostDto>(p => p.Content == "kitchen's closed, donkeys"));
         await Assert.That(h.Queue.Items.Single().PostId).IsEqualTo(posted[0].Id);
     }

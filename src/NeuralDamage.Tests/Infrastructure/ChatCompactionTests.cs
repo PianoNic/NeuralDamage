@@ -115,17 +115,17 @@ public class ChatCompactionTests
         {
             ["Providers:gw:BaseUrl"] = "http://gw-probe.test/v1",
             ["Providers:gw:ApiKey"] = "gw-key",
-            ["Providers:gw:Models"] = "sgl/deepseek",
+            ["Providers:gw:Models"] = "deepseek-chat",
         }, []);
 
-        await Assert.That(await service.ContextLengthAsync("gw:sgl/deepseek")).IsEqualTo(131072);
-        await Assert.That(await service.ContextLengthAsync("gw:sgl/deepseek")).IsEqualTo(131072);
+        await Assert.That(await service.ContextLengthAsync("gw:deepseek-chat")).IsEqualTo(131072);
+        await Assert.That(await service.ContextLengthAsync("gw:deepseek-chat")).IsEqualTo(131072);
 
         await Assert.That(Probes(servers)).IsEqualTo(1);
         var probe = servers.Requests.Single(r => r.Url.EndsWith("/chat/completions", StringComparison.Ordinal));
         await Assert.That(probe.Url).IsEqualTo("http://gw-probe.test/v1/chat/completions");
         await Assert.That(probe.Body!).Contains("\"max_tokens\":1");
-        await Assert.That(probe.Body!).Contains("\"model\":\"sgl/deepseek\"");
+        await Assert.That(probe.Body!).Contains("\"model\":\"deepseek-chat\"");
     }
 
     [Test]
@@ -333,7 +333,7 @@ public class ChatCompactionTests
         await h.SayAsync("my nickname is Ali", at: start.AddMinutes(2));
         await h.SayAsync("still in the window", at: start.AddMinutes(10));
 
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:DefaultModel"] = "gw:sgl/deepseek" }).Build();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:DefaultModel"] = "gw:deepseek-chat" }).Build();
         var compactor = new ChatCompactor(h.Provider.GetRequiredService<IServiceScopeFactory>(), configuration,
             NullLogger<ChatCompactor>.Instance, Microsoft.Extensions.Options.Options.Create(options ?? new HistoryOptions()));
         return (h, compactor, start.AddMinutes(10));
@@ -355,7 +355,7 @@ public class ChatCompactionTests
         await Assert.That(chat.Summary).IsEqualTo("Alice has a cat called Mochi, moved to Bern and goes by Ali.");
         await Assert.That(chat.SummarizedBefore).IsEqualTo(before);
         var call = h.OpenRouter.ReceivedCalls().Single().GetArguments();
-        await Assert.That((string)call[0]!).IsEqualTo("gw:sgl/deepseek");
+        await Assert.That((string)call[0]!).IsEqualTo("gw:deepseek-chat");
         var input = ((List<ChatMessage>)call[3]!).Single().Content;
         await Assert.That(input).Contains("Alice has a cat called Mochi.");
         await Assert.That(input).Contains("[Alice]: I just moved to Bern");
@@ -427,7 +427,7 @@ public class ChatCompactionTests
 
     private static ChatCompactor NewCompactor(OrchestratorHarness h, HistoryOptions? options = null) =>
         new(h.Provider.GetRequiredService<IServiceScopeFactory>(),
-            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:DefaultModel"] = "gw:sgl/deepseek" }).Build(),
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["App:DefaultModel"] = "gw:deepseek-chat" }).Build(),
             NullLogger<ChatCompactor>.Instance, Microsoft.Extensions.Options.Options.Create(options ?? new HistoryOptions()));
 
     [Test]
@@ -578,7 +578,7 @@ public class ChatCompactionTests
         await h.Notifications.Received(1).NotifyUserSystemMessage(h.Chat.Id, h.User.Id, "Summary of the chat so far:\nAlice has a cat, moved to Bern and goes by Ali.");
         await h.Notifications.DidNotReceiveWithAnyArgs().NotifySystemMessage(default, default!);
         var call = h.OpenRouter.ReceivedCalls().Single().GetArguments();
-        await Assert.That((string)call[0]!).IsEqualTo("gw:sgl/deepseek");
+        await Assert.That((string)call[0]!).IsEqualTo("gw:deepseek-chat");
         var input = ((List<ChatMessage>)call[3]!).Single().Content;
         await Assert.That(input).Contains("Alice has a cat called Mochi.");
         await Assert.That(input).Contains("[Alice]: still in the window");
