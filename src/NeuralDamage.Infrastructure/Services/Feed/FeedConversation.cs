@@ -99,8 +99,9 @@ public class FeedConversation(
         var engine = services.GetRequiredService<IBotDecisionEngine>();
         var decided = Limit(await engine.DecideAsync(round, keyed, ct), round.Subject, post, comments, subject, addressed);
 
+        // A like is any reaction, and a commenting bot may like as well.
         var likes = Task.WhenAll(decided
-            .Where(d => d.Action == BotAction.React)
+            .Where(d => d.Action == BotAction.React || d.Reacts)
             .Select(d => LikeAsync(post.Id, subject?.Id, d.Bot, ct)));
 
         var writers = decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot).ToList();

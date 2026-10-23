@@ -121,7 +121,7 @@ public class BotDecisionEngineTests
                 $"What would the person in `bots.{key}`, going only by their persona, naturally do with `new_message` in this group chat?");
             var criteria = q.GetProperty("criteria");
             await Assert.That(criteria.EnumerateObject().Select(p => p.Name))
-                .IsEquivalentTo(["reply", "react_laugh", "react_love", "react_wow", "react_thumbs", "quiet"]);
+                .IsEquivalentTo(["reply", "react_laugh", "react_love", "react_wow", "react_thumbs", "react_dead", "react_fire", "react_sob", "quiet"]);
             await Assert.That(criteria.GetProperty("reply").GetString()).IsEqualTo("They have something to say about it, or it is addressed to them.");
             await Assert.That(criteria.GetProperty("react_laugh").GetString()).IsEqualTo("They find it funny but have nothing to add.");
             await Assert.That(criteria.GetProperty("react_love").GetString()).IsEqualTo("They like it or agree, without writing anything.");
@@ -302,6 +302,9 @@ public class BotDecisionEngineTests
     [Arguments("react_love", 0.7, BotAction.React, "❤️")]
     [Arguments("react_thumbs", 0.9, BotAction.React, "👍")]
     [Arguments("react_thumbs", 0.49, BotAction.Quiet, null)]
+    [Arguments("react_dead", 0.6, BotAction.React, "💀")]
+    [Arguments("react_fire", 0.6, BotAction.React, "🔥")]
+    [Arguments("react_sob", 0.6, BotAction.React, "😭")]
     [Arguments("quiet", 0.64, BotAction.Quiet, null)]
     public async Task Probabilities_MapToOneAction(string choice, double p, BotAction action, string? emoji)
     {
@@ -313,6 +316,80 @@ public class BotDecisionEngineTests
 
         await Assert.That(verdict.Action).IsEqualTo(action);
         await Assert.That(verdict.Emoji).IsEqualTo(emoji);
+    }
+
+    [Test]
+    public async Task SplitEmojis_AddUpToAReaction_WithTheLikeliestEmoji()
+    {
+        // No single emoji clears 0.5, but together they do (0.7).
+        var jev = new FakeJev(_ => FakeJev.With(new() { [ReactLaugh] = 0.3, [ReactDead] = 0.25, [ReactSob] = 0.15, [Quiet] = 0.2, [Reply] = 0.1 }));
+        using var h = await OrchestratorHarness.CreateAsync();
+        var message = await h.SayAsync("my cat just filed my taxes");
+
+        var verdict = (await DecideAsync(h, jev, message)).Single();
+
+        await Assert.That(verdict.Action).IsEqualTo(BotAction.React);
+        await Assert.That(verdict.Emoji).IsEqualTo("😂");
+        await Assert.That(verdict.ReactProbability).IsEqualTo(0.7).Within(1e-9);
+    }
+
+    [Test]
+    public async Task SplitEmojis_BelowTheThreshold_StayQuiet()
+    {
+        var jev = new FakeJev(_ => FakeJev.With(new() { [Quiet] = 0.55, [ReactFire] = 0.2, [ReactLove] = 0.2, [Reply] = 0.05 }));
+        using var h = await OrchestratorHarness.CreateAsync();
+        var message = await h.SayAsync("ok");
+
+        var verdict = (await DecideAsync(h, jev, message)).Single();
+
+        await Assert.That(verdict.Action).IsEqualTo(BotAction.Quiet);
+        await Assert.That(verdict.Emoji).IsNull();
+    }
+
+    [Test]
+    [Arguments(0.25, 0.1, "🔥")]
+    [Arguments(0.15, 0.1, null)]
+    public async Task AReply_AlsoReacts_AboveItsOwnThreshold(double fire, double love, string? emoji)
+    {
+        var jev = new FakeJev(_ => FakeJev.With(new() { [Reply] = 0.62, [ReactFire] = fire, [ReactLove] = love, [Quiet] = 1 - 0.62 - fire - love }));
+        using var h = await OrchestratorHarness.CreateAsync();
+        var message = await h.SayAsync("just got the job!!");
+
+        var verdict = (await DecideAsync(h, jev, message)).Single();
+
+        await Assert.That(verdict.Action).IsEqualTo(BotAction.Reply);
+        await Assert.That(verdict.Emoji).IsEqualTo(emoji);
+    }
+
+    [Test]
+    public async Task ReactionCap_KeepsTheLikeliest_CountingTheReactionsAlreadyThere()
+    {
+        var total = new Dictionary<string, double> { ["GPT"] = 0.6, ["Claude"] = 0.9, ["Gemini"] = 0.7 };
+        var jev = new FakeJev(name => FakeJev.With(new() { [ReactFire] = total[name], [Quiet] = 1 - total[name] }));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 4);
+        var message = await h.SayAsync("we won the final");
+        // Llama already reacted, which leaves room for two more.
+        h.Db.Reactions.Add(new Reaction { MessageId = message.Id, BotId = h.Bots[3].Id, Emoji = "🔥" });
+        await h.Db.SaveChangesAsync();
+
+        var verdicts = await DecideAsync(h, jev, message, new BotRankingOptions { MaxReactionsPerMessage = 3 }, h.Bots[..3]);
+
+        await Assert.That(verdicts.Where(v => v.Reacts).Select(v => v.Bot.Name)).IsEquivalentTo(["Claude", "Gemini"]);
+        await Assert.That(verdicts.Where(v => !v.Reacts).All(v => v.Action == BotAction.Quiet && v.Emoji is null)).IsTrue();
+    }
+
+    [Test]
+    public async Task EachReaction_IsLogged()
+    {
+        var logger = new ListLogger<BotDecisionEngine>();
+        var jev = new FakeJev(_ => FakeJev.With(new() { [ReactSob] = 0.4, [ReactLaugh] = 0.3, [Quiet] = 0.3 }));
+        using var h = await OrchestratorHarness.CreateAsync();
+        var message = await h.SayAsync("i dropped my ice cream");
+
+        await new BotDecisionEngine(h.Db, jev, new BotRankingOptions(), logger).DecideAsync(h.Chat.Id, message, h.Bots);
+
+        await Assert.That(logger.Entries.Any(e => e.Level == LogLevel.Information
+            && e.Message.Contains("GPT") && e.Message.Contains("😭") && e.Message.Contains("react total 0.70"))).IsTrue();
     }
 
     [Test]
@@ -362,6 +439,9 @@ public class BotDecisionEngineTests
             ["BotRanking:CautiousReplyThreshold"] = "0.9",
             ["BotRanking:CautiousMaxReplies"] = "2",
             ["BotRanking:HumansActiveMinutes"] = "10",
+            ["BotRanking:ReplyAndReactThreshold"] = "0.25",
+            ["BotRanking:MaxReactionsPerMessage"] = "5",
+            ["BotRanking:Emojis:react_dead"] = "☠️",
         }).Build();
 
         var options = BotRankingOptions.FromConfiguration(config);
@@ -376,6 +456,11 @@ public class BotDecisionEngineTests
         await Assert.That(options.CautiousReplyThreshold).IsEqualTo(0.9);
         await Assert.That(options.CautiousMaxReplies).IsEqualTo(2);
         await Assert.That(options.HumansActiveWindow).IsEqualTo(TimeSpan.FromMinutes(10));
+        await Assert.That(options.ReplyAndReactThreshold).IsEqualTo(0.25);
+        await Assert.That(options.MaxReactionsPerMessage).IsEqualTo(5);
+        await Assert.That(options.Emojis[ReactDead]).IsEqualTo("☠️");
+        await Assert.That(options.Emojis[ReactFire]).IsEqualTo("🔥");
+        await Assert.That(options.Emojis[ReactSob]).IsEqualTo("😭");
     }
 
     [Test]

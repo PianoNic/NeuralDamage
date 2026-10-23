@@ -20,6 +20,9 @@ public record BotRankingOptions
         [BotDecisionEngine.ReactLove] = "❤️",
         [BotDecisionEngine.ReactWow] = "😮",
         [BotDecisionEngine.ReactThumbs] = "👍",
+        [BotDecisionEngine.ReactDead] = "💀",
+        [BotDecisionEngine.ReactFire] = "🔥",
+        [BotDecisionEngine.ReactSob] = "😭",
     };
 
     public string Endpoint { get; init; } = DefaultEndpoint;
@@ -29,8 +32,18 @@ public record BotRankingOptions
     /// <summary>Lowest probability of <c>reply</c>, when Jev chose it, for the bot to write.</summary>
     public double ReplyThreshold { get; init; } = 0.6;
 
-    /// <summary>Lowest probability of the chosen react option for the bot to react.</summary>
+    /// <summary>Lowest probability of all the react options together for a bot that doesn't reply to react.</summary>
     public double ReactThreshold { get; init; } = 0.5;
+
+    /// <summary>
+    /// Lowest probability of all the react options together for a bot that
+    /// replies to also react. A reply clears <see cref="ReplyThreshold"/>, so
+    /// this sits below what is left of the probability.
+    /// </summary>
+    public double ReplyAndReactThreshold { get; init; } = 0.3;
+
+    /// <summary>Most bot reactions on one message, counting the ones already there; the likeliest react.</summary>
+    public int MaxReactionsPerMessage { get; init; } = 3;
 
     /// <summary>
     /// Safety cap on how many bots reply to one message, the likeliest first.
@@ -63,8 +76,7 @@ public record BotRankingOptions
         var section = configuration.GetSection("BotRanking");
         var defaults = new BotRankingOptions();
 
-        // Only the four react options exist in the question, so only their
-        // emoji can be changed.
+        // Only the react options in the question can be changed.
         var emojis = DefaultEmojis.ToDictionary(e => e.Key, e => NullIfBlank(section[$"Emojis:{e.Key}"]) ?? e.Value);
 
         return new BotRankingOptions
@@ -74,6 +86,8 @@ public record BotRankingOptions
             ApiKey = NullIfBlank(section["ApiKey"]) ?? NullIfBlank(configuration["OpenRouter:ApiKey"]),
             ReplyThreshold = section.GetValue<double?>("ReplyThreshold") ?? defaults.ReplyThreshold,
             ReactThreshold = section.GetValue<double?>("ReactThreshold") ?? defaults.ReactThreshold,
+            ReplyAndReactThreshold = section.GetValue<double?>("ReplyAndReactThreshold") ?? defaults.ReplyAndReactThreshold,
+            MaxReactionsPerMessage = section.GetValue<int?>("MaxReactionsPerMessage") ?? defaults.MaxReactionsPerMessage,
             MaxReplies = section.GetValue<int?>("MaxReplies") ?? defaults.MaxReplies,
             CautiousHealth = section.GetValue<double?>("CautiousHealth") ?? defaults.CautiousHealth,
             SilentHealth = section.GetValue<double?>("SilentHealth") ?? defaults.SilentHealth,
