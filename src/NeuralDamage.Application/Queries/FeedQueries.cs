@@ -27,7 +27,7 @@ public class GetFeedHandler(NeuralDamageDbContext db, AppAdmins admins) : IQuery
         var ids = await query.OrderByDescending(p => p.CreatedAt).Take(limit).Select(p => p.Id).ToListAsync(cancellationToken);
 
         var posts = await FeedReads.PostsAsync(db, ids, request.UserId, ct: cancellationToken);
-        return Result<FeedPageDto>.Success(new FeedPageDto(posts, await StickerReads.IsAdminAsync(db, admins, request.UserId, cancellationToken)));
+        return Result<FeedPageDto>.Success(new FeedPageDto(posts, await Admins.IsAdminAsync(db, admins, request.UserId, cancellationToken)));
     }
 }
 
@@ -43,7 +43,7 @@ public class GetPostThreadHandler(NeuralDamageDbContext db, AppAdmins admins) : 
 
         var ids = await db.PostComments.Visible().Where(c => c.PostId == request.PostId).Select(c => c.Id).ToListAsync(cancellationToken);
         var comments = await FeedReads.CommentsAsync(db, ids, request.UserId, cancellationToken);
-        return Result<PostThreadDto>.Success(new PostThreadDto(post, comments, await StickerReads.IsAdminAsync(db, admins, request.UserId, cancellationToken)));
+        return Result<PostThreadDto>.Success(new PostThreadDto(post, comments, await Admins.IsAdminAsync(db, admins, request.UserId, cancellationToken)));
     }
 }
 

@@ -189,7 +189,7 @@ function providers(api: ReturnType<typeof feedApi>, hub: ReturnType<typeof fakeH
     provideRouter([]),
     { provide: FeedService, useValue: api },
     { provide: SignalRService, useValue: hub.service },
-    { provide: AuthService, useValue: { user: signal({ id: 'me', displayName: 'Alice', email: 'a@example.com' }), displayName: signal('Alice') } },
+    { provide: AuthService, useValue: { user: signal({ id: 'me', displayName: 'Alice', email: 'a@example.com' }), displayName: signal('Alice'), isAdmin: signal(false) } },
     { provide: BotDirectory, useValue: { bots: signal([]), load: () => Promise.resolve() } },
     { provide: ChatList, useValue: { chats: signal([]) } },
     { provide: AttachmentsService, useValue: {} },

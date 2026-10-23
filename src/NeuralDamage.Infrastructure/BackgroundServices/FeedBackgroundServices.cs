@@ -82,14 +82,16 @@ public class FeedScheduler(
     ILogger<FeedScheduler> logger,
     IOptions<FeedOptions>? options = null,
     BotClock? clock = null,
-    TimeProvider? time = null) : BackgroundService
+    TimeProvider? time = null) : BackgroundService, IFeedNow
 {
     private readonly FeedOptions _options = options?.Value ?? new();
     private readonly BotClock _clock = clock ?? BotClock.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private CancellationToken _stopping;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _stopping = stoppingToken;
         if (_options.Tick <= TimeSpan.Zero)
             return;
         using var timer = new PeriodicTimer(_options.Tick, _time);
@@ -169,6 +171,40 @@ public class FeedScheduler(
             }
         }
         return tick;
+    }
+
+    void IFeedNow.Start(Guid botId, bool story) => _ = Task.Run(async () =>
+    {
+        try
+        {
+            await NowAsync(botId, story, _stopping);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Bot {BotId} failed to {What} on request", botId, story ? "make a story" : "post");
+        }
+    });
+
+    /// <summary>
+    /// Has the bot post, or make a story, now, whatever its schedule says, with the
+    /// same random rolls a tick uses.
+    /// </summary>
+    /// <returns>Whether it made one; false when the bot is gone or had nothing to say.</returns>
+    public async Task<bool> NowAsync(Guid botId, bool story, CancellationToken ct = default, Func<double>? random = null)
+    {
+        random ??= Random.Shared.NextDouble;
+        Bot? bot;
+        using (var scope = scopes.CreateScope())
+            bot = await scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>().Bots
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.Id == botId && b.IsActive, ct);
+        if (bot is null)
+            return false;
+
+        var now = _time.GetUtcNow();
+        return story
+            ? await StoryAsync(bot, now, ct, imageRoll: random()) is not null
+            : await PostAsync(bot, now, random(), ct, imageRoll: random()) is not null;
     }
 
     /// <summary>Has <paramref name="bot"/> make a story now; null when its spec was dropped.</summary>

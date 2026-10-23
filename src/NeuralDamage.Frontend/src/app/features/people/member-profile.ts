@@ -175,6 +175,8 @@ export class MemberProfile {
   /** The bot's details, once loaded; null for people. */
   readonly bot = input<BotDto | null>(null);
   readonly currentUserId = input<string | null>(null);
+  /** Whether the viewer is an admin, who may edit anyone's bot. */
+  readonly isAdmin = input(false);
   /** Whether the viewer may remove this member (or leave, for themselves). */
   readonly canRemove = input(false);
   /** Shown as the body of a sheet: no card chrome, and the sheet is the dialog. */
@@ -194,7 +196,7 @@ export class MemberProfile {
   protected readonly broken = computed(() => hasModelProblem(this.member().modelStatus));
   protected readonly canEdit = computed(() => {
     const bot = this.bot();
-    return !!bot && bot.createdById === this.currentUserId();
+    return !!bot && (bot.createdById === this.currentUserId() || this.isAdmin());
   });
 
   /** Whether the full character is open in its own dialog. */

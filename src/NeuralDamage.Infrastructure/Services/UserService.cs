@@ -19,6 +19,7 @@ namespace NeuralDamage.Infrastructure.Services
         IHttpContextAccessor httpContextAccessor,
         NeuralDamageDbContext dbContext,
         DbContextOptions<NeuralDamageDbContext> dbOptions,
+        AppAdmins admins,
         ILogger<UserService> logger) : IUserService
     {
         public async Task<bool> ExistsAsync(string externalId, CancellationToken cancellationToken = default)
@@ -73,6 +74,7 @@ namespace NeuralDamage.Infrastructure.Services
                 ?? FindClaim(ClaimTypes.Name, "name")
                 ?? email;
             var avatarUrl = FindClaim("picture");
+            var isAdmin = admins.IsAdmin(httpContextAccessor.HttpContext?.User, email);
 
             if (user is null)
             {
@@ -82,6 +84,7 @@ namespace NeuralDamage.Infrastructure.Services
                     Email = email,
                     DisplayName = displayName,
                     AvatarUrl = avatarUrl,
+                    IsAdmin = isAdmin,
                     LastLoginAt = DateTime.UtcNow
                 };
                 await CreateAsync(created, cancellationToken);
@@ -91,6 +94,7 @@ namespace NeuralDamage.Infrastructure.Services
             user.Email = email;
             user.DisplayName = displayName;
             user.AvatarUrl = avatarUrl;
+            user.IsAdmin = isAdmin;
             user.LastLoginAt = DateTime.UtcNow;
 
             await dbContext.SaveChangesAsync(cancellationToken);

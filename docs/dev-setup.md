@@ -23,7 +23,7 @@ dotnet user-secrets set "Oidc:Authority" "https://your-oidc-provider.com"
 dotnet user-secrets set "Oidc:ClientId" "your-client-id"
 dotnet user-secrets set "Oidc:RedirectUri" "http://localhost:4200/callback"
 dotnet user-secrets set "Oidc:PostLogoutRedirectUri" "http://localhost:4200/"
-dotnet user-secrets set "Oidc:Scope" "openid profile email"
+dotnet user-secrets set "Oidc:Scope" "openid profile email groups"
 dotnet user-secrets set "OpenRouter:ApiKey" "sk-or-v1-your-key-here"
 ```
 

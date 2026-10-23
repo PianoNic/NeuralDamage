@@ -101,7 +101,7 @@ public class DeleteStoryHandler(NeuralDamageDbContext db, IAttachmentStorage sto
         var story = await db.Stories.FirstOrDefaultAsync(s => s.Id == request.StoryId, cancellationToken);
         if (story is null)
             return Result.Failure("That story is gone.");
-        if (story.AuthorUserId != request.UserId && !await StickerReads.IsAdminAsync(db, admins, request.UserId, cancellationToken))
+        if (story.AuthorUserId != request.UserId && !await Admins.IsAdminAsync(db, admins, request.UserId, cancellationToken))
             return Result.Failure("Only its author or an admin can delete a story.");
 
         db.Stories.Remove(story);

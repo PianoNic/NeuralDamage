@@ -20,7 +20,7 @@ public class RemoveMemberHandler(NeuralDamageDbContext db, IChatNotificationServ
 
         // Allow self-removal or owner removal
         var isSelf = member.UserId == request.RequestingUserId;
-        var isOwner = await db.ChatMembers.AnyAsync(cm => cm.ChatId == request.ChatId && cm.UserId == request.RequestingUserId && cm.Role == ChatMemberRole.Owner, cancellationToken);
+        var isOwner = await Admins.RunsChatAsync(db, request.ChatId, request.RequestingUserId, cancellationToken);
 
         if (!isSelf && !isOwner)
             return Result.Failure("Only the chat owner or the member themselves can remove a member.");

@@ -14,7 +14,7 @@ public class KickBotHandler(NeuralDamageDbContext db, IChatNotificationService n
 {
     public async ValueTask<Result> Handle(KickBotCommand request, CancellationToken cancellationToken)
     {
-        var isOwner = await db.ChatMembers.AnyAsync(cm => cm.ChatId == request.ChatId && cm.UserId == request.RequestingUserId && cm.Role == ChatMemberRole.Owner, cancellationToken);
+        var isOwner = await Admins.RunsChatAsync(db, request.ChatId, request.RequestingUserId, cancellationToken);
         if (!isOwner)
             return Result.Failure("Only the chat owner can kick bots.");
 

@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideEllipsis, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert } from '@ng-icons/lucide';
+import { lucideAperture, lucideEllipsis, lucideNewspaper, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert } from '@ng-icons/lucide';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
 import { HlmBadge } from '@spartan-ng/helm/badge';
@@ -45,7 +45,7 @@ type Filter = 'all' | 'mine';
     MemberAvatar,
     BotDialog,
   ],
-  providers: [provideIcons({ lucideEllipsis, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert })],
+  providers: [provideIcons({ lucideAperture, lucideEllipsis, lucideNewspaper, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
@@ -172,7 +172,7 @@ type Filter = 'all' | 'mine';
                     <td hlmTd class="hidden text-right tabular-nums md:table-cell">{{ bot.chatCount }}</td>
                     <td hlmTd class="hidden text-right tabular-nums sm:table-cell">{{ bot.repliesLast7Days }}</td>
                     <td hlmTd class="pe-2 text-right">
-                      @if (mine(bot)) {
+                      @if (canManage(bot)) {
                         <button
                           hlmBtn
                           variant="ghost"
@@ -208,6 +208,16 @@ type Filter = 'all' | 'mine';
           <ng-icon name="lucidePencil" />
           {{ broken(bot) ? 'Update model' : 'Edit' }}
         </button>
+        @if (isAdmin()) {
+          <button hlmDropdownMenuItem (triggered)="postNow(bot, false)">
+            <ng-icon name="lucideNewspaper" />
+            Post now
+          </button>
+          <button hlmDropdownMenuItem (triggered)="postNow(bot, true)">
+            <ng-icon name="lucideAperture" />
+            Story now
+          </button>
+        }
         <button hlmDropdownMenuItem variant="destructive" (triggered)="deleting.set(bot)">
           <ng-icon name="lucideTrash2" />
           Delete
@@ -242,6 +252,7 @@ type Filter = 'all' | 'mine';
 export class BotsPage {
   private readonly api = inject(BotsService);
   private readonly auth = inject(AuthService);
+  protected readonly isAdmin = this.auth.isAdmin;
   private readonly directory = inject(BotDirectory);
   protected readonly catalog = inject(ModelCatalog);
 
@@ -295,6 +306,23 @@ export class BotsPage {
 
   protected mine(bot: BotDto): boolean {
     return bot.createdById === this.auth.user()?.id;
+  }
+
+  /** Whether the menu to edit and delete the bot shows: for its maker, and for admins on every bot. */
+  protected canManage(bot: BotDto): boolean {
+    return this.mine(bot) || this.isAdmin();
+  }
+
+  /** Has the bot post, or make a story, right away; admins only. It arrives on the feed when written. */
+  protected async postNow(bot: BotDto, story: boolean): Promise<void> {
+    try {
+      await firstValueFrom(
+        story ? this.api.apiBotsBotIdFeedStoryPost(bot.id) : this.api.apiBotsBotIdFeedPostPost(bot.id),
+      );
+      toast.success(`${bot.name} is writing a ${story ? 'story' : 'post'}.`);
+    } catch (error) {
+      toast.error(describeApiError(error, { fallback: `Could not have ${bot.name} ${story ? 'make a story' : 'post'}.` }));
+    }
   }
 
   protected broken(bot: BotDto): boolean {

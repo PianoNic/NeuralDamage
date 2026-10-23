@@ -26,7 +26,7 @@ public class AddBotReferenceHandler(NeuralDamageDbContext db, IAttachmentStorage
             .FirstOrDefaultAsync(b => b.Id == request.BotId && b.IsActive, cancellationToken);
         if (bot is null)
             return Result.Failure<BotReferencesDto>("Bot not found.");
-        if (bot.CreatedById != request.RequestingUserId)
+        if (!await Admins.RunsBotAsync(db, bot, request.RequestingUserId, cancellationToken))
             return Result.Failure<BotReferencesDto>("Only the bot creator can change its reference pictures.");
         if (bot.References.Count >= BotReference.MaxPerBot)
             return Result.Failure<BotReferencesDto>($"A bot can have at most {BotReference.MaxPerBot} reference pictures.");
@@ -67,7 +67,7 @@ public class RemoveBotReferenceHandler(NeuralDamageDbContext db, IAttachmentStor
         var bot = await db.Bots.FirstOrDefaultAsync(b => b.Id == request.BotId && b.IsActive, cancellationToken);
         if (bot is null)
             return Result.Failure("Bot not found.");
-        if (bot.CreatedById != request.RequestingUserId)
+        if (!await Admins.RunsBotAsync(db, bot, request.RequestingUserId, cancellationToken))
             return Result.Failure("Only the bot creator can change its reference pictures.");
 
         var reference = await db.BotReferences.FirstOrDefaultAsync(r => r.Id == request.ReferenceId && r.BotId == bot.Id, cancellationToken);

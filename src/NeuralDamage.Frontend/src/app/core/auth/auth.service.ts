@@ -24,6 +24,8 @@ export class AuthService {
   readonly isAuthenticated = this._isAuthenticated.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
   readonly displayName = computed(() => this._user()?.displayName || this._user()?.email || '');
+  /** Whether the user may do anything any owner can, to anyone's bots, chats and posts. */
+  readonly isAdmin = computed(() => this._user()?.isAdmin === true);
 
   /**
    * Tells this app's other tabs about a sign-out. The OIDC session lives in per-tab sessionStorage,

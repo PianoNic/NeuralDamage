@@ -72,7 +72,7 @@ function providers(api: Partial<Record<keyof StoriesService, unknown>>, images: 
     { provide: StickersService, useValue: {} },
     { provide: ImagesService, useValue: images },
     { provide: AvatarImages, useValue: { get: (url: string) => signal(`blob:${url}`) } },
-    { provide: AuthService, useValue: { user: signal({ id: 'me', displayName: 'Alice', email: 'a@example.com' }), displayName: signal('Alice') } },
+    { provide: AuthService, useValue: { user: signal({ id: 'me', displayName: 'Alice', email: 'a@example.com' }), displayName: signal('Alice'), isAdmin: signal(false) } },
     {
       provide: SignalRService,
       useValue: { onChatEvent: () => undefined, offChatEvent: () => undefined, start: () => Promise.resolve(), reconnected$: new Subject() },

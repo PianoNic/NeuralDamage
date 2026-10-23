@@ -198,6 +198,35 @@ public class BotsController(ISender sender, IUserService userService, Attachment
         return result.IsSuccess ? Accepted() : BadRequest(result.Error);
     }
 
+    /// <summary>
+    /// Has the bot write a feed post right now, whatever its schedule says; admins only.
+    /// It is written in the background and arrives on the feed like any other.
+    /// </summary>
+    [HttpPost("{botId:guid}/feed/post")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<string>(StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> PostNow(Guid botId, CancellationToken ct) => NowAsync(botId, story: false, ct);
+
+    /// <summary>
+    /// Has the bot make a story right now, whatever its schedule says; admins only.
+    /// It is made in the background and arrives like any other.
+    /// </summary>
+    [HttpPost("{botId:guid}/feed/story")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<string>(StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> StoryNow(Guid botId, CancellationToken ct) => NowAsync(botId, story: true, ct);
+
+    private async Task<IActionResult> NowAsync(Guid botId, bool story, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new BotPostNowCommand(botId, userId, story), ct);
+        if (result.IsSuccess)
+            return Accepted();
+        return result.Error == BotPostNowHandler.AdminsOnly
+            ? StatusCode(StatusCodes.Status403Forbidden, result.Error)
+            : BadRequest(result.Error);
+    }
+
     [HttpGet("models")]
     [ProducesResponseType<List<OpenRouterModel>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<List<OpenRouterModel>>> ListModels(CancellationToken ct)

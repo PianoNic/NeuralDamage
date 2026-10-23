@@ -54,7 +54,7 @@ public class ImportStickersHandler(NeuralDamageDbContext db, IAttachmentStorage 
     public async ValueTask<Result<StickerImportResultDto>> Handle(ImportStickersCommand request, CancellationToken cancellationToken)
     {
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
-        if (user is null || !admins.IsAdmin(user.Email))
+        if (user is null || !(user.IsAdmin || admins.IsAdmin(user.Email)))
             return Result.Failure<StickerImportResultDto>(AdminsOnly);
 
         int addedCount = 0, duplicates = 0;
@@ -221,9 +221,6 @@ public static class StickerAccess
 
     public static async Task<bool> CanEditAsync(NeuralDamageDbContext db, AppAdmins admins, Sticker sticker, Guid userId, CancellationToken ct)
     {
-        if (sticker.UploaderUserId == userId)
-            return true;
-        var email = await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync(ct);
-        return admins.IsAdmin(email);
+        return sticker.UploaderUserId == userId || await Admins.IsAdminAsync(db, admins, userId, ct);
     }
 }

@@ -833,6 +833,9 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<DateTime?>("FeedSeenAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsAdmin")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
