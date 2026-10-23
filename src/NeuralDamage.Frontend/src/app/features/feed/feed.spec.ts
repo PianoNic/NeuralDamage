@@ -4,6 +4,10 @@ import { provideRouter } from '@angular/router';
 import { of, Subject } from 'rxjs';
 import { AttachmentsService } from '../../api/api/attachments.service';
 import { FeedService } from '../../api/api/feed.service';
+import { BotsService } from '../../api/api/bots.service';
+import { ImagesService } from '../../api/api/images.service';
+import { StoriesService } from '../../api/api/stories.service';
+import { AvatarImages } from '../../shared/avatar-images';
 import { AuthService } from '../../core/auth/auth.service';
 import { CommentDto, PostDto } from '../../core/models';
 import { ChatHubEvents } from '../../core/signalr/hub-events';
@@ -209,6 +213,74 @@ describe('FeedPage', () => {
     hub.fire('FeedPostNew', post('p3', { content: 'fresh one', createdAt: '2026-10-21T11:00:00Z' }));
     await settle(fixture);
     expect(el.querySelector('[data-testid=post]')?.textContent).toContain('fresh one');
+  });
+});
+
+describe('FeedPage composing a picture', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('opens the layer editor in 4:5, renders a square picture into the post, and opens it again', async () => {
+    const api = feedApi([]);
+    const hub = fakeHub();
+    const compose = vi.fn((req: { spec: { format?: string } }) =>
+      of({
+        id: 'img9',
+        status: 'Ready',
+        kind: 'Composed',
+        prompt: 'Your text',
+        waiting: 0,
+        url: '/api/images/img9/file',
+        width: 1080,
+        height: req.spec.format === 'post-1x1' ? 1080 : 1350,
+        spec: req.spec,
+      }),
+    );
+    await TestBed.configureTestingModule({
+      imports: [FeedPage],
+      providers: [
+        ...providers(api, hub),
+        { provide: ImagesService, useValue: { apiImagesComposePost: compose, apiImagesImageIdDelete: () => of(null) } },
+        { provide: StoriesService, useValue: { apiStoriesGet: () => of([]) } },
+        { provide: BotsService, useValue: {} },
+        { provide: AvatarImages, useValue: { get: (url: string) => signal(`blob:${url}`) } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FeedPage);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const body = document.body;
+    const button = (root: ParentNode, text: string) => [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+
+    (el.querySelector('button[aria-label="Create image"]') as HTMLButtonElement).click();
+    await settle(fixture);
+    const dialog = body.querySelector('[data-testid=compose-dialog]') as HTMLElement;
+    expect(dialog).not.toBeNull();
+    const stage = dialog.querySelector('[data-testid=stage]') as HTMLElement;
+    expect(stage.style.height).toBe('450px');
+
+    button(dialog, 'Square')!.click();
+    await settle(fixture);
+    expect(stage.style.height).toBe('360px');
+
+    button(dialog, 'Use image')!.click();
+    await settle(fixture);
+    expect(compose).toHaveBeenCalledTimes(1);
+    const { spec } = compose.mock.calls[0][0] as { spec: { format: string; layers: { text?: string }[] } };
+    expect(spec.format).toBe('post-1x1');
+    expect(spec.layers[0].text).toBe('Your text');
+    expect(body.querySelector('[data-testid=compose-dialog]')).toBeNull();
+
+    // The picture sits in the composer and can be opened again with its layers.
+    expect(el.querySelector('[data-testid=generated-image]')).not.toBeNull();
+    (el.querySelector('button[aria-label="Edit the picture"]') as HTMLButtonElement).click();
+    await settle(fixture);
+    expect((body.querySelector('[data-testid=compose-dialog] [data-testid=stage]') as HTMLElement).style.height).toBe('360px');
+    button(body.querySelector('[data-testid=compose-dialog]')!, 'Cancel')!.click();
+    await settle(fixture);
+
+    (el.querySelector('button[aria-label="Send message"]') as HTMLButtonElement).click();
+    await settle(fixture);
+    expect(api.apiFeedPostsPost).toHaveBeenCalledWith({ content: '', stickerId: null, imageId: 'img9' });
   });
 });
 

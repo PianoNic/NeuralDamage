@@ -1,8 +1,18 @@
 import type { StorySpec } from '../../api/model/storySpec';
 
-/** The editor's stage is 360 points wide, as the server renders it (×3 into 1080 × 1920). */
+/** The editor's stage is 360 points wide, as the server renders it (×3 into 1080 pixels). */
 export const STAGE_WIDTH = 360;
 export const STAGE_HEIGHT = 640;
+
+/** What the layers are drawn for: a story, or a post's picture in 4:5 or square. */
+export type PictureFormat = 'story' | 'post-4x5' | 'post-1x1';
+
+/** Each format's stage in points and the PNG the server renders from it. */
+export const FORMATS: Record<PictureFormat, { stageHeight: number; width: number; height: number; label: string }> = {
+  story: { stageHeight: 640, width: 1080, height: 1920, label: '9:16' },
+  'post-4x5': { stageHeight: 450, width: 1080, height: 1350, label: '4:5' },
+  'post-1x1': { stageHeight: 360, width: 1080, height: 1080, label: 'Square' },
+};
 
 export const BACKGROUNDS = ['#1f3a2b', '#1d3347', '#3a1d33', '#3f2a1d', '#141414', '#e0409a', '#f5d547', '#fafafa'] as const;
 export const TEXT_COLORS = ['#fafafa', '#0a0a0a', '#f5d547', '#e0409a', '#7dd3fc'] as const;
@@ -55,6 +65,8 @@ type NewLayer = Omit<TextLayer, 'id'> | Omit<StickerLayer, 'id'> | Omit<ImageLay
 export type LayerChange = Partial<{ x: number; y: number; size: number; text: string; color: string; weight: number; rotation: number }>;
 
 export interface StoryDraft {
+  /** Missing on a story's draft. */
+  format?: PictureFormat;
   background: string;
   /** The background picture, if any. */
   backgroundImage: { ref: string; previewUrl: string } | null;
@@ -63,8 +75,12 @@ export interface StoryDraft {
   nextId: number;
 }
 
-export function emptyDraft(): StoryDraft {
-  return { background: BACKGROUNDS[0], backgroundImage: null, layers: [], selectedId: null, nextId: 1 };
+export function emptyDraft(format: PictureFormat = 'story'): StoryDraft {
+  return { ...(format === 'story' ? {} : { format }), background: BACKGROUNDS[0], backgroundImage: null, layers: [], selectedId: null, nextId: 1 };
+}
+
+export function formatOf(draft: StoryDraft): PictureFormat {
+  return draft.format ?? 'story';
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -123,6 +139,7 @@ export function reorderLayer(draft: StoryDraft, id: string, step: 1 | -1): Story
 /** What gets posted and what a bot sends: the spec, without the editor's ids and previews. */
 export function toSpec(draft: StoryDraft): StorySpec {
   return {
+    ...(draft.format && draft.format !== 'story' ? { format: draft.format } : {}),
     background: draft.backgroundImage
       ? { color: draft.background, image: draft.backgroundImage.ref, fit: 'cover' }
       : { color: draft.background },

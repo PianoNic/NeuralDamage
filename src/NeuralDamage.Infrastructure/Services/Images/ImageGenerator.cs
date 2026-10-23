@@ -65,7 +65,7 @@ public class ImageGenerator(
             using var scope = scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
             var startOfDay = FeedSchedule.StartOfDay(_time.GetUtcNow(), _clock);
-            if (await db.GeneratedImages.CountAsync(i => i.CreatedAt >= startOfDay, ct) >= _options.MaxPerDay)
+            if (await db.GeneratedImages.CountAsync(i => i.Kind == GeneratedImageKind.Generated && i.CreatedAt >= startOfDay, ct) >= _options.MaxPerDay)
                 return Result.Failure<ImageTicket>("That's all the pictures for today. Try again tomorrow.");
             if (ask.UserId is { } userId && await db.GeneratedImages.AnyAsync(i => i.UserId == userId && i.Status == GeneratedImageStatus.Pending, ct))
                 return Result.Failure<ImageTicket>("Your last picture is still being drawn. Wait for it first.");

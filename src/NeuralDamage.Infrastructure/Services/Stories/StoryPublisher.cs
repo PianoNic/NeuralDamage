@@ -44,6 +44,8 @@ public class StoryPublisher(
     /// <summary>Renders, stores and announces a story by a person or a bot.</summary>
     public async Task<Result<StoryDto>> PublishAsync(StorySpec spec, Guid? userId, Guid? botId, CancellationToken ct = default)
     {
+        if (StoryFormats.Of(spec) != StoryFormats.Story)
+            return Result<StoryDto>.Failure("A story is 9:16; that picture is made for a post.");
         var png = await RenderAsync(spec, userId, ct, botId);
         if (png.IsFailure)
             return Result<StoryDto>.Failure(png.Error!);

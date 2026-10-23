@@ -26,7 +26,20 @@ public class ImagesController(ISender sender, IUserService userService) : Contro
     public async Task<ActionResult<GeneratedImageDto>> Generate(GenerateImageRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new GenerateImageCommand(userId, request.Prompt, request.FaceBotId, request.ForStory), ct);
+        var result = await sender.Send(new GenerateImageCommand(userId, request.Prompt, request.FaceBotId, request.ForStory, request.Format), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    /// <summary>Renders layers into a 4:5 or square picture for a post, like a story; it is ready at once.</summary>
+    [HttpPost("compose")]
+    [EnableRateLimiting(RateLimitExtensions.Uploads)]
+    [ProducesResponseType<GeneratedImageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<GeneratedImageDto>> Compose(ComposeImageRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new ComposeImageCommand(userId, request.Spec), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

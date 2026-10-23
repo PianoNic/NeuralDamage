@@ -20,6 +20,13 @@ import { FeedStore } from './feed-store';
 import { GenerateImage, GeneratedImageTile, ImageDraft } from './generate-image';
 import { PostCard } from './post-card';
 import { StoriesRow } from '../stories/stories-row';
+import { StoryEditor } from '../stories/story-editor';
+import { StoryDraft } from '../stories/story-model';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideLayers } from '@ng-icons/lucide';
+import { HlmDialogImports } from '@spartan-ng/helm/dialog';
+import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
+import { StorySpec } from '../../core/models';
 
 /** One line of "Happening now". */
 export function activityLine(item: FeedActivityItemDto): string {
@@ -52,8 +59,12 @@ export function activityLine(item: FeedActivityItemDto): string {
     GeneratedImageTile,
     PostCard,
     StoriesRow,
+    StoryEditor,
+    NgIcon,
+    HlmDialogImports,
+    HlmTooltipImports,
   ],
-  providers: [ImageDraft],
+  providers: [ImageDraft, provideIcons({ lucideLayers })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
@@ -80,13 +91,49 @@ export function activityLine(item: FeedActivityItemDto): string {
               (sendSticker)="postSticker($event)"
             >
               @if (draft.image(); as image) {
-                <app-generated-image-tile composerAttachment [image]="image" (discard)="draft.discard()" />
+                <app-generated-image-tile
+                  composerAttachment
+                  [image]="image"
+                  [editable]="image.kind === 'Composed' && !!composed()"
+                  (discard)="discardImage()"
+                  (edit)="composeOpen.set(true)"
+                />
               }
+              <button
+                composerTool
+                hlmBtn
+                variant="ghost"
+                size="icon-sm"
+                type="button"
+                aria-label="Create image"
+                hlmTooltip="Create image"
+                [disabled]="draft.pending()"
+                (click)="composeOpen.set(true)"
+              >
+                <ng-icon name="lucideLayers" />
+              </button>
               @if (imageGeneration()) {
                 <app-generate-image composerTool [bots]="bots.bots()" [busy]="draft.pending()" (generate)="draft.generate($event)" />
               }
             </app-composer>
           </section>
+          <hlm-dialog [state]="composeOpen() ? 'open' : 'closed'" (closed)="composeOpen.set(false)">
+            <hlm-dialog-content
+              *hlmDialogPortal="let ctx"
+              class="flex max-h-[94vh] w-[min(96vw,72rem)] max-w-none flex-col overflow-hidden p-0 sm:max-w-none"
+              data-testid="compose-dialog"
+            >
+              <h2 hlmDialogTitle class="sr-only">Create image</h2>
+              <app-story-editor
+                class="min-h-0 flex-1"
+                mode="post"
+                [initial]="composed()"
+                [working]="draft.composing()"
+                (compose)="useComposed($event)"
+                (cancel)="composeOpen.set(false)"
+              />
+            </hlm-dialog-content>
+          </hlm-dialog>
 
           @if (store.loading() && !store.posts().length) {
             <div class="flex justify-center py-10"><hlm-spinner /></div>
@@ -167,6 +214,10 @@ export class FeedPage implements OnInit {
   /** Ticks every minute so "2m" turns into "3m". */
   protected readonly now = signal(new Date());
   protected readonly line = activityLine;
+  /** The layer editor for the post's picture is open. */
+  protected readonly composeOpen = signal(false);
+  /** The layers of the picture composed for the post being written, to open it again. */
+  protected readonly composed = signal<StoryDraft | null>(null);
 
   constructor() {
     const timer = setInterval(() => this.now.set(new Date()), 60_000);
@@ -194,11 +245,24 @@ export class FeedPage implements OnInit {
     return canDelete(post.author, this.me(), this.store.canModerate());
   }
 
+  /** Renders the layers into the post's picture and closes the editor. */
+  protected async useComposed(result: { spec: StorySpec; draft: StoryDraft }): Promise<void> {
+    if (!(await this.draft.compose(result.spec))) return;
+    this.composed.set(result.draft);
+    this.composeOpen.set(false);
+  }
+
+  protected async discardImage(): Promise<void> {
+    this.composed.set(null);
+    await this.draft.discard();
+  }
+
   protected async post(content: string): Promise<void> {
     const image = this.draft.image();
     const imageId = this.draft.take();
     try {
       await this.store.post(content, null, imageId);
+      if (imageId) this.composed.set(null);
     } catch (error) {
       if (imageId && image) this.draft.restore(image);
       toastApiError(error, { network: 'Not posted. Check your connection and try again.' });

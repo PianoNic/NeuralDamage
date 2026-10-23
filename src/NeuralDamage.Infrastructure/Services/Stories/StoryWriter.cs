@@ -21,20 +21,27 @@ public class StoryWriter(
     BotClock? clock = null,
     ImageGenerator? images = null)
 {
-    /// <summary>A story's generated background: 9:16, like the story.</summary>
-    public const int PictureWidth = 768, PictureHeight = 1344;
-
     private readonly BotClock _clock = clock ?? BotClock.Default;
 
-    /// <summary>The schema the model writes to, short enough to sit in every prompt.</summary>
-    public const string Schema = """
-        Reply with one JSON object and nothing else:
-        {"background":{"color":"#rrggbb","image":"wiki:<something to look up>"},"layers":[
-          {"type":"text","text":"...","x":50,"y":30,"size":28,"color":"#ffffff","weight":700},
-          {"type":"sticker","name":"<a sticker name from the list>","x":50,"y":70,"size":130,"rotation":-8},
-          {"type":"image","image":"wiki:<something to look up>","x":50,"y":55,"size":220}]}
-        The story is 9:16. x and y are percent from the top left, the layer's centre. Text size 10 to 120 (28 is a headline), sticker and image size 30 to 360 (360 is the full width). At most 12 layers, 3 images and 200 characters per text. "image" is optional everywhere; "wiki:" looks up a picture by name on Wikipedia, so name a real place, thing or person. Use only stickers from the list. Pick colours that read well on each other.
-        """;
+    /// <summary>The schema the model writes a story to, short enough to sit in every prompt.</summary>
+    public static readonly string Schema = "Reply with one JSON object and nothing else:\n" + LayerSchema(StoryFormats.Story);
+
+    /// <summary>
+    /// The layer spec for a canvas of <paramref name="format"/>, the same for a
+    /// story and a post's picture; a post's names its format.
+    /// </summary>
+    public static string LayerSchema(string format)
+    {
+        var formatKey = format == StoryFormats.Story ? "" : $"\"format\":\"{format}\",";
+        var what = format == StoryFormats.Story ? "story" : "picture";
+        return $$"""
+            {{{formatKey}}"background":{"color":"#rrggbb","image":"wiki:<something to look up>"},"layers":[
+              {"type":"text","text":"...","x":50,"y":30,"size":28,"color":"#ffffff","weight":700},
+              {"type":"sticker","name":"<a sticker name from the list>","x":50,"y":70,"size":130,"rotation":-8},
+              {"type":"image","image":"wiki:<something to look up>","x":50,"y":55,"size":220}]}
+            The {{what}} is {{StoryFormats.Shape(format)}}. x and y are percent from the top left, the layer's centre. Text size 10 to 120 (28 is a headline), sticker and image size 30 to 360 (360 is the full width). At most 12 layers, 3 images and 200 characters per text. "image" is optional everywhere; "wiki:" looks up a picture by name on Wikipedia, so name a real place, thing or person. Use only stickers from the list. Pick colours that read well on each other.
+            """;
+    }
 
     /// <param name="offerImage">The bot may have its background drawn by the image generator, when it is set up.</param>
     public async Task<StoryDto?> WriteAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default, bool offerImage = false)
@@ -55,7 +62,8 @@ public class StoryWriter(
             logger.LogInformation("Bot {BotName}'s story was dropped: {Error}", bot.Name, error);
             return null;
         }
-        spec = await WithPictureAsync(bot, spec, offerImage, ct);
+        // Whatever the model wrote, a story is a story.
+        spec = await WithPictureAsync(bot, spec with { Format = null }, offerImage, ct);
 
         var result = await publisher.PublishAsync(spec, null, bot.Id, ct);
         if (result.IsFailure)
@@ -93,6 +101,8 @@ public class StoryWriter(
     public async Task<StorySpec> WithPictureAsync(Bot bot, StorySpec spec, bool draw, CancellationToken ct = default)
     {
         static bool Asks(string? image) => image?.Trim().StartsWith("generate", StringComparison.OrdinalIgnoreCase) == true;
+        var stickers = await StickerCatalog.LoadAsync(db, ct);
+        spec = StorySpecRules.WithoutUnknownStickers(spec, name => stickers.Find(name)?.Name);
         spec = spec with { Layers = spec.Layers.Where(l => !(l.Type == "image" && Asks(l.Image))).ToList() };
         if (!Asks(spec.Background.Image))
             return spec;
@@ -100,11 +110,12 @@ public class StoryWriter(
         string? drawn = null;
         if (draw && GenerateAsk(spec.Background.Image) is { } ask && images is { IsEnabled: true })
         {
-            var started = await images.StartAsync(new ImageAsk(ask.Prompt, null, bot.Id, ask.IncludeMe ? bot.Id : null, PictureWidth, PictureHeight), ct);
+            var (width, height) = StoryFormats.Picture(StoryFormats.Of(spec));
+            var started = await images.StartAsync(new ImageAsk(ask.Prompt, null, bot.Id, ask.IncludeMe ? bot.Id : null, width, height), ct);
             if (started.IsSuccess && await started.Value!.Done.WaitAsync(ct))
                 drawn = $"generated:{started.Value.Image.Id}";
             else
-                logger.LogInformation("Bot {BotName}'s story goes without its picture: {Error}", bot.Name, started.Error ?? "it failed");
+                logger.LogInformation("Bot {BotName}'s {Format} goes without its background picture: {Error}", bot.Name, StoryFormats.Of(spec), started.Error ?? "it failed");
         }
         return spec with { Background = spec.Background with { Image = drawn, Fit = drawn is null ? null : spec.Background.Fit } };
     }

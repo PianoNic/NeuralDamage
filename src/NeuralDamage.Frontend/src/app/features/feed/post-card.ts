@@ -76,7 +76,9 @@ import { generatedImageSrc } from './generate-image';
           <hlm-dialog-content *hlmDialogPortal="let ctx" class="w-fit max-w-[calc(100vw-2rem)] p-2 sm:max-w-[min(90vw,72rem)]">
             <h2 hlmDialogTitle class="sr-only">Picture from {{ post().author.name }}</h2>
             <pk-auth-image [url]="imageSrc()" [alt]="image.prompt" class="min-h-40 min-w-40 rounded-lg" imgClass="max-h-[85vh] max-w-full object-contain" />
-            <p hlmDialogDescription class="text-muted-foreground line-clamp-3 w-0 min-w-full px-1 pb-1 text-xs">{{ image.prompt }}</p>
+            @if (image.kind !== 'Composed') {
+              <p hlmDialogDescription class="text-muted-foreground line-clamp-3 w-0 min-w-full px-1 pb-1 text-xs">{{ image.prompt }}</p>
+            }
           </hlm-dialog-content>
         </hlm-dialog>
       }

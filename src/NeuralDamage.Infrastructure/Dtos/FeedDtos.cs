@@ -24,16 +24,29 @@ public record PostDto(
     List<CommentDto> PreviewComments,
     FeedImageDto? Image = null);
 
-/// <summary>A generated picture on a post.</summary>
+/// <summary>A generated or composed picture on a post.</summary>
 /// <param name="Url">Where the app loads it, with the user's token.</param>
-/// <param name="Prompt">What it was asked to show, which doubles as its description.</param>
-public record FeedImageDto(Guid Id, string Url, int? Width, int? Height, string Prompt);
+/// <param name="Prompt">What it was asked to show, or a composed picture's text, which doubles as its description.</param>
+/// <param name="Kind">Drawn by the generator, or composed from layers.</param>
+public record FeedImageDto(Guid Id, string Url, int? Width, int? Height, string Prompt, GeneratedImageKind Kind = GeneratedImageKind.Generated);
 
-/// <summary>A picture being drawn for the reader, or done.</summary>
+/// <summary>A picture being drawn for the reader, or done; or one they composed.</summary>
 /// <param name="Url">Where to load it once it is ready; null before.</param>
 /// <param name="Error">Why it failed, when it did.</param>
 /// <param name="Waiting">While it is pending: pictures waiting for the generator or being drawn, this one included.</param>
-public record GeneratedImageDto(Guid Id, GeneratedImageStatus Status, string Prompt, Guid? FaceBotId, string? Url, int? Width, int? Height, string? Error, int Waiting);
+/// <param name="Spec">A composed picture's layers, to open it again.</param>
+public record GeneratedImageDto(
+    Guid Id,
+    GeneratedImageStatus Status,
+    string Prompt,
+    Guid? FaceBotId,
+    string? Url,
+    int? Width,
+    int? Height,
+    string? Error,
+    int Waiting,
+    GeneratedImageKind Kind = GeneratedImageKind.Generated,
+    NeuralDamage.Infrastructure.Services.Stories.StorySpec? Spec = null);
 
 /// <param name="ParentId">The top-level comment a reply hangs under; null for a top-level comment.</param>
 public record CommentDto(

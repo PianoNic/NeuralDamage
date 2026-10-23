@@ -1,4 +1,4 @@
-import { Component, computed, DestroyRef, effect, ElementRef, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, computed, DestroyRef, effect, ElementRef, inject, input, OnInit, output, signal, untracked, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -27,7 +27,7 @@ import { firstValueFrom } from 'rxjs';
 import { BotsService } from '../../api/api/bots.service';
 import { BotPictureSuggestionDto } from '../../api/model/botPictureSuggestionDto';
 import { describeApiError, toastApiError } from '../../core/http-errors';
-import { StickerDto } from '../../core/models';
+import { StickerDto, StorySpec } from '../../core/models';
 import { AvatarImages, isApiAvatar } from '../../shared/avatar-images';
 import { StickerImage } from '../stickers/sticker-image';
 import { StickerPicker } from '../stickers/sticker-picker';
@@ -47,7 +47,8 @@ import {
   PICTURE_SIZE,
   removeLayer,
   reorderLayer,
-  STAGE_HEIGHT,
+  FORMATS,
+  formatOf,
   STAGE_WIDTH,
   StoryDraft,
   TEXT_COLORS,
@@ -61,9 +62,11 @@ import { BotDirectory } from '../bots/bot-directory';
 import { GenerateImage, ImageDraft } from '../feed/generate-image';
 
 /**
- * `/feed/story`: the story editor. A background colour or picture, text, stickers from the library
- * and pictures (uploaded or found on Wikipedia), dragged into place on a 360 × 640 stage that the
- * server renders three times as large. The spec it builds is the same one bots write.
+ * The layer editor. A background colour or picture, text, stickers from the library and pictures
+ * (uploaded or found on Wikipedia), dragged into place on a 360-wide stage that the server renders
+ * three times as large. The spec it builds is the same one bots write. At `/feed/story` it makes a
+ * story (9:16) and posts it; in the post composer (`mode="post"`) it makes a post's picture in 4:5
+ * or square and hands the spec back.
  */
 @Component({
   selector: 'app-story-editor',
@@ -100,19 +103,40 @@ import { GenerateImage, ImageDraft } from '../feed/generate-image';
   ],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
-    <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
-      <button hlmSidebarTrigger></button>
-      <a routerLink="/feed" class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
-        <ng-icon name="lucideChevronLeft" />
-        Feed
-      </a>
-    </header>
+    @if (mode() === 'story') {
+      <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
+        <button hlmSidebarTrigger></button>
+        <a routerLink="/feed" class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
+          <ng-icon name="lucideChevronLeft" />
+          Feed
+        </a>
+      </header>
+    }
 
     <div class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto flex w-full max-w-6xl flex-wrap items-start justify-center gap-6 px-4 py-6">
         <!-- What can be added. -->
         <section aria-label="Add" class="flex min-w-[200px] flex-[0_1_230px] flex-col gap-4">
-          <h1 class="text-lg font-semibold">New story</h1>
+          @if (mode() === 'story') {
+            <h1 class="text-lg font-semibold">New story</h1>
+          } @else {
+            <h2 class="text-lg font-semibold">Create image</h2>
+            <div class="flex flex-col gap-2">
+              <span class="text-muted-foreground text-xs" id="picture-format-label">Shape</span>
+              <hlm-toggle-group
+                type="single"
+                variant="outline"
+                size="sm"
+                aria-labelledby="picture-format-label"
+                [nullable]="false"
+                [value]="format()"
+                (valueChange)="setFormat($event)"
+              >
+                <button hlmToggleGroupItem value="post-4x5" class="px-3">4:5</button>
+                <button hlmToggleGroupItem value="post-1x1" class="px-3">Square</button>
+              </hlm-toggle-group>
+            </div>
+          }
 
           <div class="flex flex-col gap-2">
             <span class="text-muted-foreground text-xs">Background</span>
@@ -138,7 +162,8 @@ import { GenerateImage, ImageDraft } from '../feed/generate-image';
             @if (imageGeneration()) {
               <app-generate-image
                 label="Generate background"
-                [forStory]="true"
+                [forStory]="format() === 'story'"
+                [format]="format() === 'story' ? null : format()"
                 [bots]="botList.bots()"
                 [busy]="picture.pending()"
                 (generate)="picture.generate($event)"
@@ -214,7 +239,7 @@ import { GenerateImage, ImageDraft } from '../feed/generate-image';
             class="relative touch-none overflow-hidden rounded-2xl border select-none"
             data-testid="stage"
             [style.width.px]="stageWidth"
-            [style.height.px]="stageHeight"
+            [style.height.px]="stageHeight()"
             [style.background-color]="draft().background"
             (pointermove)="onPointerMove($event)"
             (pointerup)="dragging = null"
@@ -346,20 +371,31 @@ import { GenerateImage, ImageDraft } from '../feed/generate-image';
 
           @if (preview(); as url) {
             <div class="flex items-start gap-3">
-              <img [src]="url" alt="Rendered story" class="h-48 w-[108px] rounded-md border" data-testid="preview" />
-              <p class="text-muted-foreground text-[13px]">This is the PNG that gets posted, rendered by the server at 1080 × 1920.</p>
+              <img
+                [src]="url"
+                [alt]="mode() === 'story' ? 'Rendered story' : 'Rendered picture'"
+                class="w-[108px] rounded-md border"
+                [style.aspect-ratio]="canvas().width + ' / ' + canvas().height"
+                data-testid="preview"
+              />
+              <p class="text-muted-foreground text-[13px]">
+                This is the PNG that gets posted, rendered by the server at {{ canvas().width }} × {{ canvas().height }}.
+              </p>
             </div>
           }
           @if (problem(); as message) {
             <p class="text-muted-foreground text-[13px]" role="status">{{ message }}</p>
           }
           <div class="flex gap-2">
+            @if (mode() === 'post') {
+              <button hlmBtn variant="ghost" type="button" (click)="cancel.emit()">Cancel</button>
+            }
             <button hlmBtn variant="outline" type="button" class="flex-1" [disabled]="!!problem() || busy()" (click)="renderPreview()">Preview</button>
-            <button hlmBtn type="button" class="flex-1" [disabled]="!!problem() || busy()" (click)="post()">
-              @if (busy()) {
+            <button hlmBtn type="button" class="flex-1" [disabled]="!!problem() || busy() || working()" (click)="post()">
+              @if (busy() || working()) {
                 <hlm-spinner />
               }
-              Post story
+              {{ mode() === 'story' ? 'Post story' : 'Use image' }}
             </button>
           </div>
         </section>
@@ -367,7 +403,17 @@ import { GenerateImage, ImageDraft } from '../feed/generate-image';
     </div>
   `,
 })
-export class StoryEditor {
+export class StoryEditor implements OnInit {
+  /** A story, posted from here; or a post's picture, handed back through `compose`. */
+  readonly mode = input<'story' | 'post'>('story');
+  /** The layers to start from, e.g. a post's picture opened again. */
+  readonly initial = input<StoryDraft | null>(null);
+  /** The page is saving what `compose` handed it. */
+  readonly working = input(false);
+  /** A post's picture is done: its spec, and the draft to open it again with. */
+  readonly compose = output<{ spec: StorySpec; draft: StoryDraft }>();
+  readonly cancel = output<void>();
+
   private readonly store = inject(StoryStore);
   protected readonly picture = inject(ImageDraft);
   protected readonly botList = inject(BotDirectory);
@@ -378,7 +424,6 @@ export class StoryEditor {
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
 
   protected readonly stageWidth = STAGE_WIDTH;
-  protected readonly stageHeight = STAGE_HEIGHT;
   protected readonly backgrounds = BACKGROUNDS;
   protected readonly textColors = TEXT_COLORS;
   protected readonly textSize = TEXT_SIZE;
@@ -395,6 +440,9 @@ export class StoryEditor {
   protected readonly searching = signal(false);
   protected readonly found = signal<(BotPictureSuggestionDto & { name: string })[]>([]);
 
+  protected readonly format = computed(() => formatOf(this.draft()));
+  protected readonly canvas = computed(() => FORMATS[this.format()]);
+  protected readonly stageHeight = computed(() => this.canvas().stageHeight);
   protected readonly selected = computed(() => this.draft().layers.find((l) => l.id === this.draft().selectedId) ?? null);
   protected readonly problem = computed(() => draftProblem(this.draft()));
   protected readonly imageCount = computed(() => this.draft().layers.filter((l) => l.type === 'image').length);
@@ -419,10 +467,21 @@ export class StoryEditor {
       });
     });
     inject(DestroyRef).onDestroy(() => {
-      this.objectUrls.forEach((u) => URL.revokeObjectURL(u));
+      // A post's picture can be opened again, so its uploads stay viewable for the page's life.
+      if (this.mode() === 'story') this.objectUrls.forEach((u) => URL.revokeObjectURL(u));
       const preview = this.preview();
       if (preview) URL.revokeObjectURL(preview);
     });
+  }
+
+  ngOnInit(): void {
+    const initial = this.initial();
+    if (initial) this.draft.set(initial);
+    else if (this.mode() === 'post') this.draft.set(addText(emptyDraft('post-4x5'), 'Your text'));
+  }
+
+  protected setFormat(format: string | string[] | null | undefined): void {
+    if (format === 'post-4x5' || format === 'post-1x1') this.apply((d) => ({ ...d, format }));
   }
 
   /** Every change goes through here, and an old preview no longer shows the story. */
@@ -554,6 +613,10 @@ export class StoryEditor {
   }
 
   protected async post(): Promise<void> {
+    if (this.mode() === 'post') {
+      this.compose.emit({ spec: toSpec(this.draft()), draft: this.draft() });
+      return;
+    }
     this.busy.set(true);
     try {
       await this.store.publish(toSpec(this.draft()));

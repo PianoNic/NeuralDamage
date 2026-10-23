@@ -38,6 +38,7 @@ public class GeneratedImageConfiguration : IEntityTypeConfiguration<GeneratedIma
         builder.Property(i => i.Error).HasMaxLength(300);
         builder.Property(i => i.ContentType).HasMaxLength(64).IsRequired();
         builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(16);
+        builder.Property(i => i.Kind).HasConversion<string>().HasMaxLength(16);
 
         // A person's or a bot's pictures go with them; a face only loses its link.
         builder.HasOne<User>().WithMany().HasForeignKey(i => i.UserId).OnDelete(DeleteBehavior.Cascade);

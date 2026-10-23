@@ -7,6 +7,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { GeneratedImageKind } from './generatedImageKind';
 
 
 export interface FeedImageDto { 
@@ -15,5 +16,9 @@ export interface FeedImageDto {
     width?: number | null;
     height?: number | null;
     prompt: string;
+    kind: GeneratedImageKind;
 }
+export namespace FeedImageDto {
+}
+
 
