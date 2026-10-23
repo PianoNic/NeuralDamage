@@ -323,11 +323,6 @@ import { StoryStore } from './story-store';
             </div>
           }
 
-          <div hlmCard class="gap-2 px-3.5" size="sm">
-            <h2 class="text-sm font-semibold">What a bot sends</h2>
-            <pre class="bg-muted text-muted-foreground max-h-56 overflow-auto rounded-md p-2.5 text-[11px] leading-snug whitespace-pre-wrap" data-testid="spec-json">{{ json() }}</pre>
-          </div>
-
           @if (preview(); as url) {
             <div class="flex items-start gap-3">
               <img [src]="url" alt="Rendered story" class="h-48 w-[108px] rounded-md border" data-testid="preview" />
@@ -377,7 +372,6 @@ export class StoryEditor {
   protected readonly found = signal<(BotPictureSuggestionDto & { name: string })[]>([]);
 
   protected readonly selected = computed(() => this.draft().layers.find((l) => l.id === this.draft().selectedId) ?? null);
-  protected readonly json = computed(() => JSON.stringify(toSpec(this.draft()), null, 2));
   protected readonly problem = computed(() => draftProblem(this.draft()));
   protected readonly imageCount = computed(() => this.draft().layers.filter((l) => l.type === 'image').length);
 
