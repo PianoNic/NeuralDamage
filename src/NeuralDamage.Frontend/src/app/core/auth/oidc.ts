@@ -1,5 +1,7 @@
 import { EnvironmentProviders, makeEnvironmentProviders } from '@angular/core';
 import {
+  AbstractSecurityStorage,
+  DefaultLocalStorageService,
   LogLevel,
   provideAuth,
   StsConfigHttpLoader,
@@ -14,7 +16,8 @@ const AUTHORITY_KEY = 'neuraldamage.oidc.authority';
 
 /**
  * The identity provider's settings come from `/api/app` at runtime, so the bundle carries no
- * environment. The access token is only attached to this API's `/api/` requests.
+ * environment. The access token is only attached to this API's `/api/` requests. The session lives
+ * in localStorage and renews with refresh tokens, so closing the tab does not sign anyone out.
  */
 export function provideOidc(): EnvironmentProviders {
   return makeEnvironmentProviders([
@@ -32,10 +35,12 @@ export function provideOidc(): EnvironmentProviders {
                   redirectUrl: config.redirectUri,
                   postLogoutRedirectUri: config.postLogoutRedirectUri,
                   clientId: config.clientId,
-                  scope: config.scope,
+                  scope: withOfflineAccess(config.scope),
                   responseType: 'code',
-                  silentRenew: false,
-                  useRefreshToken: false,
+                  silentRenew: true,
+                  useRefreshToken: true,
+                  // Refreshed ID tokens carry no nonce.
+                  ignoreNonceAfterRefresh: true,
                   secureRoutes: [`${environment.apiBaseUrl}/api/`],
                   unauthorizedRoute: '/login',
                   logLevel: environment.production ? LogLevel.None : LogLevel.Warn,
@@ -46,7 +51,14 @@ export function provideOidc(): EnvironmentProviders {
         deps: [ApplicationConfigurationService, AppConfig],
       },
     }),
+    { provide: AbstractSecurityStorage, useClass: DefaultLocalStorageService },
   ]);
+}
+
+/** Refresh tokens need `offline_access`; it is added when the configured scope leaves it out. */
+export function withOfflineAccess(scope: string): string {
+  const scopes = scope.split(/\s+/).filter(Boolean);
+  return (scopes.includes('offline_access') ? scopes : [...scopes, 'offline_access']).join(' ');
 }
 
 /**
@@ -63,10 +75,13 @@ function forgetSessionOfOtherIssuer(authority: string): void {
   }
 }
 
-/** angular-auth-oidc-client keeps its whole state in this tab's sessionStorage. */
+/** Drops angular-auth-oidc-client's state: every stored key that isn't the app's own. */
 export function clearOidcSession(): void {
   try {
     sessionStorage.clear();
+    Object.keys(localStorage)
+      .filter((key) => !key.startsWith('neuraldamage.') && !key.startsWith('nd.'))
+      .forEach((key) => localStorage.removeItem(key));
   } catch {
     // Storage blocked.
   }
