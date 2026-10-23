@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { AuthService } from '../../core/auth/auth.service';
@@ -7,13 +7,13 @@ import { AuthService } from '../../core/auth/auth.service';
 /** Where the identity provider sends the browser back to; finishes the sign-in and moves on. */
 @Component({
   selector: 'app-callback',
-  imports: [RouterLink, HlmButton, HlmSpinner],
+  imports: [HlmButton, HlmSpinner],
   host: { class: 'bg-background flex min-h-svh items-center justify-center p-4' },
   template: `
     @if (error()) {
       <div class="flex flex-col items-center gap-3 text-center">
         <p class="text-destructive text-sm">{{ error() }}</p>
-        <a hlmBtn variant="outline" routerLink="/login">Back to sign in</a>
+        <button hlmBtn variant="outline" (click)="retry()">Try again</button>
       </div>
     } @else {
       <div class="text-muted-foreground flex items-center gap-2 text-sm">
@@ -32,5 +32,9 @@ export class Callback implements OnInit {
     await this.auth.checkAuth();
     if (this.auth.isAuthenticated()) void this.router.navigate(['/']);
     else this.error.set('Signing in did not work. Please try again.');
+  }
+
+  protected retry(): void {
+    this.auth.login();
   }
 }
