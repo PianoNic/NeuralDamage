@@ -42,7 +42,7 @@ public class BotChainTests
     }
 
     [Test]
-    public async Task Ceiling_StopsAChainAtTenBotMessages_AcrossHops()
+    public async Task Ceiling_StopsAChainAtFiveBotMessages_AcrossHops()
     {
         var (h, queue, jev) = await ChattyBotsAsync(botCount: 3, options: Unlimited());
         using var disposable = h;
@@ -52,7 +52,7 @@ public class BotChainTests
         await h.Orchestrator.ProcessMessageAsync(h.Chat.Id, trigger.Id);
         var depths = await DrainAsync(h, queue);
 
-        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(10);
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(5);
         await Assert.That(depths.Max()).IsGreaterThan(1);
     }
 
@@ -113,7 +113,7 @@ public class BotChainTests
     }
 
     [Test]
-    public async Task TwoBots_AnswerEachOther_UpToThreeHops()
+    public async Task TwoBots_AnswerEachOther_UpToTwoHops()
     {
         var (h, queue, _) = await ChattyBotsAsync();
         using var disposable = h;
@@ -123,9 +123,9 @@ public class BotChainTests
         var depths = await DrainAsync(h, queue);
 
         // Both answer the person. Each answer is a message of its own, which
-        // the other bot answers, for three hops.
-        await Assert.That(depths).IsEquivalentTo([1, 1, 2, 2, 3, 3]);
-        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(8);
+        // the other bot answers, for two hops, until the ceiling of five.
+        await Assert.That(depths).IsEquivalentTo([1, 1, 2, 2]);
+        await Assert.That(await BotMessagesAsync(h)).IsEqualTo(5);
     }
 
     [Test]

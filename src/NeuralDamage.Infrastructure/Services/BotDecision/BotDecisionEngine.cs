@@ -148,6 +148,21 @@ public class BotDecisionEngine(
             .Skip(max)
             .Select(d => d.Bot.Id)
             .ToHashSet();
+
+        // In a real group one or two people answer and the rest let it be: in a
+        // chat, each bot already answering makes the next one need to be keener
+        // to join in. Bots a person addressed always answer.
+        if (round.Place == GroupChat && addressed.Count == 0)
+        {
+            var crowd = 0;
+            foreach (var d in decided.Where(d => d.Action == BotAction.Reply && !capped.Contains(d.Bot.Id)).OrderByDescending(d => d.Probability))
+            {
+                if (d.Probability < replyThreshold + crowd * ranking.CrowdStep)
+                    capped.Add(d.Bot.Id);
+                else
+                    crowd++;
+            }
+        }
         if (capped.Count > 0)
             logger.LogInformation("Reply cap of {Max} reached ({BotMessages} bot messages since a person wrote, health {Band}); {Count} bot(s) stay quiet",
                 max, state.Flow.BotMessagesSinceLastHuman, band, capped.Count);

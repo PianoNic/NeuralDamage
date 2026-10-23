@@ -17,7 +17,7 @@ public class BotBehaviorOptions
     /// How many bot-to-bot hops can follow a person's message before the bots
     /// wait for a person again.
     /// </summary>
-    public int MaxBotChainDepth { get; set; } = 3;
+    public int MaxBotChainDepth { get; set; } = 2;
 
     /// <summary>
     /// Safety net for when Jev is wrong or down: after this many bot messages
@@ -25,7 +25,7 @@ public class BotBehaviorOptions
     /// person writes again. Jev's conversation health should stop a chain
     /// well before it.
     /// </summary>
-    public int MaxBotMessagesPerPersonMessage { get; set; } = 10;
+    public int MaxBotMessagesPerPersonMessage { get; set; } = 5;
 
     /// <summary>
     /// A pause before typing starts, as if reading the message first. Each

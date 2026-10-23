@@ -195,7 +195,7 @@ public class BotDecisionEngineTests
         await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
         var message = await h.SayAsync("pineapple, obviously", asBot: h.Bots[3]);
 
-        var verdicts = await DecideAsync(h, jev, message, bots: h.Bots[..3]);
+        var verdicts = await DecideAsync(h, jev, message, NoCrowding, h.Bots[..3]);
 
         await Assert.That(verdicts.Count(v => v.Action == BotAction.Reply)).IsEqualTo(repliers);
         await Assert.That(verdicts.Single(v => v.Bot.Name == "Gemini").Action).IsEqualTo(BotAction.React);
@@ -208,7 +208,7 @@ public class BotDecisionEngineTests
         using var h = await OrchestratorHarness.CreateAsync(botCount: 2);
         var message = await h.SayAsync("ok you two, which is it?");
 
-        var verdicts = await DecideAsync(h, jev, message);
+        var verdicts = await DecideAsync(h, jev, message, NoCrowding);
 
         await Assert.That(verdicts.All(v => v.Action == BotAction.Reply)).IsTrue();
     }
@@ -216,7 +216,7 @@ public class BotDecisionEngineTests
     [Test]
     public async Task HealthBoundaries_AreConfigurable()
     {
-        var ranking = new BotRankingOptions { CautiousHealth = 0.3, SilentHealth = 0.8, CautiousReplyThreshold = 0.7, CautiousMaxReplies = 2 };
+        var ranking = new BotRankingOptions { CautiousHealth = 0.3, SilentHealth = 0.8, CautiousReplyThreshold = 0.7, CautiousMaxReplies = 2, CrowdStep = 0 };
         using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
         await h.SayAsync("pizza?", at: DateTime.UtcNow.AddSeconds(-30));
         var message = await h.SayAsync("pineapple", asBot: h.Bots[2]);
@@ -405,6 +405,35 @@ public class BotDecisionEngineTests
         await Assert.That(verdicts[1].Action).IsEqualTo(BotAction.React);
     }
 
+    /// <summary>For tests about something else, where several bots answer at once.</summary>
+    private static readonly BotRankingOptions NoCrowding = new() { CrowdStep = 0 };
+
+    [Test]
+    public async Task Crowding_EachExtraReplierHasToBeKeener()
+    {
+        var p = new Dictionary<string, double> { ["GPT"] = 0.7, ["Claude"] = 0.95, ["Gemini"] = 0.85, ["Llama"] = 0.8 };
+        var jev = new FakeJev(name => FakeJev.Chose(Reply, p[name]));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 4);
+        var message = await h.SayAsync("everyone, dune: yes or no?");
+
+        var verdicts = await DecideAsync(h, jev, message);
+
+        // Claude clears 0.6, Gemini 0.75; Llama would need 0.9, and GPT gives up too.
+        await Assert.That(verdicts.Where(v => v.Action == BotAction.Reply).Select(v => v.Bot.Name)).IsEquivalentTo(["Claude", "Gemini"]);
+    }
+
+    [Test]
+    public async Task Crowding_LeavesBotsAPersonAddressed()
+    {
+        var jev = new FakeJev(_ => FakeJev.Chose(Reply, 0.65));
+        using var h = await OrchestratorHarness.CreateAsync(botCount: 3);
+        var message = await h.SayAsync($"@{h.Bots[0].Name} @{h.Bots[1].Name} @{h.Bots[2].Name} you three?");
+
+        var verdicts = await DecideAsync(h, jev, message);
+
+        await Assert.That(verdicts.Count(v => v.Action == BotAction.Reply)).IsEqualTo(3);
+    }
+
     [Test]
     public async Task ReplyCap_KeepsTheLikeliestRepliers()
     {
@@ -471,7 +500,7 @@ public class BotDecisionEngineTests
         await Assert.That(options.SilentHealth).IsEqualTo(1.0);
         await Assert.That(options.CautiousReplyThreshold).IsEqualTo(0.85);
         await Assert.That(options.CautiousMaxReplies).IsEqualTo(1);
-        await Assert.That(new NeuralDamage.Infrastructure.Services.BotBehaviorOptions().MaxBotMessagesPerPersonMessage).IsEqualTo(10);
+        await Assert.That(new NeuralDamage.Infrastructure.Services.BotBehaviorOptions().MaxBotMessagesPerPersonMessage).IsEqualTo(5);
     }
 
     [Test]
