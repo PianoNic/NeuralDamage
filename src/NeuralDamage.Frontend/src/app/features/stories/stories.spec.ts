@@ -181,6 +181,43 @@ describe('StoryViewer', () => {
     await settle(fixture);
     expect(reply).toHaveBeenCalledWith('s2', { content: '🔥' });
   });
+
+  it('pauses while held, keeps the story on release, and still skips on a short tap', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StoryViewer],
+      providers: providers({ apiStoriesStoryIdSeenPost: vi.fn(() => of(null)) }),
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StoryViewer);
+    fixture.componentRef.setInput('rings', [ring([story('s1'), story('s2')])]);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const next = el.querySelector<HTMLButtonElement>('[aria-label="Next story"]')!;
+    const image = () => el.querySelector('[data-testid=story-image]')?.getAttribute('src');
+    const progress = () => (el.querySelector('[aria-label="Story 1 of 2"] .bg-white') as HTMLElement).style.width;
+
+    // Hold: the progress stands still and the controls fade out.
+    next.dispatchEvent(new PointerEvent('pointerdown'));
+    await settle(fixture);
+    const before = progress();
+    await new Promise((r) => setTimeout(r, 400));
+    await settle(fixture);
+    expect(progress()).toBe(before);
+    expect(el.querySelector('header')!.classList).toContain('opacity-0');
+
+    // Letting go after holding does not skip.
+    next.dispatchEvent(new PointerEvent('pointerup'));
+    next.click();
+    await settle(fixture);
+    expect(image()).toBe('blob:/api/stories/s1/image');
+    expect(el.querySelector('header')!.classList).not.toContain('opacity-0');
+
+    // A short tap still goes on.
+    next.dispatchEvent(new PointerEvent('pointerdown'));
+    next.dispatchEvent(new PointerEvent('pointerup'));
+    next.click();
+    await settle(fixture);
+    expect(image()).toBe('blob:/api/stories/s2/image');
+  });
 });
 
 describe('StoryEditor', () => {

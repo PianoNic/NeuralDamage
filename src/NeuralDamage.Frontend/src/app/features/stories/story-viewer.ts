@@ -14,6 +14,8 @@ import { StoryStore } from './story-store';
 
 /** How long one story stays up before the next. */
 export const STORY_MS = 6000;
+/** A press longer than this is "hold to look", not a tap: it pauses, and letting go does not skip. */
+export const HOLD_MS = 250;
 export const QUICK_REACTIONS = ['😂', '🔥', '💀', '😍'] as const;
 
 /** Where tapping through goes from (ring, story): the next story, the next ring, or null at the end. */
@@ -45,7 +47,7 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
   template: `
     @if (story(); as s) {
       <div class="flex h-full max-h-[min(100svh,900px)] w-full max-w-[min(100vw,440px)] flex-col gap-3 px-3 pt-3 pb-4" data-testid="story-viewer">
-        <div class="grid gap-1" [style.grid-template-columns]="'repeat(' + count() + ', minmax(0, 1fr))'" [attr.aria-label]="'Story ' + (index() + 1) + ' of ' + count()">
+        <div class="grid gap-1 transition-opacity duration-200" [class.opacity-0]="holding()" [style.grid-template-columns]="'repeat(' + count() + ', minmax(0, 1fr))'" [attr.aria-label]="'Story ' + (index() + 1) + ' of ' + count()">
           @for (bar of bars(); track $index) {
             <div class="h-[3px] overflow-hidden rounded-full bg-white/30">
               <div class="h-full bg-white" [style.width.%]="bar"></div>
@@ -53,7 +55,7 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
           }
         </div>
 
-        <header class="flex items-center gap-2.5">
+        <header class="flex items-center gap-2.5 transition-opacity duration-200" [class.opacity-0]="holding()">
           <app-member-avatar [name]="s.author.name" [avatarUrl]="s.author.avatarUrl" [modelId]="s.author.modelId" [px]="36" />
           <div class="flex min-w-0 flex-1 flex-col leading-tight">
             <span class="truncate text-sm font-semibold">{{ s.author.name }}</span>
@@ -75,12 +77,17 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
           } @else {
             <div class="size-full animate-pulse rounded-2xl bg-white/10"></div>
           }
-          <button type="button" class="absolute inset-y-0 left-0 w-1/3" aria-label="Previous story" (click)="go(-1)"></button>
-          <button type="button" class="absolute inset-y-0 right-0 w-2/3" aria-label="Next story" (click)="go(1)"></button>
+          <!-- Tap left or right to go back or on; press and hold anywhere to pause and look. -->
+          <button type="button" class="absolute inset-y-0 left-0 w-1/3 select-none [-webkit-touch-callout:none]" aria-label="Previous story"
+            (pointerdown)="hold()" (pointerup)="release()" (pointercancel)="release()" (pointerleave)="release()"
+            (contextmenu)="$event.preventDefault()" (click)="tap(-1)"></button>
+          <button type="button" class="absolute inset-y-0 right-0 w-2/3 select-none [-webkit-touch-callout:none]" aria-label="Next story"
+            (pointerdown)="hold()" (pointerup)="release()" (pointercancel)="release()" (pointerleave)="release()"
+            (contextmenu)="$event.preventDefault()" (click)="tap(1)"></button>
         </div>
 
         @if (!ring()?.isMine) {
-          <div class="flex justify-center gap-2" role="group" aria-label="Quick reactions">
+          <div class="flex justify-center gap-2 transition-opacity duration-200" [class.opacity-0]="holding()" role="group" aria-label="Quick reactions">
             @for (emoji of reactions; track emoji) {
               <button
                 type="button"
@@ -92,7 +99,7 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
               </button>
             }
           </div>
-          <form class="flex items-center gap-2" (submit)="$event.preventDefault(); send(draft())">
+          <form class="flex items-center gap-2 transition-opacity duration-200" [class.opacity-0]="holding()" (submit)="$event.preventDefault(); send(draft())">
             <label class="sr-only" for="story-reply">Reply to {{ s.author.name }}</label>
             <input
               id="story-reply"
@@ -109,7 +116,7 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
               <ng-icon name="lucideSend" />
             </button>
           </form>
-          <p class="text-center text-xs text-white/60">Replies go to a direct chat with {{ firstName() }}</p>
+          <p class="text-center text-xs text-white/60 transition-opacity duration-200" [class.opacity-0]="holding()">Replies go to a direct chat with {{ firstName() }}</p>
         }
       </div>
     }
@@ -130,7 +137,12 @@ export class StoryViewer {
   protected readonly ringIndex = signal(0);
   protected readonly index = signal(0);
   protected readonly elapsed = signal(0);
+  /** Paused while the reply box has focus. */
   protected readonly paused = signal(false);
+  /** Paused while the story is pressed and held. */
+  protected readonly holding = signal(false);
+  private holdStart = 0;
+  private heldLong = false;
   protected readonly draft = signal('');
   protected readonly sending = signal(false);
 
@@ -164,13 +176,34 @@ export class StoryViewer {
 
     const tick = 100;
     const timer = setInterval(() => {
-      if (this.paused() || !this.src()) return;
+      if (this.paused() || this.holding() || !this.src()) return;
       const next = this.elapsed() + tick;
       if (next >= STORY_MS) this.go(1);
       else this.elapsed.set(next);
     }, tick);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
     afterNextRender(() => this.closeButton()?.nativeElement.focus());
+  }
+
+  protected hold(): void {
+    this.holding.set(true);
+    this.holdStart = performance.now();
+    this.heldLong = false;
+  }
+
+  protected release(): void {
+    if (!this.holding()) return;
+    this.heldLong = performance.now() - this.holdStart > HOLD_MS;
+    this.holding.set(false);
+  }
+
+  /** The click after a press: a short tap skips, letting go after holding does not. */
+  protected tap(by: 1 | -1): void {
+    if (this.heldLong) {
+      this.heldLong = false;
+      return;
+    }
+    this.go(by);
   }
 
   protected go(by: 1 | -1): void {
