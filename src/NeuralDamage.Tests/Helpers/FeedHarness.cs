@@ -39,7 +39,7 @@ public sealed class FeedHarness : IDisposable
     /// <summary>The picture maker, when the harness was made with a renderer.</summary>
     public ImageGenerator? Images { get; init; }
 
-    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "gateway:free", IImageRenderer? renderer = null, ImageGenOptions? imageGen = null)
+    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "vllm:free", IImageRenderer? renderer = null, ImageGenOptions? imageGen = null)
     {
         var dbOptions = new DbContextOptionsBuilder<NeuralDamageDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         var db = new NeuralDamageDbContext(dbOptions);

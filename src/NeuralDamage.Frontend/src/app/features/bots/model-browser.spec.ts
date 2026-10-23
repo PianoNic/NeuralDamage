@@ -12,11 +12,11 @@ const base: Omit<OpenRouterModel, 'id' | 'name' | 'provider'> = {
   pricing: { prompt: 0.1, completion: 0.5 },
 };
 
-const gateway: OpenRouterModel = {
+const vllm: OpenRouterModel = {
   ...base,
-  id: 'gateway:sgl/deepseek',
-  name: 'AI Gateway: sgl/deepseek',
-  provider: 'AI Gateway',
+  id: 'vllm:deepseek-chat',
+  name: 'vLLM: deepseek-chat',
+  provider: 'vLLM',
   isCustom: true,
   isDefault: true,
   pricing: { prompt: 0, completion: 0 },
@@ -72,12 +72,12 @@ function render(models: OpenRouterModel[]) {
 
 describe('ModelBrowser', () => {
   it('opens on Recommended: the default first, each with its "choose this when" line', () => {
-    const { el, rows } = render([plain, luna, gateway]);
+    const { el, rows } = render([plain, luna, vllm]);
 
     const current = el.querySelector('nav [aria-current="true"]');
     expect(current?.textContent?.trim()).toBe('Recommended');
     expect(rows()).toHaveLength(2);
-    expect(rows()[0]).toContain('sgl/deepseek');
+    expect(rows()[0]).toContain('deepseek-chat');
     expect(rows()[0]).toContain('Default · Best all-rounder for any character');
     expect(rows()[1]).toContain('GPT-6 Luna');
     expect(rows()[1]).toContain('Ultra-short, snappy texting replies');
@@ -85,7 +85,7 @@ describe('ModelBrowser', () => {
   });
 
   it('prices a model that costs nothing as Free', () => {
-    const { rows } = render([gateway, luna]);
+    const { rows } = render([vllm, luna]);
 
     expect(rows()[0]).toContain('Free');
     expect(rows()[0]).not.toContain('$0.00');
@@ -93,7 +93,7 @@ describe('ModelBrowser', () => {
   });
 
   it('lets a search override the Recommended view, across every model', () => {
-    const { rows, search } = render([plain, luna, gateway]);
+    const { rows, search } = render([plain, luna, vllm]);
 
     search('qwen');
     expect(rows()).toHaveLength(1);
