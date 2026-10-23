@@ -35,6 +35,7 @@ export type {
   StickerDto,
   StoryDto,
   StoryImageUploadDto,
+  StoryReplyDto,
   StoryRingDto,
   StorySpec,
   StickerImportResultDto,
@@ -43,7 +44,7 @@ export type {
   UserDto,
 } from '../api';
 
-import type { AttachmentDto, MessageStickerDto, ReactionGroupDto, ReplyInfoDto } from '../api';
+import type { AttachmentDto, MessageStickerDto, ReactionGroupDto, ReplyInfoDto, StoryReplyDto } from '../api';
 
 /**
  * A message as the templates render it. The wire nests sender identity under
@@ -68,6 +69,8 @@ export interface Message {
   attachments: AttachmentDto[];
   /** A sticker message carries the sticker and no text. */
   sticker: MessageStickerDto | null;
+  /** The story this message replies to, when it is a story reply. */
+  story: StoryReplyDto | null;
   createdAt: string;
 }
 

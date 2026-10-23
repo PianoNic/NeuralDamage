@@ -62,6 +62,7 @@ public static class BotPromptBuilder
             - The last line, in parentheses, is a note from the chat app, not a message: never answer or mention it.
             - The first line may also be a note from the chat app, "(Earlier in this chat: ...)": your memory of the chat before the messages you can see. Use it as you would your own memory, and never mention it, quote it or say that there is a summary.
             - Pictures people send reach you either as the picture itself or as [image from Name: what it shows]. Talk about them as if you had seen them, and never mention a description.
+            - [Name replied to your story ("...")] is someone reacting to a story you posted, with what it said in the quotes. Answer their reply in character, as the one who posted it, and don't describe your story back to them.
             - To address another bot, use @TheirName.
             - Don't echo what someone just said.
             - Never say "As an AI" or break character.
@@ -259,11 +260,11 @@ public static class BotPromptBuilder
                 var isOwn = msg.SenderBotId == currentBotId;
                 return new ChatMessage(
                     isOwn ? "assistant" : "user",
-                    Format(msg, i > 0 ? window[i - 1] : null, msg.Id == triggerId, isOwn, images))
+                    Format(msg, i > 0 ? window[i - 1] : null, msg.Id == triggerId, isOwn, images, currentBotId))
                 {
                     Images = images is null
                         ? []
-                        : Ordered(msg).Where(a => images.ContainsKey(a.Id)).Select(a => images[a.Id]).ToList(),
+                        : Pictures(msg).Where(a => images.ContainsKey(a.Id)).Select(a => images[a.Id]).ToList(),
                 };
             }))
             .ToList();
@@ -278,18 +279,24 @@ public static class BotPromptBuilder
     /// <summary>
     /// A message's text with its images written in: "[image from Alice: a cat
     /// asleep on a keyboard]", or just "[image from Alice]" when there is no
-    /// description (yet) or the model gets the picture itself.
+    /// description (yet) or the model gets the picture itself. A reply to a
+    /// story starts with which story it answers, unless <paramref name="story"/>
+    /// is off because the header already says so; the story's picture is never
+    /// written in as the sender's.
     /// </summary>
-    public static string WithImages(Message msg, IReadOnlyDictionary<Guid, ImagePart>? images = null, int maxContentChars = MaxMessageChars)
+    public static string WithImages(Message msg, IReadOnlyDictionary<Guid, ImagePart>? images = null, int maxContentChars = MaxMessageChars, bool story = true)
     {
         var content = msg.Content.Length > maxContentChars
             ? msg.Content[..maxContentChars] + "..."
             : msg.Content;
-        if (msg.Attachments.Count == 0 && msg.Sticker is null)
+        if (story && StoryReply(msg) is { } reply)
+            content = $"[{reply}] {content}";
+        var pictures = Pictures(msg).ToList();
+        if (pictures.Count == 0 && msg.Sticker is null)
             return content;
 
         var sender = SenderName(msg);
-        var lines = Ordered(msg).Select(a =>
+        var lines = pictures.Select(a =>
             images?.ContainsKey(a.Id) != true && !string.IsNullOrWhiteSpace(a.Description)
                 ? $"[image from {sender}: {Cut(a.Description.Trim(), MaxDescriptionChars)}]"
                 : $"[image from {sender}]");
@@ -304,24 +311,45 @@ public static class BotPromptBuilder
             ? $"[sticker from {sender}]"
             : $"[sticker from {sender}: {Cut(sticker.Description.Trim(), MaxDescriptionChars)}]";
 
-    private static IEnumerable<Attachment> Ordered(Message msg) =>
-        msg.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id);
+    /// <summary>
+    /// "replied to your story ("...")" for the bot that posted it, "replied to
+    /// Kim's story ("...")" for anyone else; null when it is no story reply.
+    /// </summary>
+    public static string? StoryReply(Message msg, Guid? viewerBotId = null)
+    {
+        if (!msg.IsStoryReply)
+            return null;
+        var whose = viewerBotId is { } viewer && msg.StoryAuthorBotId == viewer
+            ? "your story"
+            : $"{msg.StoryAuthorName ?? "someone"}'s story";
+        var text = OneLine(msg.StoryText);
+        return text.Length == 0 ? $"replied to {whose}" : $"replied to {whose} (\"{Cut(text, MaxDescriptionChars)}\")";
+    }
+
+    /// <summary>
+    /// The pictures the sender sent. A story reply's picture is the story
+    /// itself, which the model reads from the reference instead.
+    /// </summary>
+    private static IEnumerable<Attachment> Pictures(Message msg) =>
+        msg.IsStoryReply ? [] : msg.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id);
 
     private static string Cut(string text, int max) => text.Length > max ? text[..max] + "..." : text;
 
-    private static string Format(Message msg, Message? previous, bool isTrigger, bool ownTurn, IReadOnlyDictionary<Guid, ImagePart>? images = null)
+    private static string Format(Message msg, Message? previous, bool isTrigger, bool ownTurn, IReadOnlyDictionary<Guid, ImagePart>? images = null, Guid? viewerBotId = null)
     {
         // The bot's own stickers read the way it sends them, so it learns the format from its own turns.
         var content = ownTurn && msg.Sticker is { } sticker && msg.Content.Length == 0
             ? $"[sticker: {sticker.Name}]"
-            : WithImages(msg, images);
-        return ownTurn ? content : $"{Header(msg, previous, isTrigger)}: {content}";
+            : WithImages(msg, images, story: false);
+        return ownTurn ? content : $"{Header(msg, previous, isTrigger, viewerBotId)}: {content}";
     }
 
-    /// <summary>"[Alice, 2h later] (→ Bob) (you're answering this)"</summary>
-    private static string Header(Message msg, Message? previous, bool isTrigger)
+    /// <summary>"[Alice, 2h later] (→ Bob) (you're answering this)", or "[Alice replied to your story ("...")]"</summary>
+    private static string Header(Message msg, Message? previous, bool isTrigger, Guid? viewerBotId)
     {
         var header = $"[{SenderName(msg)}";
+        if (StoryReply(msg, viewerBotId) is { } story)
+            header += $" {story}";
 
         var gap = previous is null ? TimeSpan.Zero : msg.CreatedAt - previous.CreatedAt;
         if (gap > NotableGap)

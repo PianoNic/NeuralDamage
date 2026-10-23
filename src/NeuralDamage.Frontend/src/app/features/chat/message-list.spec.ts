@@ -18,6 +18,7 @@ function message(id: string, minute: number, replyTo?: string): Message {
     reactions: [],
     attachments: [],
     sticker: null,
+    story: null,
     replyTo: replyTo ? { id: replyTo, senderName: 'x', senderType: 'bot', content: 'x' } : null,
     createdAt: new Date(2026, 8, 30, 12, minute).toISOString(),
   };

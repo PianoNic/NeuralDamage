@@ -100,8 +100,8 @@ public class DeleteStoryHandler(NeuralDamageDbContext db, IAttachmentStorage sto
 
 /// <summary>
 /// A reply to a story goes into a direct chat with its author, bot or person,
-/// which is made when there is none yet. The story goes along as a picture, so
-/// the author (and a bot's model) sees what is being answered.
+/// which is made when there is none yet. The story goes along as a picture for
+/// people, and as a reference with what it said for a bot's model.
 /// </summary>
 public record ReplyToStoryCommand(Guid UserId, Guid StoryId, string Content) : ICommand<Result<StoryReplyResultDto>>;
 
@@ -129,12 +129,15 @@ public class ReplyToStoryHandler(NeuralDamageDbContext db, IAttachmentStorage st
         var me = await db.Users.FirstAsync(u => u.Id == request.UserId, cancellationToken);
         var chat = await DirectChatAsync(me, story, cancellationToken);
 
-        // The story as a picture in the chat, already described, so no describer is needed.
+        // The story as a picture in the chat, for people. The model gets the
+        // reference instead, so it reads as a reply to the story rather than
+        // a picture the person sent.
+        var spec = StorySpecRules.Parse(story.Spec).Spec;
+        var author = FeedReads.Author(story.AuthorUser, story.AuthorBot).Name;
+        var said = spec is null ? "" : StorySpecRules.Describe(spec);
         Guid[] attachmentIds = [];
         if (await storage.ReadStoryFileAsync(story.Id, cancellationToken) is { } png)
         {
-            var spec = StorySpecRules.Parse(story.Spec).Spec;
-            var author = FeedReads.Author(story.AuthorUser, story.AuthorBot).Name;
             var attachment = new Attachment
             {
                 ChatId = chat.Id,
@@ -143,7 +146,7 @@ public class ReplyToStoryHandler(NeuralDamageDbContext db, IAttachmentStorage st
                 SizeBytes = png.Length,
                 Width = StoryRenderer.Width,
                 Height = StoryRenderer.Height,
-                Description = $"{author}'s story" + (spec is null ? "" : $": {StorySpecRules.Describe(spec)}"),
+                Description = $"{author}'s story" + (said.Length == 0 ? "" : $": {said}"),
             };
             await storage.SaveAsync(chat.Id, attachment.Id, png, cancellationToken);
             db.Attachments.Add(attachment);
@@ -151,7 +154,9 @@ public class ReplyToStoryHandler(NeuralDamageDbContext db, IAttachmentStorage st
             attachmentIds = [attachment.Id];
         }
 
-        var sent = await sender.Send(new SendMessageCommand(chat.Id, me.Id, content, AttachmentIds: attachmentIds), cancellationToken);
+        var reference = new StoryReference(story.Id, story.AuthorUserId, story.AuthorBotId, author,
+            said.Length > Message.MaxStoryTextLength ? said[..Message.MaxStoryTextLength] : said);
+        var sent = await sender.Send(new SendMessageCommand(chat.Id, me.Id, content, AttachmentIds: attachmentIds, Story: reference), cancellationToken);
         return sent.IsSuccess
             ? Result.Success(new StoryReplyResultDto(chat.Id))
             : Result.Failure<StoryReplyResultDto>(sent.Error!);

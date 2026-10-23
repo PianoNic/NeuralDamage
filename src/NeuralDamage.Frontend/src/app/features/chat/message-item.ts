@@ -66,6 +66,10 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
         }
       }
 
+      @if (storyLabel(); as label) {
+        <span data-testid="story-label" class="text-muted-foreground text-xs">{{ label }}</span>
+      }
+
       @if (showReply() && message().replyTo; as reply) {
         <button
           type="button"
@@ -205,6 +209,13 @@ export class MessageItem {
     () => !!this.currentUserId() && this.message().senderUserId === this.currentUserId(),
   );
   protected readonly isBot = computed(() => this.message().senderType === 'bot');
+  /** "Replied to your story" or "Replied to Kim's story", above a story reply, as in Instagram. */
+  protected readonly storyLabel = computed(() => {
+    const story = this.message().story;
+    if (!story) return null;
+    const mine = !!this.currentUserId() && story.authorUserId === this.currentUserId();
+    return mine ? 'Replied to your story' : `Replied to ${story.authorName}'s story`;
+  });
   protected readonly body = computed(() =>
     markMentions(this.message().content, this.mentionTargets()),
   );

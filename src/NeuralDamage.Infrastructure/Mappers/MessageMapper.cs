@@ -20,7 +20,10 @@ public static class MessageMapper
         message.Reactions.ToGroups(),
         message.ReplyTo?.ToReplyInfo(),
         message.Attachments.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).Select(a => a.ToDto()).ToList(),
-        message.Sticker?.ToMessageDto());
+        message.Sticker?.ToMessageDto(),
+        message.StoryId is { } storyId
+            ? new StoryReplyDto(storyId, message.StoryAuthorName ?? "", message.StoryAuthorUserId, message.StoryAuthorBotId, message.StoryText ?? "")
+            : null);
 
     public static MessageStickerDto ToMessageDto(this Sticker sticker) => new(
         sticker.Id,
