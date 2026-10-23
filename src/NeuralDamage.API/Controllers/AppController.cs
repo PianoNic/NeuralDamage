@@ -18,7 +18,11 @@ namespace NeuralDamage.API.Controllers;
 [Route("api/app")]
 [AllowAnonymous]
 [Tags("Application Configuration")]
-public class AppController(IToamaisutaaClientConfigurationProvider oidc, AttachmentOptions attachments, IOptions<ImageGenOptions> imageGen) : ControllerBase
+public class AppController(
+    IToamaisutaaClientConfigurationProvider oidc,
+    AttachmentOptions attachments,
+    IOptions<ImageGenOptions> imageGen,
+    IOptions<NeuralDamage.Infrastructure.Services.WebImages.ImageSearchOptions> imageSearch) : ControllerBase
 {
     [HttpGet(Name = "appConfiguration")]
     [ProducesResponseType<AppConfigurationDto>(StatusCodes.Status200OK)]
@@ -33,7 +37,8 @@ public class AppController(IToamaisutaaClientConfigurationProvider oidc, Attachm
             config.Scope,
             attachments.Limits(),
             Version,
-            imageGen.Value.Enabled));
+            imageGen.Value.Enabled,
+            imageSearch.Value.Enabled));
     }
 
     /// <summary>

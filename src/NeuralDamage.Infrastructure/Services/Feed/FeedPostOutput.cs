@@ -6,10 +6,11 @@ namespace NeuralDamage.Infrastructure.Services.Feed;
 /// <summary>
 /// The picture a bot asked for with its post: drawn by the image generator
 /// from <see cref="Prompt"/>, or composed by the bot itself from layers
-/// (<see cref="Spec"/>), like a story in a post's format.
+/// (<see cref="Spec"/>), like a story in a post's format, or found on the web
+/// (<see cref="Search"/>).
 /// </summary>
 /// <param name="IncludeMe">The bot wants to be in a drawn picture, with its own face.</param>
-public record PostImageAsk(string? Prompt, bool IncludeMe = false, StorySpec? Spec = null);
+public record PostImageAsk(string? Prompt, bool IncludeMe = false, StorySpec? Spec = null, string? Search = null);
 
 /// <summary>
 /// A post the model wrote when it was offered a picture: JSON,
@@ -21,8 +22,12 @@ public static class FeedPostOutput
 {
     /// <summary>What the model is told to answer with.</summary>
     /// <param name="canGenerate">The image generator is set up, so the bot may have a picture drawn.</param>
-    public static string Instruction(bool canIncludeMe, bool canGenerate = true)
+    /// <param name="canSearch">The image web search is set up, so the bot may use a photo from the web.</param>
+    public static string Instruction(bool canIncludeMe, bool canGenerate = true, bool canSearch = false)
     {
+        var searched = canSearch
+            ? "To use a real photo from the web: {\"text\": \"the post\", \"image\": {\"search\": \"what to search for\"}}, naming the thing, place or person precisely, in English. "
+            : "";
         var drawn = canGenerate
             ? "To have an image generator draw it: {\"text\": \"the post\", \"image\": {\"prompt\": \"what the picture shows\", \"includeMe\": false}}. " +
               "Write the image prompt in English, as a detailed description of one photo or scene: who and what is in it, where, the light, the style; " +
@@ -31,10 +36,11 @@ public static class FeedPostOutput
                   ? " Set includeMe to true to be in the picture yourself, with your own face; then call yourself \"this person\" in the prompt. "
                   : " includeMe stays false. ")
             : "";
-        var background = canGenerate ? " " + StoryWriter.GenerateNote(canIncludeMe) : "";
+        var background = (canSearch ? " " + StoryWriter.SearchNote : "") + (canGenerate ? " " + StoryWriter.GenerateNote(canIncludeMe) : "");
         return
             "You may add one picture to this post, if it makes the post better. " +
             "Answer with JSON only, nothing around it: {\"text\": \"the post\", \"image\": null} for no picture. " +
+            searched +
             drawn +
             "To compose it yourself from a background, text, stickers and pictures, like a meme: {\"text\": \"the post\", \"image\": {\"spec\": <the picture>}}, where the picture is " +
             StoryWriter.LayerSchema(StoryFormats.Post4x5).Trim() +
@@ -80,6 +86,9 @@ public static class FeedPostOutput
             var format = StoryFormats.Of(spec);
             return new PostImageAsk(null, Spec: spec with { Format = StoryFormats.IsPost(format) ? format : StoryFormats.Post4x5 });
         }
+
+        if (TryGet(image, "search", out var search) && search.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(search.GetString()))
+            return new PostImageAsk(null, Search: search.GetString()!.Trim());
 
         if (TryGet(image, "prompt", out var prompt) && prompt.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(prompt.GetString()))
         {

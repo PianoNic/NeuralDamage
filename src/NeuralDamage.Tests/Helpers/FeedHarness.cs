@@ -39,7 +39,7 @@ public sealed class FeedHarness : IDisposable
     /// <summary>The picture maker, when the harness was made with a renderer.</summary>
     public ImageGenerator? Images { get; init; }
 
-    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "vllm:free", IImageRenderer? renderer = null, ImageGenOptions? imageGen = null)
+    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "vllm:free", IImageRenderer? renderer = null, ImageGenOptions? imageGen = null, FakeWeb? web = null)
     {
         var dbOptions = new DbContextOptionsBuilder<NeuralDamageDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         var db = new NeuralDamageDbContext(dbOptions);
@@ -85,7 +85,18 @@ public sealed class FeedHarness : IDisposable
         services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Stories.StoryWriter(
             sp.GetRequiredService<NeuralDamageDbContext>(), openRouter, sp.GetRequiredService<FeedPostWriter>(),
             sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>(),
-            NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryWriter>.Instance, clock, sp.GetService<ImageGenerator>()));
+            NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryWriter>.Instance, clock, sp.GetService<ImageGenerator>(),
+            sp.GetService<NeuralDamage.Infrastructure.Services.WebImages.WebImageStore>()));
+        if (web is not null)
+        {
+            services.AddSingleton(web.Search);
+            services.AddSingleton(web.Fetcher);
+            services.AddMemoryCache();
+            services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.WebImages.WebImageStore(
+                sp.GetRequiredService<NeuralDamageDbContext>(), storage, web.Search, web.Fetcher,
+                sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+                NullLogger<NeuralDamage.Infrastructure.Services.WebImages.WebImageStore>.Instance));
+        }
         jev.Engine()(services);
         if (renderer is not null)
         {

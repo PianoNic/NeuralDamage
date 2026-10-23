@@ -43,6 +43,48 @@ public class ImagesController(ISender sender, IUserService userService) : Contro
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    /// <summary>Searches the web for pictures (when <c>ImageSearch:BaseUrl</c> is set); thumbnails come through this API.</summary>
+    [HttpGet("search")]
+    [EnableRateLimiting(RateLimitExtensions.Messages)]
+    [ProducesResponseType<List<WebImageResultDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<List<WebImageResultDto>>> Search([FromQuery] string q, CancellationToken ct)
+    {
+        await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new SearchWebImagesQuery(q ?? ""), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    /// <summary>A small picture of one search result, fetched by the server so the reader's browser never calls the web.</summary>
+    [HttpGet("search/thumbnail")]
+    [ProducesResponseType<FileStreamResult>(StatusCodes.Status200OK, "image/png", "image/jpeg", "image/webp", "image/gif")]
+    [ProducesResponseType<string>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SearchThumbnail([FromQuery] string q, [FromQuery] int index, CancellationToken ct)
+    {
+        await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetWebImageThumbnailQuery(q ?? "", index), ct);
+        if (result.IsFailure)
+            return NotFound(result.Error);
+        Response.Headers.CacheControl = "private, max-age=900";
+        Response.Headers.Vary = "Authorization";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    /// <summary>Fetches one search result and keeps it for the caller's post or story; use it as <c>generated:&lt;id&gt;</c> or as the post's picture.</summary>
+    [HttpPost("search/pick")]
+    [EnableRateLimiting(RateLimitExtensions.Uploads)]
+    [ProducesResponseType<GeneratedImageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<GeneratedImageDto>> PickSearchResult(PickWebImageRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new PickWebImageCommand(userId, request.Query, request.Index), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     /// <summary>The caller's own picture: whether it is done yet.</summary>
     [HttpGet("{imageId:guid}")]
     [ProducesResponseType<GeneratedImageDto>(StatusCodes.Status200OK)]

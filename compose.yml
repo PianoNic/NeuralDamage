@@ -25,6 +25,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=db;Database=neuraldamage;Username=neuraldamage;Password=changeme
+      - ImageSearch__BaseUrl=http://searxng:8080
     volumes:
       - attachments:/app/data/attachments
     ports:
@@ -32,11 +33,56 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      searxng:
+        condition: service_started
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /api/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Image web search for bots and the editors. Only the app talks to it: it has no published port.
+  # Search engines change often, so this follows SearXNG's releases.
+  searxng:
+    image: searxng/searxng:latest
+    container_name: neuraldamage-searxng
+    environment:
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-change-me-to-a-long-random-string}
+    configs:
+      - source: searxng-settings
+        target: /etc/searxng/settings.yml
+    restart: unless-stopped
+
+configs:
+  searxng-settings:
+    content: |
+      use_default_settings:
+        engines:
+          keep_only:
+            - bing images
+            - duckduckgo images
+            - qwant
+            - qwant images
+            - wikicommons.images
+      general:
+        instance_name: NeuralDamage image search
+      server:
+        limiter: false
+        image_proxy: false
+        public_instance: false
+      search:
+        safe_search: 1
+        formats:
+          - html
+          - json
+      outgoing:
+        request_timeout: 5.0
+      engines:
+        # qwant images borrows the qwant engine's network; only the images are used.
+        - name: qwant
+          disabled: true
+        - name: qwant images
+          disabled: false
 
 volumes:
   db-data:

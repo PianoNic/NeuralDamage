@@ -12,6 +12,7 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Stories;
 using NeuralDamage.Infrastructure.Services.Images;
+using NeuralDamage.Infrastructure.Services.WebImages;
 
 namespace NeuralDamage.Infrastructure.BackgroundServices;
 
@@ -194,7 +195,9 @@ public class FeedScheduler(
         // Any picture: one the bot composes always works, a drawn one only with the generator.
         var offerImage = imageRoll < _options.ImageShare;
 
-        var draft = await writer.WriteAsync(bot, now, roll, ct, offerImage, canGenerate);
+        var web = services.GetService<WebImageStore>();
+        var canSearch = web is { IsEnabled: true };
+        var draft = await writer.WriteAsync(bot, now, roll, ct, offerImage, canGenerate, canSearch);
         if (draft is null)
         {
             logger.LogInformation("Bot {BotName} had nothing to post", bot.Name);
@@ -204,6 +207,13 @@ public class FeedScheduler(
         Guid? imageId = null;
         if (draft.Image is { Spec: { } spec })
             imageId = await ComposedAsync(services, bot, spec, canGenerate, ct);
+        else if (draft.Image is { Search: { } query } && canSearch)
+        {
+            // A post shows its picture at its own shape, so a 4:5 one is only a preference.
+            imageId = (await web!.FindForBotAsync(bot.Id, query, 0.8, ct))?.Id;
+            if (imageId is null)
+                logger.LogInformation("Bot {BotName} posts without the picture it searched for", bot.Name);
+        }
         else if (draft.Image is { Prompt: not null } ask && canGenerate)
             imageId = await PictureAsync(images!, bot, ask, ct);
 

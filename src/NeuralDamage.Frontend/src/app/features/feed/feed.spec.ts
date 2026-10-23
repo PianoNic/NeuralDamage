@@ -17,7 +17,7 @@ import { ChatList } from '../chat/chat-list';
 import { activityLine, FeedPage } from './feed-page';
 import { canDelete, formatAgo, mergePosts, threadOf, withComment, withLike } from './feed-model';
 import { textParts } from './feed-text';
-import { PostCard } from './post-card';
+import { imageSource, PostCard } from './post-card';
 import { PostThread } from './post-thread';
 
 const author = (id: string, name: string, isBot = true) => ({ id, name, avatarUrl: null, isBot, modelId: isBot ? 'm/x' : null });
@@ -310,5 +310,31 @@ describe('PostThread', () => {
     await settle(fixture);
     await (fixture.componentInstance as unknown as { comment(c: string): Promise<void> }).comment('rematch?');
     expect(api.apiFeedPostsPostIdCommentsPost).toHaveBeenCalledWith('p1', { content: 'rematch?', parentId: 'c1', stickerId: null });
+  });
+});
+
+describe('PostCard with a picture from the web', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('credits the page it came from, and only ever links http(s)', async () => {
+    expect(imageSource('javascript:alert(1)')).toBeNull();
+    expect(imageSource('not a url')).toBeNull();
+    expect(imageSource('https://www.example.com/photos/1')).toEqual({ href: 'https://www.example.com/photos/1', host: 'example.com' });
+
+    await TestBed.configureTestingModule({
+      imports: [PostCard],
+      providers: [provideRouter([]), { provide: ChatList, useValue: { chats: signal([]) } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PostCard);
+    fixture.componentRef.setInput(
+      'post',
+      post('p1', { image: { id: 'w1', url: '/api/images/w1/file', width: 800, height: 1000, prompt: 'Eiffel Tower', kind: 'Web', sourceUrl: 'https://pages.example.com/tower' } }),
+    );
+    await fixture.whenStable();
+
+    const link = (fixture.nativeElement as HTMLElement).querySelector('[data-testid=post-image-source]') as HTMLAnchorElement;
+    expect(link.href).toBe('https://pages.example.com/tower');
+    expect(link.rel).toContain('noopener');
+    expect(link.textContent).toContain('pages.example.com');
   });
 });

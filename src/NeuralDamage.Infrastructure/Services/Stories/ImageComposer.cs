@@ -25,6 +25,7 @@ public class ImageComposer(NeuralDamageDbContext db, IAttachmentStorage storage,
         if (png.IsFailure)
             return Result.Failure<GeneratedImage>(png.Error!);
 
+        spec = await publisher.WithSourcesAsync(spec, ct);
         var (width, height) = StoryFormats.Canvas(format);
         var description = StorySpecRules.Describe(spec);
         var image = new GeneratedImage
@@ -34,6 +35,7 @@ public class ImageComposer(NeuralDamageDbContext db, IAttachmentStorage storage,
             Kind = GeneratedImageKind.Composed,
             Prompt = description.Length == 0 ? "A picture" : description.Length > GeneratedImage.MaxPromptLength ? description[..GeneratedImage.MaxPromptLength] : description,
             Spec = StorySpecRules.Serialize(spec),
+            SourceUrl = spec.Sources?.FirstOrDefault(),
             Status = GeneratedImageStatus.Ready,
             ContentType = "image/png",
             SizeBytes = png.Value!.Length,

@@ -4,6 +4,7 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Images;
 using NeuralDamage.Infrastructure.Services.Stickers;
+using NeuralDamage.Infrastructure.Services.WebImages;
 
 namespace NeuralDamage.Infrastructure.Services.Stories;
 
@@ -19,9 +20,18 @@ public class StoryWriter(
     StoryPublisher publisher,
     ILogger<StoryWriter> logger,
     BotClock? clock = null,
-    ImageGenerator? images = null)
+    ImageGenerator? images = null,
+    WebImageStore? web = null)
 {
     private readonly BotClock _clock = clock ?? BotClock.Default;
+
+    /// <summary>The image web search is set up, so specs may ask for <c>search:</c> pictures.</summary>
+    public bool CanSearch => web is { IsEnabled: true };
+
+    /// <summary>What the schema says about pictures from the web, when the search is set up.</summary>
+    public const string SearchNote =
+        "Any \"image\" may also be \"search:<what to search the web for>\" to use a real photo from the web: " +
+        "name the thing, place or person precisely, in English, the way you would type it into an image search.";
 
     /// <summary>The schema the model writes a story to, short enough to sit in every prompt.</summary>
     public static readonly string Schema = "Reply with one JSON object and nothing else:\n" + LayerSchema(StoryFormats.Story);
@@ -48,7 +58,7 @@ public class StoryWriter(
     {
         var stickers = await StickerCatalog.LoadAsync(db, ct);
         offerImage = offerImage && images is { IsEnabled: true };
-        var system = SystemPrompt(bot, stickers.ForPrompt, offerImage);
+        var system = SystemPrompt(bot, stickers.ForPrompt, offerImage, CanSearch);
         List<ChatMessage> turns =
         [
             new(ChatMessage.Note, $"(It is {_clock.Describe(now)}. {BotPromptBuilder.Reminder(bot)} Make one story for today, in character: a thought, a mood, a show-off, a joke. Keep the text short, the way stories are.)"),
@@ -92,18 +102,31 @@ public class StoryWriter(
         return null;
     }
 
+    /// <summary>The query of a picture the model asked to have found on the web.</summary>
+    public static string? SearchAsk(string? image)
+    {
+        var value = image?.Trim() ?? "";
+        return value.StartsWith("search:", StringComparison.OrdinalIgnoreCase) && value[7..].Trim() is { Length: > 0 } query ? query : null;
+    }
+
     /// <summary>
-    /// Draws the background the bot asked for and points the spec at it; the
-    /// background is a plain colour when the picture fails. Image layers that
-    /// ask for a drawing are dropped: only the background is drawn, and only
-    /// when <paramref name="draw"/> says the bot was offered it.
+    /// Fetches the pictures the bot asked to find on the web and draws the
+    /// background it asked to have drawn, and points the spec at them. A
+    /// background whose picture fails is a plain colour; an image layer whose
+    /// picture fails is dropped. Image layers that ask for a drawing are
+    /// dropped: only the background is drawn, and only when
+    /// <paramref name="draw"/> says the bot was offered it.
     /// </summary>
     public async Task<StorySpec> WithPictureAsync(Bot bot, StorySpec spec, bool draw, CancellationToken ct = default)
     {
-        static bool Asks(string? image) => image?.Trim().StartsWith("generate", StringComparison.OrdinalIgnoreCase) == true;
+        // "generate:" and "generate-me:", never a picture already made ("generated:<id>").
+        static bool Asks(string? image) =>
+            image?.Trim() is { } value
+            && (value.StartsWith("generate:", StringComparison.OrdinalIgnoreCase) || value.StartsWith("generate-me:", StringComparison.OrdinalIgnoreCase));
         var stickers = await StickerCatalog.LoadAsync(db, ct);
         spec = StorySpecRules.WithoutUnknownStickers(spec, name => stickers.Find(name)?.Name);
         spec = spec with { Layers = spec.Layers.Where(l => !(l.Type == "image" && Asks(l.Image))).ToList() };
+        spec = await WithSearchedAsync(bot, spec, ct);
         if (!Asks(spec.Background.Image))
             return spec;
 
@@ -120,7 +143,46 @@ public class StoryWriter(
         return spec with { Background = spec.Background with { Image = drawn, Fit = drawn is null ? null : spec.Background.Fit } };
     }
 
-    public static string SystemPrompt(Bot bot, IReadOnlyList<BotSticker> stickers, bool offerImage = false)
+    /// <summary>The spec with its <c>search:</c> pictures found and stored, or left out when they cannot be.</summary>
+    private async Task<StorySpec> WithSearchedAsync(Bot bot, StorySpec spec, CancellationToken ct)
+    {
+        var (width, height) = StoryFormats.Canvas(StoryFormats.Of(spec));
+        var found = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        async Task<string?> FindAsync(string query, double aspect)
+        {
+            if (found.TryGetValue(query, out var known))
+                return known;
+            string? reference = null;
+            if (web is { IsEnabled: true } && await web.FindForBotAsync(bot.Id, query, aspect, ct) is { } image)
+                reference = $"generated:{image.Id}";
+            else
+                logger.LogInformation("Bot {BotName}'s picture search found nothing to use", bot.Name);
+            return found[query] = reference;
+        }
+
+        var background = spec.Background;
+        if (SearchAsk(background.Image) is { } backgroundQuery)
+        {
+            var reference = await FindAsync(backgroundQuery, (double)width / height);
+            background = background with { Image = reference, Fit = reference is null ? null : "cover" };
+        }
+
+        var layers = new List<StoryLayer>();
+        foreach (var layer in spec.Layers)
+        {
+            if (layer.Type == "image" && SearchAsk(layer.Image) is { } query)
+            {
+                if (await FindAsync(query, 1.0) is { } reference)
+                    layers.Add(layer with { Image = reference });
+                continue;
+            }
+            layers.Add(layer);
+        }
+        return spec with { Background = background, Layers = layers };
+    }
+
+    public static string SystemPrompt(Bot bot, IReadOnlyList<BotSticker> stickers, bool offerImage = false, bool canSearch = false)
     {
         var list = stickers.Count == 0 ? "(none)" : string.Join("\n", stickers.Select(s => $"{s.Name}: {s.Description}"));
         return $"""
@@ -128,7 +190,7 @@ public class StoryWriter(
 
             You are "{bot.Name}", about to post a story on a chat app: a picture everyone sees for 24 hours, made of a background and layers of text, stickers and pictures.
 
-            {Schema}{(offerImage ? "\n" + GenerateNote(bot.AvatarUrl is not null) : "")}
+            {Schema}{(canSearch ? "\n" + SearchNote : "")}{(offerImage ? "\n" + GenerateNote(bot.AvatarUrl is not null) : "")}
 
             Stickers (name: what it shows):
             {list}

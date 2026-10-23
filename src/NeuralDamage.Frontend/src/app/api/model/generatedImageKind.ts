@@ -9,10 +9,11 @@
  */
 
 
-export type GeneratedImageKind = 'Generated' | 'Composed';
+export type GeneratedImageKind = 'Generated' | 'Composed' | 'Web';
 
 export const GeneratedImageKind = {
     Generated: 'Generated' as GeneratedImageKind,
-    Composed: 'Composed' as GeneratedImageKind
+    Composed: 'Composed' as GeneratedImageKind,
+    Web: 'Web' as GeneratedImageKind
 };
 

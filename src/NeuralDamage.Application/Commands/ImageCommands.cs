@@ -8,6 +8,7 @@ using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Images;
 using NeuralDamage.Infrastructure.Services.Stories;
+using NeuralDamage.Infrastructure.Services.WebImages;
 
 namespace NeuralDamage.Application.Commands;
 
@@ -49,6 +50,63 @@ public class ComposeImageHandler(ImageComposer composer) : ICommandHandler<Compo
         return composed.IsSuccess
             ? Result.Success(GeneratedImages.ToDto(composed.Value!, 0))
             : Result.Failure<GeneratedImageDto>(composed.Error!);
+    }
+}
+
+/// <summary>Searches the web for pictures; the results point at server-side thumbnails, never at the web.</summary>
+public record SearchWebImagesQuery(string Query) : IQuery<Result<List<WebImageResultDto>>>;
+
+public class SearchWebImagesHandler(WebImageStore web) : IQueryHandler<SearchWebImagesQuery, Result<List<WebImageResultDto>>>
+{
+    public async ValueTask<Result<List<WebImageResultDto>>> Handle(SearchWebImagesQuery request, CancellationToken cancellationToken)
+    {
+        if (!web.IsEnabled)
+            return Result.Failure<List<WebImageResultDto>>("Web image search is not set up on this server.");
+        var query = request.Query.Trim();
+        if (query.Length == 0)
+            return Result.Failure<List<WebImageResultDto>>("Type what to search for.");
+        if (query.Length > SearxngImageSearch.MaxQueryLength)
+            return Result.Failure<List<WebImageResultDto>>($"A search can be at most {SearxngImageSearch.MaxQueryLength} characters.");
+
+        var results = await web.SearchAsync(query, cancellationToken);
+        return Result.Success(results.Select((r, i) => new WebImageResultDto(
+            i,
+            r.Title,
+            $"/api/images/search/thumbnail?q={Uri.EscapeDataString(query)}&index={i}",
+            r.SourceUrl.AbsoluteUri,
+            r.Width,
+            r.Height)).ToList());
+    }
+}
+
+public record GetWebImageThumbnailQuery(string Query, int Index) : IQuery<Result<GeneratedImageFile>>;
+
+public class GetWebImageThumbnailHandler(WebImageStore web) : IQueryHandler<GetWebImageThumbnailQuery, Result<GeneratedImageFile>>
+{
+    public async ValueTask<Result<GeneratedImageFile>> Handle(GetWebImageThumbnailQuery request, CancellationToken cancellationToken)
+    {
+        if (!web.IsEnabled || request.Query.Trim().Length is 0 or > SearxngImageSearch.MaxQueryLength)
+            return Result.Failure<GeneratedImageFile>("Image not found.");
+        var image = await web.ThumbnailAsync(request.Query, request.Index, cancellationToken);
+        return image is null
+            ? Result.Failure<GeneratedImageFile>("Image not found.")
+            : Result.Success(new GeneratedImageFile(image.Content, image.ContentType));
+    }
+}
+
+/// <summary>Fetches one result of a search the person made and keeps it for their post or story, with the page it came from.</summary>
+public record PickWebImageCommand(Guid UserId, string Query, int Index) : ICommand<Result<GeneratedImageDto>>;
+
+public class PickWebImageHandler(WebImageStore web) : ICommandHandler<PickWebImageCommand, Result<GeneratedImageDto>>
+{
+    public async ValueTask<Result<GeneratedImageDto>> Handle(PickWebImageCommand request, CancellationToken cancellationToken)
+    {
+        if (!web.IsEnabled)
+            return Result.Failure<GeneratedImageDto>("Web image search is not set up on this server.");
+        var picked = await web.PickAsync(request.UserId, request.Query, request.Index, cancellationToken);
+        return picked.IsSuccess
+            ? Result.Success(GeneratedImages.ToDto(picked.Value!, 0))
+            : Result.Failure<GeneratedImageDto>(picked.Error!);
     }
 }
 
@@ -125,5 +183,6 @@ public static class GeneratedImages
         image.Error,
         image.Status == GeneratedImageStatus.Pending ? Math.Max(1, waiting) : 0,
         image.Kind,
-        image.Spec is { } spec ? StorySpecRules.Parse(spec).Spec : null);
+        image.Spec is { } spec ? StorySpecRules.Parse(spec).Spec : null,
+        image.SourceUrl);
 }

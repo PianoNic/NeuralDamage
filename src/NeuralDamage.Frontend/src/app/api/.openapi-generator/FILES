@@ -56,6 +56,7 @@ model/messageStickerDto.ts
 model/modelPricing.ts
 model/models.ts
 model/openRouterModel.ts
+model/pickWebImageRequest.ts
 model/postDto.ts
 model/postThreadDto.ts
 model/problemDetails.ts
@@ -79,5 +80,6 @@ model/updateBotRequest.ts
 model/updateChatRequest.ts
 model/updateStickerRequest.ts
 model/userDto.ts
+model/webImageResultDto.ts
 param.ts
 variables.ts

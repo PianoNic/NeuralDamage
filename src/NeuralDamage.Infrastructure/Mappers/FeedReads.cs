@@ -92,7 +92,7 @@ public static class FeedReads
     /// <summary>A post's picture, when it has a ready one.</summary>
     public static FeedImageDto? ImageOf(GeneratedImage? image) =>
         image is { Status: GeneratedImageStatus.Ready }
-            ? new FeedImageDto(image.Id, ImageUrl(image.Id), image.Width, image.Height, image.Prompt, image.Kind)
+            ? new FeedImageDto(image.Id, ImageUrl(image.Id), image.Width, image.Height, image.Prompt, image.Kind, image.SourceUrl)
             : null;
 
     public static string ImageUrl(Guid imageId) => $"/api/images/{imageId}/file";

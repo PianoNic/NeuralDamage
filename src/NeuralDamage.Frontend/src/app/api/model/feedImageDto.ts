@@ -17,6 +17,7 @@ export interface FeedImageDto {
     height?: number | null;
     prompt: string;
     kind: GeneratedImageKind;
+    sourceUrl?: string | null;
 }
 export namespace FeedImageDto {
 }

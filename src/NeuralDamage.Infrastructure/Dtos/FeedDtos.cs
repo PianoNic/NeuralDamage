@@ -27,8 +27,9 @@ public record PostDto(
 /// <summary>A generated or composed picture on a post.</summary>
 /// <param name="Url">Where the app loads it, with the user's token.</param>
 /// <param name="Prompt">What it was asked to show, or a composed picture's text, which doubles as its description.</param>
-/// <param name="Kind">Drawn by the generator, or composed from layers.</param>
-public record FeedImageDto(Guid Id, string Url, int? Width, int? Height, string Prompt, GeneratedImageKind Kind = GeneratedImageKind.Generated);
+/// <param name="Kind">Drawn by the generator, composed from layers, or from the web.</param>
+/// <param name="SourceUrl">The page a picture from the web came from, to credit; null for others.</param>
+public record FeedImageDto(Guid Id, string Url, int? Width, int? Height, string Prompt, GeneratedImageKind Kind = GeneratedImageKind.Generated, string? SourceUrl = null);
 
 /// <summary>A picture being drawn for the reader, or done; or one they composed.</summary>
 /// <param name="Url">Where to load it once it is ready; null before.</param>
@@ -46,7 +47,14 @@ public record GeneratedImageDto(
     string? Error,
     int Waiting,
     GeneratedImageKind Kind = GeneratedImageKind.Generated,
-    NeuralDamage.Infrastructure.Services.Stories.StorySpec? Spec = null);
+    NeuralDamage.Infrastructure.Services.Stories.StorySpec? Spec = null,
+    string? SourceUrl = null);
+
+/// <summary>One picture an image web search found.</summary>
+/// <param name="Index">Its place in the results, which is what a pick or a thumbnail asks for.</param>
+/// <param name="ThumbnailUrl">A small version, fetched by the server: <c>/api/images/search/thumbnail</c>.</param>
+/// <param name="SourceUrl">The page it is on.</param>
+public record WebImageResultDto(int Index, string Title, string ThumbnailUrl, string SourceUrl, int? Width, int? Height);
 
 /// <param name="ParentId">The top-level comment a reply hangs under; null for a top-level comment.</param>
 public record CommentDto(

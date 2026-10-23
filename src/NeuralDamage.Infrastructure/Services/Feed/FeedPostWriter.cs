@@ -52,7 +52,8 @@ public partial class FeedPostWriter(
     /// <param name="roll">A random number in [0, 1): whether this post reacts to a chat, and to which.</param>
     /// <param name="offerImage">The bot may add a picture to the post (<see cref="FeedPostOutput"/>): one it composes, or one drawn when <paramref name="canGenerate"/>.</param>
     /// <param name="canGenerate">The image generator is set up.</param>
-    public async Task<FeedDraft?> WriteAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, bool offerImage = false, bool canGenerate = false)
+    /// <param name="canSearch">The image web search is set up.</param>
+    public async Task<FeedDraft?> WriteAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, bool offerImage = false, bool canGenerate = false, bool canSearch = false)
     {
         var material = roll < _options.ChatInspiredShare ? await MaterialAsync(bot, now, roll, ct) : null;
         var recent = await RecentPostsAsync(ct);
@@ -60,7 +61,7 @@ public partial class FeedPostWriter(
         var language = material is null ? PeopleLanguage.Unknown : ChatLanguage.OfPeople(material.Messages);
 
         var system = SystemPrompt(bot, stickers.ForPrompt);
-        var imageNote = offerImage ? FeedPostOutput.Instruction(canIncludeMe: bot.AvatarUrl is not null, canGenerate) : null;
+        var imageNote = offerImage ? FeedPostOutput.Instruction(canIncludeMe: bot.AvatarUrl is not null, canGenerate, canSearch) : null;
         var turns = Turns(bot, material, recent, now, _clock, language, imageNote);
         var model = ModelFor(bot);
         var temperature = Math.Min(bot.Temperature, 1.2);

@@ -60,6 +60,7 @@ import { StoryStore } from './story-store';
 import { AppConfig } from '../../core/app-config';
 import { BotDirectory } from '../bots/bot-directory';
 import { GenerateImage, ImageDraft } from '../feed/generate-image';
+import { WebImagePick, WebImageSearch } from './web-image-search';
 
 /**
  * The layer editor. A background colour or picture, text, stickers from the library and pictures
@@ -86,6 +87,7 @@ import { GenerateImage, ImageDraft } from '../feed/generate-image';
     StickerImage,
     StickerPicker,
     GenerateImage,
+    WebImageSearch,
   ],
   providers: [
     ImageDraft,
@@ -230,6 +232,9 @@ import { GenerateImage, ImageDraft } from '../feed/generate-image';
               </div>
             }
           </form>
+          @if (imageSearch()) {
+            <app-web-image-search (picked)="onWebPick($event)" />
+          }
         </section>
 
         <!-- The stage. -->
@@ -418,6 +423,7 @@ export class StoryEditor implements OnInit {
   protected readonly picture = inject(ImageDraft);
   protected readonly botList = inject(BotDirectory);
   protected readonly imageGeneration = inject(AppConfig).imageGeneration;
+  protected readonly imageSearch = inject(AppConfig).imageSearch;
   private readonly bots = inject(BotsService);
   private readonly images = inject(AvatarImages);
   private readonly router = inject(Router);
@@ -577,6 +583,15 @@ export class StoryEditor implements OnInit {
 
   protected addWiki(picture: BotPictureSuggestionDto & { name: string }): void {
     this.apply((d) => addImage(d, this.wikiRef(picture), this.wikiUrl(picture)));
+  }
+
+  /** A picture from the web, kept by the server as `generated:<id>`, goes in as a layer or the background. */
+  protected onWebPick(pick: WebImagePick): void {
+    const ref = `generated:${pick.image.id}`;
+    const previewUrl = pick.image.url ?? '';
+    if (pick.asBackground) this.apply((d) => ({ ...d, backgroundImage: { ref, previewUrl } }));
+    else if (this.imageCount() >= MAX_IMAGE_LAYERS) toast.info(`A picture can hold ${MAX_IMAGE_LAYERS} images; use it as the background instead.`);
+    else this.apply((d) => addImage(d, ref, previewUrl));
   }
 
   protected useWikiAsBackground(picture: BotPictureSuggestionDto & { name: string }): void {

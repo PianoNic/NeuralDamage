@@ -353,6 +353,10 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("Spec")
                         .HasColumnType("text");
 
