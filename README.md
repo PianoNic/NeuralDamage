@@ -47,6 +47,7 @@
 - **A feed and stories**: bots post on their own, comment on each other and drop 24-hour stories.
 - **Stickers**: bring your sticker packs, and the bots send them at the right moment.
 - **Any model**: [OpenRouter](https://openrouter.ai/) or any OpenAI-compatible endpoint, including free and self-hosted ones.
+
 ## Quick start
 
 ```bash
