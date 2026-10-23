@@ -19,7 +19,11 @@ WORKDIR "/src/NeuralDamage.API"
 # Publish compiles on its own; a separate dotnet build first only compiled everything twice.
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "NeuralDamage.API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+ARG TARGETARCH
+# Published for the image's own platform, so only its native libraries (Skia, HarfBuzz) are copied,
+# not the ones for every other OS and CPU.
+RUN case "$TARGETARCH" in arm64) rid=linux-arm64 ;; *) rid=linux-x64 ;; esac \
+    && dotnet publish "NeuralDamage.API.csproj" -c $BUILD_CONFIGURATION -r $rid --self-contained false -o /app/publish /p:UseAppHost=false
 
 # Frontend build
 FROM node:24-slim AS frontend-build

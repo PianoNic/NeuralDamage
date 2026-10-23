@@ -24,7 +24,8 @@ public static class BotMapper
             ModelStatus.Available,
             null,
             b.FeedEnabled,
-            b.MaxPostsPerDay));
+            b.MaxPostsPerDay,
+            b.MaxStoriesPerDay));
     }
 
     public static BotDto WithModelStatus(this BotDto bot, Func<string, ModelStatus> lookup)

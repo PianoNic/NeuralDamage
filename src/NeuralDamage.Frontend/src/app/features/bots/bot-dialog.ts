@@ -31,8 +31,10 @@ import {
   characterFields,
   clampTemperature,
   DEFAULT_POSTS_PER_DAY,
+  DEFAULT_STORIES_PER_DAY,
   hasModelProblem,
   MAX_POSTS_PER_DAY,
+  MAX_STORIES_PER_DAY,
   MAX_SHORT_DESCRIPTION,
   MAX_TEMPERATURE,
   modelDisplayName,
@@ -371,6 +373,19 @@ interface PictureOffer {
                   />
                   <span class="w-8 text-right text-sm tabular-nums" data-testid="posts-per-day">{{ maxPostsPerDay() }}</span>
                 </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-muted-foreground text-sm" id="bot-stories-label">Stories a day</span>
+                  <hlm-slider
+                    class="flex-1"
+                    aria-labelledby="bot-stories-label"
+                    [min]="0"
+                    [max]="maxStoriesPerDayLimit"
+                    [step]="1"
+                    [value]="[maxStoriesPerDay()]"
+                    (valueChange)="maxStoriesPerDay.set($event[0])"
+                  />
+                  <span class="w-8 text-right text-sm tabular-nums" data-testid="stories-per-day">{{ maxStoriesPerDay() }}</span>
+                </div>
               }
             </div>
           }
@@ -430,6 +445,8 @@ export class BotDialog {
   protected readonly feedEnabled = signal(true);
   protected readonly maxPostsPerDay = signal(DEFAULT_POSTS_PER_DAY);
   protected readonly maxPostsPerDayLimit = MAX_POSTS_PER_DAY;
+  protected readonly maxStoriesPerDay = signal(DEFAULT_STORIES_PER_DAY);
+  protected readonly maxStoriesPerDayLimit = MAX_STORIES_PER_DAY;
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   /** A picture picked but not uploaded yet: it goes up when the bot is saved. */
@@ -507,6 +524,7 @@ export class BotDialog {
         this.temperature.set(clampTemperature(bot?.temperature ?? DEFAULT_TEMPERATURE));
         this.feedEnabled.set(bot?.feedEnabled ?? true);
         this.maxPostsPerDay.set(bot?.maxPostsPerDay ?? DEFAULT_POSTS_PER_DAY);
+        this.maxStoriesPerDay.set(bot?.maxStoriesPerDay ?? DEFAULT_STORIES_PER_DAY);
         this.nameTouched.set(false);
         this.error.set(null);
         this.saving.set(false);
@@ -692,6 +710,7 @@ export class BotDialog {
             temperature: this.temperature(),
             feedEnabled: this.feedEnabled(),
             maxPostsPerDay: this.maxPostsPerDay(),
+            maxStoriesPerDay: this.maxStoriesPerDay(),
             // Always sent, so clearing the field goes back to the server default.
             systemPrompt: this.character().trim(),
           }),
@@ -712,6 +731,7 @@ export class BotDialog {
                 systemPrompt: this.character(),
                 feedEnabled: this.feedEnabled(),
                 maxPostsPerDay: this.maxPostsPerDay(),
+                maxStoriesPerDay: this.maxStoriesPerDay(),
               },
               this.chatId(),
             ),

@@ -38,6 +38,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/feed/feed-page').then((m) => m.FeedPage),
       },
       {
+        path: 'feed/story',
+        title: 'New story · Neural Damage',
+        loadComponent: () => import('./features/stories/story-editor').then((m) => m.StoryEditor),
+      },
+      {
         path: 'feed/:postId',
         title: 'Post · Neural Damage',
         loadComponent: () => import('./features/feed/post-thread').then((m) => m.PostThread),

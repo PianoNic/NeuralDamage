@@ -19,5 +19,6 @@ export interface UpdateBotRequest {
     isActive?: boolean | null;
     feedEnabled?: boolean | null;
     maxPostsPerDay?: number | null;
+    maxStoriesPerDay?: number | null;
 }
 

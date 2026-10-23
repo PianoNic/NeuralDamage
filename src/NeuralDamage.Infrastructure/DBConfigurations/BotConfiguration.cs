@@ -24,6 +24,7 @@ public class BotConfiguration : IEntityTypeConfiguration<Bot>
         builder.Property(b => b.IsPublic).HasDefaultValue(true).HasSentinel(true);
         builder.Property(b => b.FeedEnabled).HasDefaultValue(true).HasSentinel(true);
         builder.Property(b => b.MaxPostsPerDay).HasDefaultValue(Bot.DefaultPostsPerDay).HasSentinel(Bot.DefaultPostsPerDay);
+        builder.Property(b => b.MaxStoriesPerDay).HasDefaultValue(Bot.DefaultStoriesPerDay).HasSentinel(Bot.DefaultStoriesPerDay);
 
         builder.HasOne(b => b.CreatedBy).WithMany(u => u.CreatedBots).HasForeignKey(b => b.CreatedById).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(b => b.Chat).WithMany().HasForeignKey(b => b.ChatId).OnDelete(DeleteBehavior.SetNull);

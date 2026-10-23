@@ -28,6 +28,13 @@ public interface IAttachmentStorage
     Task SaveStickerAsync(Guid stickerId, byte[] data, CancellationToken ct = default);
 
     Task<byte[]?> ReadStickerAsync(Guid stickerId, CancellationToken ct = default);
+
+    /// <summary>Stores a story's PNG or a picture uploaded for one, by its id.</summary>
+    Task SaveStoryFileAsync(Guid id, byte[] data, CancellationToken ct = default);
+
+    Task<byte[]?> ReadStoryFileAsync(Guid id, CancellationToken ct = default);
+
+    void DeleteStoryFile(Guid id);
 }
 
 public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
@@ -97,6 +104,30 @@ public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
         var path = StickerPathOf(stickerId);
         return File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
     }
+
+    public async Task SaveStoryFileAsync(Guid id, byte[] data, CancellationToken ct = default)
+    {
+        var path = StoryPathOf(id);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, data, ct);
+    }
+
+    public async Task<byte[]?> ReadStoryFileAsync(Guid id, CancellationToken ct = default)
+    {
+        var path = StoryPathOf(id);
+        return File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
+    }
+
+    public void DeleteStoryFile(Guid id)
+    {
+        var path = StoryPathOf(id);
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    // Like "bots", "stories" can never be a chat's folder.
+    private string StoryPathOf(Guid id) =>
+        Path.Combine(root, "stories", id.ToString("N"));
 
     // Both parts are GUIDs, so nothing from the request can steer the path.
     private string PathOf(Guid chatId, Guid attachmentId) =>

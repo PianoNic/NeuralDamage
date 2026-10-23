@@ -27,6 +27,9 @@ public class FeedOptions
     /// <summary>At most this many bots post in one tick, so a restart does not bring a burst.</summary>
     public int MaxPostsPerTick { get; set; } = 1;
 
+    /// <summary>How often a bot that is due makes a story instead of a post, while it is under its daily story cap.</summary>
+    public double StoryShare { get; set; } = 0.3;
+
     /// <summary>The model posts are written with; empty means <c>App:DefaultModel</c>, then the bot's own.</summary>
     public string? Model { get; set; }
 

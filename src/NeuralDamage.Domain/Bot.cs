@@ -41,6 +41,12 @@ public class Bot : BaseEntity
 
     public const int DefaultPostsPerDay = 3;
     public const int MaxPostsPerDayLimit = 24;
+
+    /// <summary>The most stories the bot makes on its own in a day.</summary>
+    public int MaxStoriesPerDay { get; set; } = DefaultStoriesPerDay;
+
+    public const int DefaultStoriesPerDay = 1;
+    public const int MaxStoriesPerDayLimit = 6;
     /// <summary>The one chat a private bot belongs to; null for public bots.</summary>
     public Guid? ChatId { get; set; }
     public Chat? Chat { get; set; }

@@ -20,4 +20,6 @@ public class FeedNotifier(IHubContext<ChatHub, IChatClient> hub) : IFeedNotifier
     public Task LikeUpdated(FeedLikeDto like) => hub.Clients.All.FeedLikeUpdated(like);
     public Task Typing(Guid postId, Guid authorId, string name, bool isBot) => hub.Clients.Group(ChatHub.PostGroup(postId)).FeedTyping(postId, authorId, name, isBot);
     public Task Reply(Guid userId, FeedReplyNoticeDto notice) => hub.Clients.Group(ChatHub.UserGroup(userId)).FeedReply(notice);
+    public Task StoryNew(StoryDto story) => hub.Clients.All.StoryNew(story);
+    public Task StoryDeleted(Guid storyId) => hub.Clients.All.StoryDeleted(storyId);
 }

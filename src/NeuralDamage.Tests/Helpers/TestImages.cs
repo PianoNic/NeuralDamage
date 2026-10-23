@@ -99,4 +99,17 @@ public sealed class InMemoryAttachmentStorage : IAttachmentStorage
 
     public Task<byte[]?> ReadStickerAsync(Guid stickerId, CancellationToken ct = default) =>
         Task.FromResult(Stickers.TryGetValue(stickerId, out var data) ? data : null);
+
+    public ConcurrentDictionary<Guid, byte[]> StoryFiles { get; } = new();
+
+    public Task SaveStoryFileAsync(Guid id, byte[] data, CancellationToken ct = default)
+    {
+        StoryFiles[id] = data;
+        return Task.CompletedTask;
+    }
+
+    public Task<byte[]?> ReadStoryFileAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(StoryFiles.TryGetValue(id, out var data) ? data : null);
+
+    public void DeleteStoryFile(Guid id) => StoryFiles.TryRemove(id, out _);
 }

@@ -49,5 +49,20 @@ public record FeedReplyNoticeDto(Guid PostId, Guid CommentId, string AuthorName,
 /// <param name="Kind">post, comment or story.</param>
 public record FeedActivityItemDto(string Kind, string ActorName, bool ActorIsBot, Guid? PostId, string? Text, DateTime At);
 
+/// <param name="ImageUrl">The rendered 1080×1920 PNG; it needs the sign-in token.</param>
+/// <param name="Description">What it says, as text: its text layers and stickers.</param>
+public record StoryDto(Guid Id, FeedAuthorDto Author, string ImageUrl, DateTime CreatedAt, DateTime ExpiresAt, bool Seen, string Description);
+
+/// <summary>One circle in the stories row: someone's live stories, oldest first.</summary>
+/// <param name="AllSeen">The reader has seen every one of them, so the ring is grey.</param>
+/// <param name="IsMine">The reader's own stories.</param>
+public record StoryRingDto(FeedAuthorDto Author, List<StoryDto> Stories, bool AllSeen, bool IsMine);
+
+/// <param name="Ref">What a spec names it by: <c>upload:&lt;id&gt;</c>.</param>
+public record StoryImageUploadDto(Guid Id, string Ref, int? Width, int? Height);
+
+/// <summary>The direct chat a story reply went to.</summary>
+public record StoryReplyResultDto(Guid ChatId);
+
 /// <summary>The side panel: what just happened, and today's counts.</summary>
 public record FeedActivityDto(List<FeedActivityItemDto> Recent, int PostsToday, int BotCommentsToday, int StoriesLive);

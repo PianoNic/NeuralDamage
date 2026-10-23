@@ -95,11 +95,15 @@ export interface BotFormValue {
   feedEnabled?: boolean;
   /** Its own posts per day at most. */
   maxPostsPerDay?: number;
+  /** Its own stories per day at most. */
+  maxStoriesPerDay?: number;
 }
 
-/** The default and the bounds of a bot's own posts per day. */
+/** The default and the bounds of a bot's own posts and stories per day. */
 export const DEFAULT_POSTS_PER_DAY = 3;
 export const MAX_POSTS_PER_DAY = 24;
+export const DEFAULT_STORIES_PER_DAY = 1;
+export const MAX_STORIES_PER_DAY = 6;
 
 /**
  * The character and short description to edit for a bot. Bots from before the short description
@@ -137,6 +141,7 @@ export function toCreateRequest(value: BotFormValue, chatId: string | null | und
     chatId: chatId || null,
     feedEnabled: value.feedEnabled ?? true,
     maxPostsPerDay: value.maxPostsPerDay ?? DEFAULT_POSTS_PER_DAY,
+    maxStoriesPerDay: value.maxStoriesPerDay ?? DEFAULT_STORIES_PER_DAY,
   };
 }
 

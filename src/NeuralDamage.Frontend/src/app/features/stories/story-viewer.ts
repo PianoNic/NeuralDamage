@@ -1,0 +1,217 @@
+import { afterNextRender, Component, computed, DestroyRef, effect, ElementRef, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { Router } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideTrash2, lucideX } from '@ng-icons/lucide';
+import { toast } from '@spartan-ng/brain/sonner';
+import { HlmButton } from '@spartan-ng/helm/button';
+import { HlmInput } from '@spartan-ng/helm/input';
+import { toastApiError } from '../../core/http-errors';
+import { StoryDto, StoryRingDto } from '../../core/models';
+import { AvatarImages } from '../../shared/avatar-images';
+import { MemberAvatar } from '../../shared/member-avatar';
+import { formatAgo } from '../feed/feed-model';
+import { StoryStore } from './story-store';
+
+/** How long one story stays up before the next. */
+export const STORY_MS = 6000;
+export const QUICK_REACTIONS = ['😂', '🔥', '💀', '😍'] as const;
+
+/** Where tapping through goes from (ring, story): the next story, the next ring, or null at the end. */
+export function step(rings: readonly StoryRingDto[], ring: number, story: number, by: 1 | -1): { ring: number; story: number } | null {
+  const next = story + by;
+  if (next >= 0 && next < (rings[ring]?.stories.length ?? 0)) return { ring, story: next };
+  const nextRing = ring + by;
+  if (nextRing < 0 || nextRing >= rings.length) return null;
+  return { ring: nextRing, story: by === 1 ? 0 : rings[nextRing].stories.length - 1 };
+}
+
+/**
+ * The full-screen viewer: progress bars, who and when, the story, tap left or right to go back or
+ * on, quick reactions and "Reply to X", which go to a direct chat with them.
+ */
+@Component({
+  selector: 'app-story-viewer',
+  imports: [NgIcon, HlmButton, HlmInput, MemberAvatar],
+  providers: [provideIcons({ lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideTrash2, lucideX })],
+  host: {
+    class: 'fixed inset-0 z-50 flex items-center justify-center bg-black/95 text-white',
+    role: 'dialog',
+    'aria-modal': 'true',
+    '[attr.aria-label]': '"Story by " + (story()?.author?.name ?? "")',
+    '(keydown.escape)': 'close.emit()',
+    '(keydown.arrowright)': 'go(1)',
+    '(keydown.arrowleft)': 'go(-1)',
+  },
+  template: `
+    @if (story(); as s) {
+      <div class="flex h-full max-h-[min(100svh,900px)] w-full max-w-[min(100vw,440px)] flex-col gap-3 px-3 pt-3 pb-4" data-testid="story-viewer">
+        <div class="grid gap-1" [style.grid-template-columns]="'repeat(' + count() + ', minmax(0, 1fr))'" [attr.aria-label]="'Story ' + (index() + 1) + ' of ' + count()">
+          @for (bar of bars(); track $index) {
+            <div class="h-[3px] overflow-hidden rounded-full bg-white/30">
+              <div class="h-full bg-white" [style.width.%]="bar"></div>
+            </div>
+          }
+        </div>
+
+        <header class="flex items-center gap-2.5">
+          <app-member-avatar [name]="s.author.name" [avatarUrl]="s.author.avatarUrl" [modelId]="s.author.modelId" [px]="36" />
+          <div class="flex min-w-0 flex-1 flex-col leading-tight">
+            <span class="truncate text-sm font-semibold">{{ s.author.name }}</span>
+            <span class="text-xs text-white/70">{{ ago(s.createdAt) }}{{ s.author.isBot ? ' · Bot' : '' }}</span>
+          </div>
+          @if (ring()?.isMine) {
+            <button hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Delete story" (click)="remove(s)">
+              <ng-icon name="lucideTrash2" />
+            </button>
+          }
+          <button #closeButton hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Close story" (click)="close.emit()">
+            <ng-icon name="lucideX" size="22" />
+          </button>
+        </header>
+
+        <div class="relative min-h-0 flex-1">
+          @if (src(); as url) {
+            <img [src]="url" [alt]="s.description || 'Story by ' + s.author.name" class="size-full rounded-2xl object-contain" data-testid="story-image" />
+          } @else {
+            <div class="size-full animate-pulse rounded-2xl bg-white/10"></div>
+          }
+          <button type="button" class="absolute inset-y-0 left-0 w-1/3" aria-label="Previous story" (click)="go(-1)"></button>
+          <button type="button" class="absolute inset-y-0 right-0 w-2/3" aria-label="Next story" (click)="go(1)"></button>
+        </div>
+
+        @if (!ring()?.isMine) {
+          <div class="flex justify-center gap-2" role="group" aria-label="Quick reactions">
+            @for (emoji of reactions; track emoji) {
+              <button
+                type="button"
+                class="h-10 min-w-12 rounded-full border border-white/20 bg-white/10 px-3 text-lg transition-colors hover:bg-white/20"
+                [attr.aria-label]="'React with ' + emoji"
+                (click)="send(emoji)"
+              >
+                {{ emoji }}
+              </button>
+            }
+          </div>
+          <form class="flex items-center gap-2" (submit)="$event.preventDefault(); send(draft())">
+            <label class="sr-only" for="story-reply">Reply to {{ s.author.name }}</label>
+            <input
+              id="story-reply"
+              hlmInput
+              class="h-11 flex-1 rounded-full border-white/30 bg-transparent px-4 text-white placeholder:text-white/60"
+              [placeholder]="'Reply to ' + s.author.name"
+              autocomplete="off"
+              [value]="draft()"
+              (input)="draft.set($any($event.target).value)"
+              (focus)="paused.set(true)"
+              (blur)="paused.set(false)"
+            />
+            <button hlmBtn size="icon" class="size-11 rounded-full" type="submit" aria-label="Send reply" [disabled]="!draft().trim() || sending()">
+              <ng-icon name="lucideSend" />
+            </button>
+          </form>
+          <p class="text-center text-xs text-white/60">Replies go to a direct chat with {{ firstName() }}</p>
+        }
+      </div>
+    }
+  `,
+})
+export class StoryViewer {
+  private readonly store = inject(StoryStore);
+  private readonly images = inject(AvatarImages);
+  private readonly router = inject(Router);
+  private readonly closeButton = viewChild<ElementRef<HTMLButtonElement>>('closeButton');
+
+  readonly rings = input.required<StoryRingDto[]>();
+  /** The ring to open, and its first story the reader has not seen. */
+  readonly startRing = input(0);
+  readonly close = output<void>();
+
+  protected readonly reactions = QUICK_REACTIONS;
+  protected readonly ringIndex = signal(0);
+  protected readonly index = signal(0);
+  protected readonly elapsed = signal(0);
+  protected readonly paused = signal(false);
+  protected readonly draft = signal('');
+  protected readonly sending = signal(false);
+
+  protected readonly ring = computed<StoryRingDto | null>(() => this.rings().at(this.ringIndex()) ?? null);
+  protected readonly story = computed<StoryDto | null>(() => this.ring()?.stories[this.index()] ?? null);
+  protected readonly count = computed(() => this.ring()?.stories.length ?? 0);
+  protected readonly bars = computed(() =>
+    Array.from({ length: this.count() }, (_, i) => (i < this.index() ? 100 : i > this.index() ? 0 : Math.min(100, (this.elapsed() / STORY_MS) * 100))),
+  );
+  protected readonly src = computed(() => {
+    const s = this.story();
+    return s ? this.images.get(s.imageUrl)() : null;
+  });
+  protected readonly firstName = computed(() => this.story()?.author.name ?? '');
+
+  constructor() {
+    effect(() => {
+      const start = this.startRing();
+      untracked(() => {
+        this.ringIndex.set(start);
+        const stories = this.rings()[start]?.stories ?? [];
+        const firstUnseen = stories.findIndex((s) => !s.seen);
+        this.index.set(firstUnseen >= 0 ? firstUnseen : 0);
+      });
+    });
+    // Each story counts as seen once it is on screen.
+    effect(() => {
+      const s = this.story();
+      if (s) untracked(() => void this.store.markSeen(s));
+    });
+
+    const tick = 100;
+    const timer = setInterval(() => {
+      if (this.paused() || !this.src()) return;
+      const next = this.elapsed() + tick;
+      if (next >= STORY_MS) this.go(1);
+      else this.elapsed.set(next);
+    }, tick);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+    afterNextRender(() => this.closeButton()?.nativeElement.focus());
+  }
+
+  protected go(by: 1 | -1): void {
+    const next = step(this.rings(), this.ringIndex(), this.index(), by);
+    this.elapsed.set(0);
+    if (!next) {
+      if (by === 1) this.close.emit();
+      return;
+    }
+    this.ringIndex.set(next.ring);
+    this.index.set(next.story);
+  }
+
+  protected ago(at: string): string {
+    return formatAgo(at);
+  }
+
+  protected async send(content: string): Promise<void> {
+    const s = this.story();
+    if (!s || !content.trim() || this.sending()) return;
+    this.sending.set(true);
+    try {
+      const chatId = await this.store.reply(s, content.trim());
+      this.draft.set('');
+      toast.success(`Sent to ${s.author.name}`, {
+        action: { label: 'Open chat', onClick: () => void this.router.navigate(['/chat', chatId]) },
+      });
+    } catch (error) {
+      toastApiError(error, { network: 'Not sent. Check your connection and try again.' });
+    } finally {
+      this.sending.set(false);
+    }
+  }
+
+  protected async remove(s: StoryDto): Promise<void> {
+    try {
+      await this.store.remove(s);
+      if (!this.ring()) this.close.emit();
+      else if (this.index() >= this.count()) this.index.set(Math.max(0, this.count() - 1));
+    } catch (error) {
+      toastApiError(error);
+    }
+  }
+}

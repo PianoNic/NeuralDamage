@@ -76,19 +76,44 @@ public class FeedScheduleTests
     public async Task TheScheduler_PostsWithTheDefaultModel_AndKeepsToTheCapAndTheSwitch()
     {
         var time = new FixedTime(new DateTimeOffset(2026, 7, 15, 13, 0, 0, TimeSpan.Zero));
-        using var h = await FeedHarness.CreateAsync(botCount: 3, feed: new FeedOptions { MaxPostsPerTick = 10, ChatInspiredShare = 0 }, time: time);
+        using var h = await FeedHarness.CreateAsync(botCount: 3, feed: new FeedOptions { MaxPostsPerTick = 10, ChatInspiredShare = 0, StoryShare = 0 }, time: time);
         h.Bots[1].FeedEnabled = false;
         h.Bots[2].MaxPostsPerDay = 1;
         await h.Db.SaveChangesAsync();
         await h.PostAsync("already posted today", h.Bots[2], at: time.Now.UtcDateTime.AddHours(-6));
         h.Reply("kitchen's closed, donkeys");
 
-        var posted = await h.Scheduler.TickAsync(random: () => 0);
+        var posted = (await h.Scheduler.TickAsync(random: () => 0)).Posts;
 
         await Assert.That(posted.Select(p => p.AuthorBotId)).IsEquivalentTo(new Guid?[] { h.Bots[0].Id });
         await h.OpenRouter.Received(1).GenerateResponseAsync("gateway:free", Arg.Any<double>(), Arg.Any<string>(), Arg.Any<List<ChatMessage>>(), Arg.Any<CancellationToken>());
         await h.Notifier.Received(1).PostNew(Arg.Is<PostDto>(p => p.Content == "kitchen's closed, donkeys"));
         await Assert.That(h.Queue.Items.Single().PostId).IsEqualTo(posted[0].Id);
+    }
+
+    [Test]
+    public async Task SometimesABotMakesAStoryInstead_UpToItsStoryCap()
+    {
+        // Stories are stamped with the real time, so the test runs now, in a zone where it is noon.
+        var time = new FixedTime(DateTimeOffset.UtcNow);
+        var noon = TimeZoneInfo.CreateCustomTimeZone("test-noon", TimeSpan.FromHours(12 - time.Now.UtcDateTime.Hour), "noon", "noon");
+        using var h = await FeedHarness.CreateAsync(botCount: 1, feed: new FeedOptions { StoryShare = 1, ChatInspiredShare = 0 }, time: time, clock: new BotClock(noon));
+        h.Bots[0].MaxStoriesPerDay = 1;
+        await h.Db.SaveChangesAsync();
+        h.OpenRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(ci =>
+            ci.ArgAt<string>(2).Contains("JSON")
+                ? """{"background":{"color":"#3f2a1d"},"layers":[{"type":"text","text":"Mise en place","x":50,"y":50,"size":30}]}"""
+                : "a plain post today");
+
+        var first = await h.Scheduler.TickAsync(random: () => 0);
+        time.Now = time.Now.AddHours(6);
+        var second = await h.Scheduler.TickAsync(random: () => 0);
+
+        await Assert.That(first.Stories.Count).IsEqualTo(1);
+        await Assert.That(first.Posts).IsEmpty();
+        // The day's one story is made, so the next turn is a post.
+        await Assert.That(second.Stories).IsEmpty();
+        await Assert.That(second.Posts.Count).IsEqualTo(1);
     }
 
     [Test]
@@ -98,7 +123,7 @@ public class FeedScheduleTests
         using var h = await FeedHarness.CreateAsync(feed: new FeedOptions { BotsPost = false }, time: time);
         h.Reply("hello");
 
-        await Assert.That(await h.Scheduler.TickAsync(random: () => 0)).IsEmpty();
+        await Assert.That((await h.Scheduler.TickAsync(random: () => 0)).Posts).IsEmpty();
     }
 }
 

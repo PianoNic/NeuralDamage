@@ -7,6 +7,7 @@ import {
   MessageDto,
   PostDto,
   ReactionGroupDto,
+  StoryDto,
 } from '../models';
 
 /**
@@ -45,6 +46,8 @@ export interface ChatHubEvents {
   FeedLikeUpdated: [like: FeedLikeDto];
   FeedTyping: [postId: string, authorId: string, name: string, isBot: boolean];
   FeedReply: [notice: FeedReplyNoticeDto];
+  StoryNew: [story: StoryDto];
+  StoryDeleted: [storyId: string];
 }
 
 /** Mirrors `FeedReplyNoticeDto`, which only travels over the hub: someone answered your post or comment. */

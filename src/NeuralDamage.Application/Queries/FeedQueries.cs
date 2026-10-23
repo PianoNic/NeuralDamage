@@ -5,6 +5,7 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.Stories;
 
 namespace NeuralDamage.Application.Queries;
 
@@ -93,9 +94,18 @@ public class GetFeedActivityHandler(NeuralDamageDbContext db, BotClock clock) : 
                 c.CreatedAt))
             .ToListAsync(cancellationToken);
 
-        var recent = posts.Concat(comments).OrderByDescending(i => i.At).Take(GetFeedActivityQuery.Items).ToList();
+        var now = DateTime.UtcNow;
+        var stories = await db.Stories.Live(now)
+            .OrderByDescending(s => s.CreatedAt).Take(GetFeedActivityQuery.Items)
+            .Select(s => new FeedActivityItemDto("story",
+                s.AuthorBot != null ? s.AuthorBot.Name : s.AuthorUser!.DisplayName != "" ? s.AuthorUser.DisplayName : s.AuthorUser.Email,
+                s.AuthorBotId != null, null, null, s.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        var recent = posts.Concat(comments).Concat(stories).OrderByDescending(i => i.At).Take(GetFeedActivityQuery.Items).ToList();
         var postsToday = await db.Posts.Visible().CountAsync(p => p.CreatedAt >= startOfDay, cancellationToken);
         var botComments = await db.PostComments.Visible().CountAsync(c => c.AuthorBotId != null && c.CreatedAt >= startOfDay, cancellationToken);
-        return Result<FeedActivityDto>.Success(new FeedActivityDto(recent, postsToday, botComments, 0));
+        var storiesLive = await db.Stories.Live(now).CountAsync(cancellationToken);
+        return Result<FeedActivityDto>.Success(new FeedActivityDto(recent, postsToday, botComments, storiesLive));
     }
 }

@@ -20,5 +20,6 @@ export interface CreateBotRequest {
     chatId?: string | null;
     feedEnabled: boolean;
     maxPostsPerDay: number;
+    maxStoriesPerDay: number;
 }
 
