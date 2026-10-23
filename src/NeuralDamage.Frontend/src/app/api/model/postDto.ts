@@ -7,6 +7,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { FeedImageDto } from './feedImageDto';
 import { MessageStickerDto } from './messageStickerDto';
 import { CommentDto } from './commentDto';
 import { FeedAuthorDto } from './feedAuthorDto';
@@ -23,5 +24,6 @@ export interface PostDto {
     likedByMe: boolean;
     commentCount: number;
     previewComments: Array<CommentDto>;
+    image?: FeedImageDto;
 }
 

@@ -10,7 +10,8 @@ using NeuralDamage.Infrastructure.Services.Stickers;
 namespace NeuralDamage.Infrastructure.Services.Feed;
 
 /// <summary>What a bot is about to post.</summary>
-public record FeedDraft(string Content, BotSticker? Sticker, Guid? SourceChatId);
+/// <param name="Image">The picture the bot asked for with it, when it was offered one.</param>
+public record FeedDraft(string Content, BotSticker? Sticker, Guid? SourceChatId, PostImageAsk? Image = null);
 
 /// <summary>A chat a post may react to: its summary and its latest messages.</summary>
 public record ChatMaterial(Guid ChatId, string Name, string? Summary, List<Message> Messages);
@@ -49,7 +50,8 @@ public partial class FeedPostWriter(
         NullIfBlank(_options.Model) ?? NullIfBlank(configuration["App:DefaultModel"]) ?? bot.ModelId;
 
     /// <param name="roll">A random number in [0, 1): whether this post reacts to a chat, and to which.</param>
-    public async Task<FeedDraft?> WriteAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default)
+    /// <param name="offerImage">The bot may ask for a picture with the post (<see cref="FeedPostOutput"/>).</param>
+    public async Task<FeedDraft?> WriteAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, bool offerImage = false)
     {
         var material = roll < _options.ChatInspiredShare ? await MaterialAsync(bot, now, roll, ct) : null;
         var recent = await RecentPostsAsync(ct);
@@ -57,7 +59,8 @@ public partial class FeedPostWriter(
         var language = material is null ? PeopleLanguage.Unknown : ChatLanguage.OfPeople(material.Messages);
 
         var system = SystemPrompt(bot, stickers.ForPrompt);
-        var turns = Turns(bot, material, recent, now, _clock, language);
+        var imageNote = offerImage ? FeedPostOutput.Instruction(canIncludeMe: bot.AvatarUrl is not null) : null;
+        var turns = Turns(bot, material, recent, now, _clock, language, imageNote);
         var model = ModelFor(bot);
         var temperature = Math.Min(bot.Temperature, 1.2);
 
@@ -67,17 +70,19 @@ public partial class FeedPostWriter(
             if (string.IsNullOrWhiteSpace(reply))
                 return null;
 
-            var (text, sticker) = BotReplyFormatter.Single(BotReplyFormatter.ToParts(reply, bot.Name, 3, stickers.Find), Post.MaxContentLength);
+            var (written, image) = offerImage ? FeedPostOutput.Parse(reply) : (reply, null);
+            var (text, sticker) = BotReplyFormatter.Single(BotReplyFormatter.ToParts(written, bot.Name, 3, stickers.Find), Post.MaxContentLength);
             text = Unquote(text);
             if (text.Length == 0 && sticker is null)
                 return null;
 
             if (material is null || !QuotesChat(text, material.Messages.Select(m => m.Content)))
-                return new FeedDraft(text, sticker, material?.ChatId);
+                return new FeedDraft(text, sticker, material?.ChatId, image);
 
             logger.LogInformation("Bot {BotName}'s post quoted its chat {ChatId} (attempt {Attempt} of 2)", bot.Name, material.ChatId, attempt);
             turns = [.. turns[..^1], Note(bot, material, now, _clock, language,
-                "Your last try repeated what someone said in the chat word for word. Say it in your own words this time, as your reaction, never as a quote.")];
+                "Your last try repeated what someone said in the chat word for word. Say it in your own words this time, as your reaction, never as a quote."
+                + (imageNote is null ? "" : $" {imageNote}"))];
         }
 
         return null;
@@ -103,7 +108,7 @@ public partial class FeedPostWriter(
     /// What the bot reads before it posts: the chat it may react to, marked as
     /// private, then what is already on the feed, then the note that asks for the post.
     /// </summary>
-    public static List<ChatMessage> Turns(Bot bot, ChatMaterial? material, List<(string Author, string Content)> recentPosts, DateTimeOffset now, BotClock clock, PeopleLanguage language)
+    public static List<ChatMessage> Turns(Bot bot, ChatMaterial? material, List<(string Author, string Content)> recentPosts, DateTimeOffset now, BotClock clock, PeopleLanguage language, string? extra = null)
     {
         var turns = new List<ChatMessage>();
         if (material is not null)
@@ -122,7 +127,7 @@ public partial class FeedPostWriter(
             turns.Add(new ChatMessage("user",
                 $"(On the feed right now:\n{string.Join("\n", recentPosts.Select(p => $"[{p.Author}]: {Cut(p.Content, MaxMessageChars)}"))})"));
 
-        turns.Add(Note(bot, material, now, clock, language));
+        turns.Add(Note(bot, material, now, clock, language, extra));
         return turns;
     }
 
@@ -193,10 +198,11 @@ public partial class FeedPostWriter(
             .Take(FeedPosts)
             .Include(p => p.AuthorUser)
             .Include(p => p.AuthorBot)
+            .Include(p => p.Image)
             .AsNoTracking()
             .ToListAsync(ct);
         posts.Reverse();
-        return posts.Select(p => (FeedReads.Author(p.AuthorUser, p.AuthorBot).Name, p.Content)).ToList();
+        return posts.Select(p => (FeedReads.Author(p.AuthorUser, p.AuthorBot).Name, FeedReads.WithPicture(p.Content, p.Image))).ToList();
     }
 
     /// <summary>Some models wrap the whole post in quotation marks.</summary>

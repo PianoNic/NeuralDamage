@@ -7,7 +7,9 @@ using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Feed;
+using NeuralDamage.Infrastructure.Services.Images;
 using NSubstitute;
 
 namespace NeuralDamage.Tests.Helpers;
@@ -32,8 +34,12 @@ public sealed class FeedHarness : IDisposable
     public required ServiceProvider Provider { get; init; }
     public required User User { get; init; }
     public required List<Bot> Bots { get; init; }
+    public required InMemoryAttachmentStorage Storage { get; init; }
 
-    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "gateway:free")
+    /// <summary>The picture maker, when the harness was made with a renderer.</summary>
+    public ImageGenerator? Images { get; init; }
+
+    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "gateway:free", IImageRenderer? renderer = null, ImageGenOptions? imageGen = null)
     {
         var dbOptions = new DbContextOptionsBuilder<NeuralDamageDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         var db = new NeuralDamageDbContext(dbOptions);
@@ -77,6 +83,16 @@ public sealed class FeedHarness : IDisposable
             sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>(),
             NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryWriter>.Instance, clock));
         jev.Engine()(services);
+        var storage = new InMemoryAttachmentStorage();
+        services.AddSingleton<IAttachmentStorage>(storage);
+        if (renderer is not null)
+        {
+            var imageOptions = Options.Create(imageGen ?? new ImageGenOptions { BaseUrl = "http://comfyui.example.com/" });
+            services.AddSingleton(renderer);
+            services.AddSingleton(new ImageQueue(imageOptions));
+            services.AddSingleton(sp => new ImageGenerator(sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<ImageQueue>(),
+                storage, imageOptions, NullLogger<ImageGenerator>.Instance, clock, time));
+        }
         var provider = services.BuildServiceProvider();
         var scopes = provider.GetRequiredService<IServiceScopeFactory>();
 
@@ -92,6 +108,8 @@ public sealed class FeedHarness : IDisposable
             Provider = provider,
             User = user,
             Bots = bots,
+            Storage = storage,
+            Images = provider.GetService<ImageGenerator>(),
         };
     }
 

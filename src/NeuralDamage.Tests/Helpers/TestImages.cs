@@ -112,4 +112,16 @@ public sealed class InMemoryAttachmentStorage : IAttachmentStorage
         Task.FromResult(StoryFiles.TryGetValue(id, out var data) ? data : null);
 
     public void DeleteStoryFile(Guid id) => StoryFiles.TryRemove(id, out _);
+    public ConcurrentDictionary<Guid, byte[]> Generated { get; } = new();
+
+    public Task SaveGeneratedImageAsync(Guid imageId, byte[] data, CancellationToken ct = default)
+    {
+        Generated[imageId] = data;
+        return Task.CompletedTask;
+    }
+
+    public Task<byte[]?> ReadGeneratedImageAsync(Guid imageId, CancellationToken ct = default) =>
+        Task.FromResult(Generated.TryGetValue(imageId, out var data) ? data : null);
+
+    public void DeleteGeneratedImage(Guid imageId) => Generated.TryRemove(imageId, out _);
 }

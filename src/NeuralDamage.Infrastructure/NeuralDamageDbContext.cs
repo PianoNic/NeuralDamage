@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using NeuralDamage.Domain;
 
@@ -21,6 +21,7 @@ public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> optio
     public DbSet<Story> Stories => Set<Story>();
     public DbSet<StoryView> StoryViews => Set<StoryView>();
     public DbSet<StoryImage> StoryImages => Set<StoryImage>();
+    public DbSet<GeneratedImage> GeneratedImages => Set<GeneratedImage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(NeuralDamageDbContext).Assembly);
 

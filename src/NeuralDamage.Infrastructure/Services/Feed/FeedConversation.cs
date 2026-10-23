@@ -58,6 +58,7 @@ public class FeedConversation(
             .Include(p => p.AuthorUser)
             .Include(p => p.AuthorBot)
             .Include(p => p.Sticker)
+            .Include(p => p.Image)
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == item.PostId, ct);
         if (post is null)
@@ -455,7 +456,7 @@ public class FeedConversation(
     /// <summary>A post or comment, read the same way for Jev and the model.</summary>
     private sealed record Said(Guid Id, string Author, Guid? BotId, string Text, DateTime At)
     {
-        public static Said Of(Post p) => new(p.Id, FeedReads.Author(p.AuthorUser, p.AuthorBot).Name, p.AuthorBotId, WithSticker(p.Content, p.Sticker, FeedReads.Author(p.AuthorUser, p.AuthorBot).Name), p.CreatedAt);
+        public static Said Of(Post p) => new(p.Id, FeedReads.Author(p.AuthorUser, p.AuthorBot).Name, p.AuthorBotId, WithSticker(FeedReads.WithPicture(p.Content, p.Image), p.Sticker, FeedReads.Author(p.AuthorUser, p.AuthorBot).Name), p.CreatedAt);
 
         public static Said Of(PostComment c) => new(c.Id, FeedReads.Author(c.AuthorUser, c.AuthorBot).Name, c.AuthorBotId, WithSticker(c.Content, c.Sticker, FeedReads.Author(c.AuthorUser, c.AuthorBot).Name), c.CreatedAt);
 

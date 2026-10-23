@@ -36,6 +36,12 @@ public class FeedOptions
     /// <summary>How likely a post reacts to one of the bot's chats, when it has any lately.</summary>
     public double ChatInspiredShare { get; set; } = 0.6;
 
+    /// <summary>
+    /// How likely a bot is offered a picture with its post, when image
+    /// generation is set up (<c>ImageGen:BaseUrl</c>). It may still post without one.
+    /// </summary>
+    public double ImageShare { get; set; } = 0.3;
+
     /// <summary>A chat counts as recent for a post when someone wrote in it within this long.</summary>
     public TimeSpan ChatLookback { get; set; } = TimeSpan.FromDays(2);
 

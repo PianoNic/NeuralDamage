@@ -1,0 +1,72 @@
+using Mediator;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using NeuralDamage.Application.Commands;
+using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Dtos.Requests;
+using NeuralDamage.Infrastructure.Extensions;
+using NeuralDamage.Infrastructure.Services;
+
+namespace NeuralDamage.API.Controllers;
+
+/// <summary>
+/// Generated pictures: asked for with a prompt, drawn one at a time by the
+/// self-hosted generator, then attached to a post like an upload.
+/// </summary>
+[ApiController]
+[Route("api/images")]
+public class ImagesController(ISender sender, IUserService userService) : ControllerBase
+{
+    /// <summary>Starts drawing a picture; poll it until its status is Ready or Failed.</summary>
+    [HttpPost]
+    [EnableRateLimiting(RateLimitExtensions.Uploads)]
+    [ProducesResponseType<GeneratedImageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<string>(StatusCodes.Status429TooManyRequests)]
+    public async Task<ActionResult<GeneratedImageDto>> Generate(GenerateImageRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GenerateImageCommand(userId, request.Prompt, request.FaceBotId), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    /// <summary>The caller's own picture: whether it is done yet.</summary>
+    [HttpGet("{imageId:guid}")]
+    [ProducesResponseType<GeneratedImageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<string>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GeneratedImageDto>> Get(Guid imageId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetGeneratedImageQuery(userId, imageId), ct);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(result.Error);
+    }
+
+    /// <summary>The picture itself: for its maker, and for everyone once it is on a post.</summary>
+    [HttpGet("{imageId:guid}/file")]
+    [ProducesResponseType<FileStreamResult>(StatusCodes.Status200OK, "image/png", "image/jpeg", "image/webp")]
+    [ProducesResponseType<string>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetFile(Guid imageId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetGeneratedImageFileQuery(userId, imageId), ct);
+        if (result.IsFailure)
+            return NotFound(result.Error);
+
+        // Like an attachment: it never changes under its id, but it is only for those signed in.
+        Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+        Response.Headers.Vary = "Authorization";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return File(result.Value!.Content, result.Value.ContentType);
+    }
+
+    /// <summary>Throws away a picture the caller made and did not post.</summary>
+    [HttpDelete("{imageId:guid}")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Discard(Guid imageId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new DiscardImageCommand(userId, imageId), ct);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+    }
+}

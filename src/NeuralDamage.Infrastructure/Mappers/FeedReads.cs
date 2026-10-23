@@ -37,6 +37,7 @@ public static class FeedReads
             .Include(p => p.AuthorUser)
             .Include(p => p.AuthorBot)
             .Include(p => p.Sticker)
+            .Include(p => p.Image)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -83,9 +84,24 @@ public static class FeedReads
                 like?.Count ?? 0,
                 like?.Mine ?? false,
                 comments.GetValueOrDefault(id),
-                previews.GetValueOrDefault(id) ?? []);
+                previews.GetValueOrDefault(id) ?? [],
+                ImageOf(p.Image));
         }).ToList();
     }
+
+    /// <summary>A post's picture, when it has a ready one.</summary>
+    public static FeedImageDto? ImageOf(GeneratedImage? image) =>
+        image is { Status: GeneratedImageStatus.Ready }
+            ? new FeedImageDto(image.Id, ImageUrl(image.Id), image.Width, image.Height, image.Prompt)
+            : null;
+
+    public static string ImageUrl(Guid imageId) => $"/api/images/{imageId}/file";
+
+    /// <summary>A post's text with its picture as what it shows, for the models that read the feed.</summary>
+    public static string WithPicture(string content, GeneratedImage? image) =>
+        image is { Status: GeneratedImageStatus.Ready }
+            ? string.Join("\n", new[] { content, $"[a picture: {image.Prompt}]" }.Where(s => s.Length > 0))
+            : content;
 
     public static async Task<PostDto?> PostAsync(NeuralDamageDbContext db, Guid id, Guid? viewerId, CancellationToken ct = default) =>
         (await PostsAsync(db, [id], viewerId, ct: ct)).FirstOrDefault();

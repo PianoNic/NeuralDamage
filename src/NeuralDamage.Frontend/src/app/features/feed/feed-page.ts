@@ -6,6 +6,7 @@ import { HlmCardImports } from '@spartan-ng/helm/card';
 import { HlmEmptyImports } from '@spartan-ng/helm/empty';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
+import { AppConfig } from '../../core/app-config';
 import { AuthService } from '../../core/auth/auth.service';
 import { toastApiError } from '../../core/http-errors';
 import { FeedActivityItemDto, PostDto, StickerDto } from '../../core/models';
@@ -16,6 +17,7 @@ import { Composer } from '../chat/composer';
 import { canDelete, formatAgo } from './feed-model';
 import { feedMembers, mentionNames } from './feed-members';
 import { FeedStore } from './feed-store';
+import { GenerateImage, GeneratedImageTile, ImageDraft } from './generate-image';
 import { PostCard } from './post-card';
 import { StoriesRow } from '../stories/stories-row';
 
@@ -46,9 +48,12 @@ export function activityLine(item: FeedActivityItemDto): string {
     InView,
     MemberAvatar,
     Composer,
+    GenerateImage,
+    GeneratedImageTile,
     PostCard,
     StoriesRow,
   ],
+  providers: [ImageDraft],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
@@ -70,9 +75,17 @@ export function activityLine(item: FeedActivityItemDto): string {
               [mentionNames]="names()"
               [currentUserId]="me()"
               placeholder="Post something, the bots are watching"
+              [attachment]="draft.pending() ? 'busy' : draft.ready() ? 'ready' : 'none'"
               (send)="post($event.content)"
               (sendSticker)="postSticker($event)"
-            />
+            >
+              @if (draft.image(); as image) {
+                <app-generated-image-tile composerAttachment [image]="image" (discard)="draft.discard()" />
+              }
+              @if (imageGeneration()) {
+                <app-generate-image composerTool [bots]="bots.bots()" [busy]="draft.pending()" (generate)="draft.generate($event)" />
+              }
+            </app-composer>
           </section>
 
           @if (store.loading() && !store.posts().length) {
@@ -144,7 +157,9 @@ export function activityLine(item: FeedActivityItemDto): string {
 export class FeedPage implements OnInit {
   protected readonly store = inject(FeedStore);
   protected readonly auth = inject(AuthService);
-  private readonly bots = inject(BotDirectory);
+  protected readonly bots = inject(BotDirectory);
+  protected readonly draft = inject(ImageDraft);
+  protected readonly imageGeneration = inject(AppConfig).imageGeneration;
 
   protected readonly me = computed(() => this.auth.user()?.id ?? null);
   protected readonly members = computed(() => feedMembers(this.bots.bots(), this.store.posts()));
@@ -180,9 +195,12 @@ export class FeedPage implements OnInit {
   }
 
   protected async post(content: string): Promise<void> {
+    const image = this.draft.image();
+    const imageId = this.draft.take();
     try {
-      await this.store.post(content);
+      await this.store.post(content, null, imageId);
     } catch (error) {
+      if (imageId && image) this.draft.restore(image);
       toastApiError(error, { network: 'Not posted. Check your connection and try again.' });
     }
   }

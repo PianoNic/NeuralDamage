@@ -35,6 +35,12 @@ public interface IAttachmentStorage
     Task<byte[]?> ReadStoryFileAsync(Guid id, CancellationToken ct = default);
 
     void DeleteStoryFile(Guid id);
+    /// <summary>Stores a generated picture.</summary>
+    Task SaveGeneratedImageAsync(Guid imageId, byte[] data, CancellationToken ct = default);
+
+    Task<byte[]?> ReadGeneratedImageAsync(Guid imageId, CancellationToken ct = default);
+
+    void DeleteGeneratedImage(Guid imageId);
 }
 
 public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
@@ -128,6 +134,30 @@ public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
     // Like "bots", "stories" can never be a chat's folder.
     private string StoryPathOf(Guid id) =>
         Path.Combine(root, "stories", id.ToString("N"));
+
+    public async Task SaveGeneratedImageAsync(Guid imageId, byte[] data, CancellationToken ct = default)
+    {
+        var path = GeneratedPathOf(imageId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, data, ct);
+    }
+
+    public async Task<byte[]?> ReadGeneratedImageAsync(Guid imageId, CancellationToken ct = default)
+    {
+        var path = GeneratedPathOf(imageId);
+        return File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
+    }
+
+    public void DeleteGeneratedImage(Guid imageId)
+    {
+        var path = GeneratedPathOf(imageId);
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    // Like "bots", "generated" can never be a chat's folder.
+    private string GeneratedPathOf(Guid imageId) =>
+        Path.Combine(root, "generated", imageId.ToString("N"));
 
     // Both parts are GUIDs, so nothing from the request can steer the path.
     private string PathOf(Guid chatId, Guid attachmentId) =>

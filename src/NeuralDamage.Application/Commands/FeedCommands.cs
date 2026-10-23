@@ -7,25 +7,38 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Feed;
 
 namespace NeuralDamage.Application.Commands;
 
-public record CreatePostCommand(Guid UserId, string Content, Guid? StickerId = null) : ICommand<Result<PostDto>>;
+/// <param name="ImageId">A picture the person had generated for this post.</param>
+public record CreatePostCommand(Guid UserId, string Content, Guid? StickerId = null, Guid? ImageId = null) : ICommand<Result<PostDto>>;
 
 public class CreatePostHandler(NeuralDamageDbContext db, IFeedNotifier notifier, IFeedQueue queue) : ICommandHandler<CreatePostCommand, Result<PostDto>>
 {
     public async ValueTask<Result<PostDto>> Handle(CreatePostCommand request, CancellationToken cancellationToken)
     {
         var content = request.Content.Trim();
-        if (content.Length == 0 && request.StickerId is null)
+        if (content.Length == 0 && request.StickerId is null && request.ImageId is null)
             return Result<PostDto>.Failure("Write something to post.");
         if (content.Length > Post.MaxContentLength)
             return Result<PostDto>.Failure($"A post can be at most {Post.MaxContentLength} characters.");
         if (await FeedStickers.UseAsync(db, request.StickerId, cancellationToken) is { } problem)
             return Result<PostDto>.Failure(problem);
 
-        var post = new Post { AuthorUserId = request.UserId, Content = content, StickerId = request.StickerId };
+        if (request.ImageId is { } imageId)
+        {
+            var image = await db.GeneratedImages.FirstOrDefaultAsync(i => i.Id == imageId && i.UserId == request.UserId, cancellationToken);
+            if (image is null)
+                return Result<PostDto>.Failure("That picture is gone.");
+            if (image.Status != GeneratedImageStatus.Ready)
+                return Result<PostDto>.Failure("That picture is not ready yet.");
+            if (await db.Posts.AnyAsync(p => p.ImageId == imageId, cancellationToken))
+                return Result<PostDto>.Failure("That picture is already posted.");
+        }
+
+        var post = new Post { AuthorUserId = request.UserId, Content = content, StickerId = request.StickerId, ImageId = request.ImageId };
         db.Posts.Add(post);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -87,7 +100,7 @@ public class CreateCommentHandler(NeuralDamageDbContext db, IFeedNotifier notifi
 
 public record DeletePostCommand(Guid UserId, Guid PostId) : ICommand<Result>;
 
-public class DeletePostHandler(NeuralDamageDbContext db, AppAdmins admins, IFeedNotifier notifier) : ICommandHandler<DeletePostCommand, Result>
+public class DeletePostHandler(NeuralDamageDbContext db, AppAdmins admins, IFeedNotifier notifier, IAttachmentStorage storage) : ICommandHandler<DeletePostCommand, Result>
 {
     public async ValueTask<Result> Handle(DeletePostCommand request, CancellationToken cancellationToken)
     {
@@ -97,8 +110,14 @@ public class DeletePostHandler(NeuralDamageDbContext db, AppAdmins admins, IFeed
         if (post.AuthorUserId != request.UserId && !await StickerReads.IsAdminAsync(db, admins, request.UserId, cancellationToken))
             return Result.Failure("Only its author or an admin can delete a post.");
 
+        // Its picture goes with it.
+        var image = post.ImageId is { } imageId ? await db.GeneratedImages.FirstOrDefaultAsync(i => i.Id == imageId, cancellationToken) : null;
         db.Posts.Remove(post);
+        if (image is not null)
+            db.GeneratedImages.Remove(image);
         await db.SaveChangesAsync(cancellationToken);
+        if (image is not null)
+            storage.DeleteGeneratedImage(image.Id);
         await notifier.PostDeleted(post.Id);
         return Result.Success();
     }

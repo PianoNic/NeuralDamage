@@ -313,6 +313,68 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.ToTable("FeedLikes");
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.GeneratedImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("FaceBotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Prompt")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BotId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("FaceBotId");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("GeneratedImages");
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.Message", b =>
                 {
                     b.Property<Guid>("Id")
@@ -383,6 +445,9 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ImageId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("SourceChatId")
                         .HasColumnType("uuid");
 
@@ -397,6 +462,9 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.HasIndex("AuthorUserId");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ImageId")
+                        .IsUnique();
 
                     b.HasIndex("SourceChatId");
 
@@ -841,6 +909,24 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("Post");
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.GeneratedImage", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", null)
+                        .WithMany()
+                        .HasForeignKey("BotId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.Bot", null)
+                        .WithMany()
+                        .HasForeignKey("FaceBotId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("NeuralDamage.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.Message", b =>
                 {
                     b.HasOne("NeuralDamage.Domain.Chat", "Chat")
@@ -892,6 +978,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasForeignKey("AuthorUserId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("NeuralDamage.Domain.GeneratedImage", "Image")
+                        .WithMany()
+                        .HasForeignKey("ImageId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("NeuralDamage.Domain.Chat", "SourceChat")
                         .WithMany()
                         .HasForeignKey("SourceChatId")
@@ -905,6 +996,8 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("AuthorBot");
 
                     b.Navigation("AuthorUser");
+
+                    b.Navigation("Image");
 
                     b.Navigation("SourceChat");
 
