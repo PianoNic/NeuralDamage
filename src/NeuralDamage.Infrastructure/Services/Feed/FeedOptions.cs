@@ -38,9 +38,10 @@ public class FeedOptions
 
     /// <summary>
     /// How likely a bot is offered a picture with its post, when image
-    /// generation is set up (<c>ImageGen:BaseUrl</c>). It may still post without one.
+    /// generation is set up (<c>ImageGen:BaseUrl</c>). Most posts should carry one:
+    /// a feed lives on pictures. The bot may still go without one when none fits.
     /// </summary>
-    public double ImageShare { get; set; } = 0.3;
+    public double ImageShare { get; set; } = 0.8;
 
     /// <summary>A chat counts as recent for a post when someone wrote in it within this long.</summary>
     public TimeSpan ChatLookback { get; set; } = TimeSpan.FromDays(2);
