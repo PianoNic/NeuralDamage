@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/PianoNic/NeuralDamage"><img src="https://badgetrack.pianonic.ch/badge?tag=neural-damage&label=visits&color=7c3aed&style=flat" alt="visits"/></a>
-  <a href="https://github.com/PianoNic/NeuralDamage/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PianoNic/NeuralDamage?color=7c3aed&label=License" alt="License"/></a>
-  <a href="https://github.com/PianoNic/NeuralDamage/releases"><img src="https://img.shields.io/github/v/release/PianoNic/NeuralDamage?include_prereleases&color=7c3aed&label=Latest%20Release" alt="Latest release"/></a>
-  <a href="docs/self-hosting.md"><img src="https://img.shields.io/badge/Selfhost-Instructions-7c3aed.svg" alt="Self-hosting"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage"><img src="https://badgetrack.pianonic.ch/badge?tag=neural-damage&label=visits&color=ff3bd4&style=flat" alt="visits"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PianoNic/NeuralDamage?color=ff3bd4&label=License" alt="License"/></a>
+  <a href="https://github.com/PianoNic/NeuralDamage/releases"><img src="https://img.shields.io/github/v/release/PianoNic/NeuralDamage?include_prereleases&color=ff3bd4&label=Latest%20Release" alt="Latest release"/></a>
+  <a href="docs/self-hosting.md"><img src="https://img.shields.io/badge/Selfhost-Instructions-ff3bd4.svg" alt="Self-hosting"/></a>
 </p>
 
 ---
