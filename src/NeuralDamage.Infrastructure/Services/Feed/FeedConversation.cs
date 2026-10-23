@@ -21,9 +21,10 @@ public interface IFeedQueue
 /// <summary>
 /// The bots in a feed thread, the way they are in a chat: one Jev decision
 /// per new post or comment says which bots comment, like it or scroll past,
-/// with the chat's thresholds, health bands, caps and fallback. Each comment
-/// a bot writes is a new event of its own, which is how bots answer each
-/// other, up to <see cref="BotBehaviorOptions.MaxBotChainDepth"/> hops.
+/// with the chat's thresholds, health bands, caps and fallback, plus the
+/// feed's own caps that keep a thread short. Each comment a bot writes is a
+/// new event of its own, which is how bots answer each other, up to
+/// <see cref="FeedOptions.MaxBotChainDepth"/> hops.
 /// </summary>
 public class FeedConversation(
     IServiceScopeFactory scopes,
@@ -40,6 +41,9 @@ public class FeedConversation(
     private readonly BotBehaviorOptions _behavior = behavior?.Value ?? new();
     private readonly FeedOptions _feed = feed?.Value ?? new();
     private readonly BotClock _clock = clock ?? BotClock.Default;
+
+    /// <summary>One bot comment saved at a time, so each one is checked against the others.</summary>
+    private readonly SemaphoreSlim _saving = new(1, 1);
 
     /// <summary>Bots that take part in the feed: public, alive, with the feed on.</summary>
     public static bool OnFeed(Bot bot) => bot.IsActive && bot.IsPublic && bot.FeedEnabled;
@@ -82,26 +86,27 @@ public class FeedConversation(
             return;
 
         var keyed = bots.Select((bot, i) => (Key: $"bot_{i}", Bot: bot)).ToList();
+        var addressed = Addressed(said, subject, comments, bots);
         var round = new DecisionRound(
             Place,
             subject is null ? $"feed post {post.Id}" : $"feed comment {subject.Id}",
             State(post, comments, subject, said, keyed),
             FromBot: said.BotId is not null,
-            Addressed(said, subject, comments, bots),
+            addressed,
             (repliers, token) => RepliesLastMinuteAsync(db, repliers, token));
 
         var engine = services.GetRequiredService<IBotDecisionEngine>();
-        var decided = await engine.DecideAsync(round, keyed, ct);
+        var decided = Limit(await engine.DecideAsync(round, keyed, ct), round.Subject, post, comments, subject, addressed);
 
         var likes = Task.WhenAll(decided
             .Where(d => d.Action == BotAction.React)
             .Select(d => LikeAsync(post.Id, subject?.Id, d.Bot, ct)));
 
         var writers = decided.Where(d => d.Action == BotAction.Reply).Select(d => d.Bot).ToList();
-        var written = await Task.WhenAll(writers.Select(bot => CommentAsync(post, subject, bot, ct)));
+        var written = await Task.WhenAll(writers.Select(bot => CommentAsync(post, subject, bot, addressed.Contains(bot.Id), ct)));
         await likes;
 
-        if (item.Depth + 1 > _behavior.MaxBotChainDepth)
+        if (item.Depth + 1 > _feed.MaxBotChainDepth)
             return;
         var queue = services.GetService<IFeedQueue>();
         if (queue is null)
@@ -109,6 +114,60 @@ public class FeedConversation(
         foreach (var comment in written.OfType<PostComment>().OrderBy(c => c.CreatedAt))
             await queue.EnqueueAsync(new FeedEvent(post.Id, comment.Id, item.Depth + 1), ct);
     }
+
+    /// <summary>
+    /// The feed's own limits on top of the chat's, so a busy post does not
+    /// turn into a pile of bot comments. A bot told to comment likes instead
+    /// when Jev was only lukewarm (<see cref="FeedOptions.CommentThreshold"/>),
+    /// when it already commented <see cref="FeedOptions.MaxCommentsPerBot"/>
+    /// times here, when the post has <see cref="FeedOptions.MaxBotCommentsPerPost"/>
+    /// bot comments, or when <see cref="FeedOptions.MaxBotRepliesPerComment"/>
+    /// bots already answer this one. A bot a person addressed skips them all,
+    /// and a bot whose words this answers skips the per-bot cap.
+    /// </summary>
+    private List<BotVerdict> Limit(List<BotVerdict> decided, string subjectName, Post post, List<PostComment> comments, PostComment? subject, IReadOnlySet<Guid> addressed)
+    {
+        var answered = AnsweredBot(post, comments, subject);
+        var perBot = comments.Where(c => c.AuthorBotId != null).GroupBy(c => c.AuthorBotId!.Value).ToDictionary(g => g.Key, g => g.Count());
+        var room = _feed.MaxBotCommentsPerPost - perBot.Values.Sum();
+        var writing = 0;
+        var kept = new HashSet<Guid>();
+
+        foreach (var d in decided.Where(d => d.Action == BotAction.Reply)
+            .OrderByDescending(d => addressed.Contains(d.Bot.Id))
+            .ThenByDescending(d => d.Probability))
+        {
+            var isAddressed = addressed.Contains(d.Bot.Id);
+            var reason =
+                !isAddressed && d.Probability < _feed.CommentThreshold ? $"only {d.Probability:F2} sure"
+                : !isAddressed && d.Bot.Id != answered && perBot.GetValueOrDefault(d.Bot.Id) >= _feed.MaxCommentsPerBot ? "its comments here are used up"
+                : !isAddressed && room <= 0 ? "the post has enough bot comments"
+                : !isAddressed && writing >= _feed.MaxBotRepliesPerComment ? "enough bots answer this already"
+                : null;
+            if (reason is not null)
+            {
+                logger.LogInformation("Bot {BotName} likes {Subject} instead of commenting: {Reason}", d.Bot.Name, subjectName, reason);
+                continue;
+            }
+            kept.Add(d.Bot.Id);
+            writing++;
+            room--;
+        }
+
+        return decided
+            .Select(d => d.Action == BotAction.Reply && !kept.Contains(d.Bot.Id) ? d with { Action = BotAction.React, Emoji = null } : d)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The bot whose words <paramref name="subject"/> answers: the author of
+    /// the comment it hangs under, or of the post for a top-level comment.
+    /// None for the post itself.
+    /// </summary>
+    private static Guid? AnsweredBot(Post post, List<PostComment> comments, PostComment? subject) =>
+        subject is null ? null
+        : subject.ParentId is { } parentId ? comments.FirstOrDefault(c => c.Id == parentId)?.AuthorBotId
+        : post.AuthorBotId;
 
     /// <summary>
     /// The bots Jev is asked about: the ones addressed, the post's author, the
@@ -206,7 +265,7 @@ public class FeedConversation(
     }
 
     /// <summary>One bot's comment: read, type, write, post. Null when it had nothing to say or failed.</summary>
-    private async Task<PostComment?> CommentAsync(Post post, PostComment? subject, Bot bot, CancellationToken ct)
+    private async Task<PostComment?> CommentAsync(Post post, PostComment? subject, Bot bot, bool addressed, CancellationToken ct)
     {
         using var typingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         Task typing = Task.CompletedTask;
@@ -235,17 +294,15 @@ public class FeedConversation(
             var system = SystemPrompt(bot, Said.Of(post).Author, stickers.ForPrompt);
             var language = ChatLanguage.Detect(new[] { Said.Of(post) }.Concat(comments.Select(Said.Of)).Where(s => s.BotId is null).Select(s => s.Text));
             var history = History(post, comments, subject?.Id, bot.Id);
-            history.Add(BotPromptBuilder.BuildNote(clock: _clock, bot: bot, language: language,
-                instruction: "Write one comment for this thread, the length of a real comment: a line or two."));
+            history.Add(CommentNote(bot, language, _clock));
 
             var reply = await BotResponseOrchestrator.GenerateAsync(openRouter, bot.Name, bot.ModelId, bot.Temperature, system, history, logger, ct);
             var (text, sticker) = BotReplyFormatter.Single(BotReplyFormatter.ToParts(reply, bot.Name, 3, stickers.Find), PostComment.MaxContentLength);
             if (text.Length == 0 && sticker is null)
                 return null;
-            var own = comments.Where(c => c.AuthorBotId == bot.Id).Select(c => c.Content).TakeLast(5);
-            if (BotReplyFormatter.IsNearDuplicate(text, own))
+            if (BotReplyFormatter.IsNearDuplicate(text, comments.Select(c => c.Content).Append(post.Content)))
             {
-                logger.LogInformation("Bot {BotName} repeated itself on the feed; dropping it", bot.Name);
+                logger.LogInformation("Bot {BotName} said what the thread already says on post {PostId}; dropping it", bot.Name, post.Id);
                 return null;
             }
 
@@ -255,18 +312,45 @@ public class FeedConversation(
             await typingCts.CancelAsync();
             await typing;
 
-            var comment = new PostComment
+            // Checked against the thread as it is now, one comment at a time:
+            // the other bots of the round write in parallel and may have just
+            // said the same thing, or used up the post's last comments.
+            await _saving.WaitAsync(ct);
+            PostComment comment;
+            try
             {
-                PostId = post.Id,
-                ParentId = subject is null ? null : subject.ParentId ?? subject.Id,
-                AuthorBotId = bot.Id,
-                Content = text,
-                StickerId = sticker?.Id,
-            };
-            db.PostComments.Add(comment);
-            if (sticker is not null && await db.Stickers.FirstOrDefaultAsync(s => s.Id == sticker.Id, ct) is { } used)
-                used.UseCount++;
-            await db.SaveChangesAsync(ct);
+                var thread = await db.PostComments.Visible()
+                    .Where(c => c.PostId == post.Id)
+                    .Select(c => new { c.Content, c.AuthorBotId })
+                    .ToListAsync(ct);
+                if (BotReplyFormatter.IsNearDuplicate(text, thread.Select(c => c.Content).Append(post.Content)))
+                {
+                    logger.LogInformation("Bot {BotName} said what the thread already says on post {PostId}; dropping it", bot.Name, post.Id);
+                    return null;
+                }
+                if (!addressed && thread.Count(c => c.AuthorBotId != null) >= _feed.MaxBotCommentsPerPost)
+                {
+                    logger.LogInformation("Post {PostId} filled up with bot comments while {BotName} wrote; dropping it", post.Id, bot.Name);
+                    return null;
+                }
+
+                comment = new PostComment
+                {
+                    PostId = post.Id,
+                    ParentId = subject is null ? null : subject.ParentId ?? subject.Id,
+                    AuthorBotId = bot.Id,
+                    Content = text,
+                    StickerId = sticker?.Id,
+                };
+                db.PostComments.Add(comment);
+                if (sticker is not null && await db.Stickers.FirstOrDefaultAsync(s => s.Id == sticker.Id, ct) is { } used)
+                    used.UseCount++;
+                await db.SaveChangesAsync(ct);
+            }
+            finally
+            {
+                _saving.Release();
+            }
 
             if (await FeedReads.CommentAsync(db, comment.Id, null, ct) is { } dto)
                 await notifier.CommentNew(dto);
@@ -297,7 +381,24 @@ public class FeedConversation(
             You are "{bot.Name}", on the feed of a chat app: a public timeline everyone using the app reads. You are in the comments under a post by {postAuthor}.
 
             {BotPromptBuilder.HouseRules(bot.Name)}
+
+            {CommentRules}
             """, stickers);
+
+    /// <summary>How a comment differs from a chat message: shorter, about the post, in the bot's own voice.</summary>
+    public const string CommentRules = """
+        Commenting on the feed:
+        - A comment is usually one short line, like a real comment under a post. Go longer only rarely.
+        - React to a concrete detail of the post, or of the comment you're answering: a joke about it, your take on it, or disagree with it.
+        - Don't fall back on your catchphrases or slogans. Use one only when it really fits this exact moment.
+        - Don't echo or paraphrase what another comment already said. If you have nothing new to add, say something else or keep it very short.
+        - Don't copy how the others write, such as ALL CAPS, their phrasing or punctuation. Keep your own voice.
+        """;
+
+    /// <summary>The note after a thread's history: the time, who the bot is, and to write one short comment.</summary>
+    public static ChatMessage CommentNote(Bot bot, PeopleLanguage language, BotClock? clock = null) =>
+        BotPromptBuilder.BuildNote(clock: clock, bot: bot, language: language,
+            instruction: "Write one comment for this thread: usually one short line that reacts to something specific in what you're answering. Skip your catchphrases, don't repeat what others said, and keep your own voice.");
 
     /// <summary>
     /// The thread as the model reads it: the post first, then the comments in
