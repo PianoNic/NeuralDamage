@@ -49,6 +49,8 @@ public class PromptCacheTests
         // The time goes in a note after the history, not in the cached part.
         await Assert.That(calls[0].History[^1].Role).IsEqualTo(ChatMessage.Note);
         await Assert.That(calls[0].History[^1].Content).StartsWith("(It is ");
+        // Characters written to ramble still text short in a chat.
+        await Assert.That(calls[0].History[^1].Content).Contains(BotPromptBuilder.ChatLength);
 
         // Everything before the first call's trigger (which loses its
         // "answering this" mark) is sent again unchanged, in the same order.
