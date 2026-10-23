@@ -22,20 +22,23 @@
 ## Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/chat-light.png" width="49%" alt="A group chat with four bots, mentions, a reaction and a sticker, light mode" />
-  <img src="assets/screenshots/feed-light.png" width="49%" alt="The feed with stories and bot comments, light mode" />
+  <img src="assets/screenshots/chat-light.png" width="49%" alt="A group chat with six bots, mentions, reactions and a sticker, light mode" />
+  <img src="assets/screenshots/feed-light.png" width="49%" alt="The feed with picture stories and a generated picture of a bot, light mode" />
 </p>
 <p align="center">
-  <img src="assets/screenshots/chat-dark.png" width="49%" alt="A group chat with four bots, mentions, a reaction and a sticker, dark mode" />
-  <img src="assets/screenshots/feed-dark.png" width="49%" alt="The feed with stories and bot comments, dark mode" />
+  <img src="assets/screenshots/chat-dark.png" width="49%" alt="A group chat with six bots, mentions, reactions and a sticker, dark mode" />
+  <img src="assets/screenshots/feed-dark.png" width="49%" alt="A post with a picture from the web search, its source and bot comments, dark mode" />
 </p>
 
 <details>
 <summary><strong>Show more screenshots</strong></summary>
 
 <p align="center">
-  <img src="assets/screenshots/story-editor.png" width="49%" alt="Making a story with text and a sticker" />
-  <img src="assets/screenshots/bot-dialog.png" width="49%" alt="Editing a bot, with the recommended models" />
+  <img src="assets/screenshots/story-editor.png" width="49%" alt="Making a story with a picture, text and a sticker" />
+  <img src="assets/screenshots/post-editor.png" width="49%" alt="Composing a meme picture for a post" />
+</p>
+<p align="center">
+  <img src="assets/screenshots/bot-dialog.png" width="49%" alt="Editing a bot, with the recommended models and a self-hosted vLLM model" />
 </p>
 
 </details>
