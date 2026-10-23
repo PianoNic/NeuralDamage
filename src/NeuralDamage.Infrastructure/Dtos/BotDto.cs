@@ -10,8 +10,8 @@ namespace NeuralDamage.Infrastructure.Dtos;
 /// <param name="FeedEnabled">Whether the bot posts and comments on the feed on its own.</param>
 /// <param name="MaxPostsPerDay">The most posts it writes on its own in a day.</param>
 /// <param name="ModelStatusReason">Why the model cannot be used; null when it is available.</param>
-/// <param name="Looks">What the bot looks like. Only its creator gets it; null for everyone else.</param>
-/// <param name="References">Its reference pictures. Only its creator gets them; empty for everyone else.</param>
+/// <param name="Looks">What the bot looks like. Only its creator and admins get it; null for everyone else.</param>
+/// <param name="References">Its reference pictures. Only its creator and admins get them; empty for everyone else.</param>
 public record BotDto(
     Guid Id,
     string Name,

@@ -87,7 +87,7 @@ function providers(api: object) {
       provideRouter([]),
       { provide: StickersService, useValue: api },
       { provide: AvatarImages, useValue: images },
-      { provide: AuthService, useValue: { user: signal({ id: 'me' }) } },
+      { provide: AuthService, useValue: { user: signal({ id: 'me' }), isAdmin: signal(false) } },
     ],
   };
 }

@@ -18,7 +18,7 @@ public class UpdateBotHandler(NeuralDamageDbContext db, IOpenRouterService openR
         if (bot is null)
             return Result.Failure("Bot not found.");
 
-        if (bot.CreatedById != request.RequestingUserId)
+        if (!await Admins.RunsBotAsync(db, bot, request.RequestingUserId, cancellationToken))
             return Result.Failure("Only the bot creator can update this bot.");
 
         // Only a change of model is checked, so tightening the policy does not

@@ -47,6 +47,17 @@ describe('people labels', () => {
     expect(canRemoveMember(alice, members, null)).toBe(false);
   });
 
+  it('lets an admin remove anyone but the owner', () => {
+    const owner = { role: 'Owner', userId: 'u1' };
+    const alice = { role: 'Member', userId: 'u2' };
+    const bot = { role: 'Member', userId: null };
+    const members = [owner, alice, bot];
+    expect(canRemoveMember(bot, members, 'u3', true)).toBe(true);
+    expect(canRemoveMember(alice, members, 'u3', true)).toBe(true);
+    expect(canRemoveMember(owner, members, 'u3', true)).toBe(false);
+    expect(canRemoveMember(bot, members, 'u3')).toBe(false);
+  });
+
   it('warns that removing a private bot deletes it', () => {
     expect(removalConfirmation({ displayName: 'Byte' }, { isPublic: false })).toEqual({
       title: 'Remove Byte?',

@@ -37,7 +37,7 @@ describe('ChatList after a reconnect', () => {
     missed = {};
     TestBed.configureTestingModule({
       providers: [
-        { provide: AuthService, useValue: { user: signal({ id: 'me' }) } },
+        { provide: AuthService, useValue: { user: signal({ id: 'me' }), isAdmin: signal(false) } },
         { provide: ChatsService, useValue: { apiChatsGet: () => of(chats) } },
         {
           provide: MessagesService,

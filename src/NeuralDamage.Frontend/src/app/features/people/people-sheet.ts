@@ -39,6 +39,7 @@ import { firstValueFrom } from 'rxjs';
 import { ChatBotsService } from '../../api/api/chatBots.service';
 import { ChatMembersService } from '../../api/api/chatMembers.service';
 import { UserService } from '../../api/api/user.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { describeApiError } from '../../core/http-errors';
 import { mediaQuery } from '../../core/media-query';
 import { BotDto, ChatMember, UserDto } from '../../core/models';
@@ -269,6 +270,7 @@ const PROFILE_HEIGHT = 340;
             [member]="member"
             [bot]="member.botId ? (details().get(member.botId) ?? null) : null"
             [currentUserId]="currentUserId()"
+            [isAdmin]="isAdmin()"
             [canRemove]="canRemove(member)"
             (close)="profileId.set(null)"
             (mention)="mentionMember(member)"
@@ -295,6 +297,7 @@ const PROFILE_HEIGHT = 340;
             [member]="member"
             [bot]="member.botId ? (details().get(member.botId) ?? null) : null"
             [currentUserId]="currentUserId()"
+            [isAdmin]="isAdmin()"
             [canRemove]="canRemove(member)"
             (close)="ctx.close()"
             (mention)="mentionMember(member)"
@@ -362,6 +365,8 @@ const PROFILE_HEIGHT = 340;
 })
 export class PeopleSheet implements OnDestroy {
   private readonly directory = inject(BotDirectory);
+  private readonly auth = inject(AuthService);
+  protected readonly isAdmin = this.auth.isAdmin;
   private readonly botDetails = inject(BotDetails);
   private readonly chatBotsApi = inject(ChatBotsService);
   private readonly membersApi = inject(ChatMembersService);
@@ -508,12 +513,12 @@ export class PeopleSheet implements OnDestroy {
   }
 
   protected canRemove(member: ChatMember): boolean {
-    return canRemoveMember(member, this.members(), this.currentUserId());
+    return canRemoveMember(member, this.members(), this.currentUserId(), this.auth.isAdmin());
   }
 
   protected canEdit(member: ChatMember): boolean {
     const bot = member.botId ? this.details().get(member.botId) : null;
-    return !!bot && bot.createdById === this.currentUserId();
+    return !!bot && (bot.createdById === this.currentUserId() || this.auth.isAdmin());
   }
 
   protected toggleProfile(member: ChatMember, event: MouseEvent): void {

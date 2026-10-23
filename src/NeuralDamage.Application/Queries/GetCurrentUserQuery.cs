@@ -10,7 +10,7 @@ namespace NeuralDamage.Application.Queries;
 
 public record GetCurrentUserQuery : IQuery<Result<UserDto>>;
 
-public class GetCurrentUserHandler(NeuralDamageDbContext db, IUserService userService)
+public class GetCurrentUserHandler(NeuralDamageDbContext db, IUserService userService, AppAdmins admins)
     : IQueryHandler<GetCurrentUserQuery, Result<UserDto>>
 {
     public async ValueTask<Result<UserDto>> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
@@ -23,6 +23,6 @@ public class GetCurrentUserHandler(NeuralDamageDbContext db, IUserService userSe
 
         return user is null
             ? Result<UserDto>.Failure("User not found")
-            : Result<UserDto>.Success(user.ToDto());
+            : Result<UserDto>.Success(user.ToDto() with { IsAdmin = user.IsAdmin || admins.IsAdmin(user.Email) });
     }
 }

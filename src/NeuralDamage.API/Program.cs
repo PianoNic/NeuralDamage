@@ -92,6 +92,7 @@ builder.Services.AddSingleton(sp => new FeedScheduler(
     sp.GetRequiredService<IOptions<FeedOptions>>(),
     sp.GetRequiredService<BotClock>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FeedScheduler>());
+builder.Services.AddSingleton<IFeedNow>(sp => sp.GetRequiredService<FeedScheduler>());
 
 // Stories: rendered with Skia from a spec, by people in the editor and by bots on their own.
 builder.Services.AddSingleton(_ => new StoryRenderer());

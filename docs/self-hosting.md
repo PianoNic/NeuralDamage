@@ -26,9 +26,11 @@ Create a **public** client (authorization code with PKCE, no client secret) and 
 |---|---|
 | Redirect URI | `https://your-domain/callback` |
 | Post-logout redirect URI | `https://your-domain/` |
-| Scopes | `openid profile email` |
+| Scopes | `openid profile email groups` |
 
 Put the issuer URL and client id into `.env` as `Oidc__Authority` and `Oidc__ClientId`. The API validates access tokens against the issuer's discovery document and checks that their audience is the client id, so the provider has to issue tokens for that client. Pocket ID, Authentik and Keycloak all work.
+
+The `groups` scope carries the sign-in role that makes someone an admin (`App__AdminRole`, below). The API reads it from the access token, or from the provider's userinfo endpoint when the token leaves it out, as Pocket ID does. Leave `groups` out of the scopes if your provider does not know it and you only use `App__Admins`.
 
 ## Configuration
 
@@ -42,7 +44,7 @@ Everything is read from environment variables (the `.env` file next to `compose.
 | `Oidc__ClientId` | required | Client id of the public client. Also the expected token audience. |
 | `Oidc__RedirectUri` | required | Where the provider sends the browser back after sign-in: `<your URL>/callback`. |
 | `Oidc__PostLogoutRedirectUri` | required | Where the browser lands after sign-out, usually the app's root URL. |
-| `Oidc__Scope` | required | Scopes the web app asks for: `openid profile email`. |
+| `Oidc__Scope` | required | Scopes the web app asks for: `openid profile email groups`. Without `groups`, admins come only from `App__Admins`. |
 | `Oidc__RequireHttpsMetadata` | | Set to `false` only for a provider served over plain HTTP, such as a local one. |
 | `Oidc__InternalAuthority` | not set | How the API reaches the provider when that differs from the public URL, for example a container name on the same Docker network. Tokens keep the public issuer. |
 | `Oidc__ValidAudiences` | the client id | Other accepted token audiences, as an array (`Oidc__ValidAudiences__0`, `__1`, ...). |
@@ -63,7 +65,8 @@ The web app reads the sign-in settings from `GET /api/app` at startup, so none o
 | `OpenRouter__MaxOutputTokens` | `1500` | Output token budget per bot reply. Reasoning models spend part of it thinking, so leave headroom. |
 | `OpenRouter__BaseUrl` | `https://openrouter.ai/api/v1` | Point at a gateway or proxy that speaks the OpenRouter API. |
 | `App__TimeZone` | `Europe/Zurich` | IANA time zone for the time the bots see. They get only the day and part of day ("Wednesday afternoon": night until 5, morning until 12, afternoon until 17, evening until 22) and are told not to bring it up unless it matters. An unknown zone falls back to UTC with a warning in the log. Stored timestamps stay UTC. |
-| `App__Admins` | (none) | Comma-separated sign-in emails of the people who may edit or delete any sticker in the shared library, not only their own, and import a whole sticker folder at once on the Stickers page. |
+| `App__Admins` | (none) | Comma-separated sign-in emails of admins. Admins can do anything an owner can, to anyone's bots (private ones too), posts, comments, stories, stickers and the chats they are in, import a whole sticker folder at once, and have a bot post or make a story right away. |
+| `App__AdminRole` | `private` | The sign-in role that also makes someone an admin. It is read, case-insensitively, from the token's `role`, `roles` or `groups` claim. A change takes effect at the person's next sign-in sync, within 15 minutes. |
 
 Out of the box, bots can only use cheap models whose providers keep no data. A model that fails any of these rules (over a price cap, without a fixed price such as `openrouter/auto`, without a zero-data-retention endpoint, a batch variant, or a model that always reasons while `DisableReasoning` is on) is hidden from the model picker and refused when a bot is created or switched to it. Every reply request also sends the caps as OpenRouter's `provider.max_price` and, with `ZdrOnly`, `provider.zdr`, so a request is never routed to a provider that charges more or retains data.
 

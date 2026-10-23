@@ -5,13 +5,23 @@ import { MemberProfile } from './member-profile';
 
 const member = { memberType: 'bot', displayName: 'Megatron', modelId: 'm' } as unknown as ChatMember;
 const bot = (systemPrompt: string) =>
-  ({ systemPrompt, personality: 'Ruthless Decepticon leader', aliases: 'megs', temperature: 1, repliesToday: 0 }) as unknown as BotDto;
+  ({
+    systemPrompt,
+    personality: 'Ruthless Decepticon leader',
+    aliases: 'megs',
+    temperature: 1,
+    repliesToday: 0,
+    createdById: 'maker',
+    createdBy: { displayName: 'Maker' },
+  }) as unknown as BotDto;
 
-function render(systemPrompt: string) {
+function render(systemPrompt: string, viewer: { currentUserId?: string; isAdmin?: boolean } = {}) {
   TestBed.configureTestingModule({ providers: [{ provide: ModelCatalog, useValue: { nameOf: () => 'Model' } }] });
   const fixture = TestBed.createComponent(MemberProfile);
   fixture.componentRef.setInput('member', member);
   fixture.componentRef.setInput('bot', bot(systemPrompt));
+  if (viewer.currentUserId) fixture.componentRef.setInput('currentUserId', viewer.currentUserId);
+  if (viewer.isAdmin) fixture.componentRef.setInput('isAdmin', true);
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
 }
@@ -30,5 +40,12 @@ describe('MemberProfile', () => {
     const el = render('You are Megatron.');
     expect(el.textContent).toContain('You are Megatron.');
     expect(readMore(el)).toBeUndefined();
+  });
+
+  it("offers to edit someone else's bot only to an admin", () => {
+    const edit = (el: HTMLElement) => [...el.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Edit');
+    expect(edit(render('You are Megatron.', { currentUserId: 'someone' }))).toBe(false);
+    TestBed.resetTestingModule();
+    expect(edit(render('You are Megatron.', { currentUserId: 'someone', isAdmin: true }))).toBe(true);
   });
 });

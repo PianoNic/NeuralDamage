@@ -52,15 +52,16 @@ export function removalConfirmation(
 
 /**
  * Whether the viewer may remove this member, as the API allows it: the chat owner removes anyone but
- * themselves, everyone else only themselves. The owner can never be removed.
+ * themselves, everyone else only themselves; an admin anyone. The owner can never be removed.
  */
 export function canRemoveMember(
   member: { role: string; userId: string | null },
   members: readonly { role: string; userId: string | null }[],
   currentUserId: string | null,
+  isAdmin = false,
 ): boolean {
   if (!currentUserId || member.role === 'Owner') return false;
-  if (member.userId === currentUserId) return true;
+  if (member.userId === currentUserId || isAdmin) return true;
   return members.some((m) => m.userId === currentUserId && m.role === 'Owner');
 }
 

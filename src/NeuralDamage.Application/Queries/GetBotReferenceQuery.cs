@@ -7,7 +7,7 @@ using NeuralDamage.Infrastructure.Services.Attachments;
 namespace NeuralDamage.Application.Queries;
 
 /// <summary>
-/// One of a bot's reference pictures, for its creator only: unlike the
+/// One of a bot's reference pictures, for its creator and admins only: unlike the
 /// profile picture, they are never shown to anyone else.
 /// </summary>
 public record GetBotReferenceQuery(Guid BotId, Guid ReferenceId, Guid RequestingUserId) : IQuery<Result<BotAvatarFile>>;
@@ -18,8 +18,9 @@ public class GetBotReferenceHandler(NeuralDamageDbContext db, IAttachmentStorage
 
     public async ValueTask<Result<BotAvatarFile>> Handle(GetBotReferenceQuery request, CancellationToken cancellationToken)
     {
+        var admin = await Admins.IsAdminAsync(db, request.RequestingUserId, cancellationToken);
         var mine = await db.BotReferences.AnyAsync(r => r.Id == request.ReferenceId && r.BotId == request.BotId
-            && r.Bot.CreatedById == request.RequestingUserId, cancellationToken);
+            && (admin || r.Bot.CreatedById == request.RequestingUserId), cancellationToken);
         if (!mine)
             return Result.Failure<BotAvatarFile>(NotFound);
 

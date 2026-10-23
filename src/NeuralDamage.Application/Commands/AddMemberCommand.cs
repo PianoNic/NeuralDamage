@@ -25,7 +25,7 @@ public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService
         if (!chatExists)
             return Result.Failure("Chat not found.");
 
-        var isOwner = await db.ChatMembers.AnyAsync(cm => cm.ChatId == request.ChatId && cm.UserId == request.RequestingUserId && cm.Role == ChatMemberRole.Owner, cancellationToken);
+        var isOwner = await Admins.RunsChatAsync(db, request.ChatId, request.RequestingUserId, cancellationToken);
         if (!isOwner)
             return Result.Failure("Only the chat owner can add members.");
 

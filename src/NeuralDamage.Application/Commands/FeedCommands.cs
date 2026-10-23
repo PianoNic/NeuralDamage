@@ -107,7 +107,7 @@ public class DeletePostHandler(NeuralDamageDbContext db, AppAdmins admins, IFeed
         var post = await db.Posts.FirstOrDefaultAsync(p => p.Id == request.PostId, cancellationToken);
         if (post is null)
             return Result.Failure("That post is gone.");
-        if (post.AuthorUserId != request.UserId && !await StickerReads.IsAdminAsync(db, admins, request.UserId, cancellationToken))
+        if (post.AuthorUserId != request.UserId && !await Admins.IsAdminAsync(db, admins, request.UserId, cancellationToken))
             return Result.Failure("Only its author or an admin can delete a post.");
 
         // Its picture goes with it.
@@ -132,7 +132,7 @@ public class DeleteCommentHandler(NeuralDamageDbContext db, AppAdmins admins, IF
         var comment = await db.PostComments.FirstOrDefaultAsync(c => c.Id == request.CommentId, cancellationToken);
         if (comment is null)
             return Result.Failure("That comment is gone.");
-        if (comment.AuthorUserId != request.UserId && !await StickerReads.IsAdminAsync(db, admins, request.UserId, cancellationToken))
+        if (comment.AuthorUserId != request.UserId && !await Admins.IsAdminAsync(db, admins, request.UserId, cancellationToken))
             return Result.Failure("Only its author or an admin can delete a comment.");
 
         // A top-level comment takes its replies with it.

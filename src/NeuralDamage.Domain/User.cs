@@ -8,6 +8,12 @@ public class User : BaseEntity
     public string? AvatarUrl { get; set; }
     public DateTime? LastLoginAt { get; set; }
 
+    /// <summary>
+    /// Whether the person may do anything any owner can. Set at every sign-in sync from
+    /// <c>App:Admins</c> and the admin role their token carries.
+    /// </summary>
+    public bool IsAdmin { get; set; }
+
     /// <summary>When the user last opened the feed; what is newer counts as unread.</summary>
     public DateTime? FeedSeenAt { get; set; }
 

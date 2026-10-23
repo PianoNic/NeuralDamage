@@ -82,7 +82,7 @@ describe('Chat after a reconnect', () => {
     TestBed.configureTestingModule({
       providers: [
         { provide: Router, useValue: { navigate: vi.fn() } },
-        { provide: AuthService, useValue: { user: signal({ id: 'me' }) } },
+        { provide: AuthService, useValue: { user: signal({ id: 'me' }), isAdmin: signal(false) } },
         {
           provide: ChatList,
           useValue: { activeId: signal(null), markRead: vi.fn(), wasDeletedHere: () => false },

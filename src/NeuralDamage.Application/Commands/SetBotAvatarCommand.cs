@@ -22,7 +22,7 @@ public class SetBotAvatarHandler(NeuralDamageDbContext db, IAttachmentStorage st
         if (bot is null)
             return Result.Failure<string>("Bot not found.");
 
-        if (bot.CreatedById != request.RequestingUserId)
+        if (!await Admins.RunsBotAsync(db, bot, request.RequestingUserId, cancellationToken))
             return Result.Failure<string>("Only the bot creator can change its picture.");
 
         if (request.Data.Length == 0)
@@ -51,7 +51,7 @@ public class RemoveBotAvatarHandler(NeuralDamageDbContext db, IAttachmentStorage
         if (bot is null)
             return Result.Failure("Bot not found.");
 
-        if (bot.CreatedById != request.RequestingUserId)
+        if (!await Admins.RunsBotAsync(db, bot, request.RequestingUserId, cancellationToken))
             return Result.Failure("Only the bot creator can change its picture.");
 
         storage.DeleteBotAvatar(bot.Id);

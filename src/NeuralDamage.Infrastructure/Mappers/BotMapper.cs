@@ -10,9 +10,10 @@ public static class BotMapper
     /// Projects bots with their creator and usage counts. The counts are
     /// correlated subqueries, so a whole list is still one round trip.
     /// The looks and reference pictures are filtered in the query: only
-    /// <paramref name="viewerId"/>'s own bots carry them.
+    /// <paramref name="viewerId"/>'s own bots carry them, or every bot when
+    /// <paramref name="viewerIsAdmin"/>.
     /// </summary>
-    public static IQueryable<BotDto> SelectDto(this IQueryable<Bot> bots, DateTime utcNow, Guid? viewerId)
+    public static IQueryable<BotDto> SelectDto(this IQueryable<Bot> bots, DateTime utcNow, Guid? viewerId, bool viewerIsAdmin = false)
     {
         var today = utcNow.Date;
         var weekAgo = utcNow.AddDays(-7);
@@ -28,15 +29,15 @@ public static class BotMapper
             b.FeedEnabled,
             b.MaxPostsPerDay,
             b.MaxStoriesPerDay,
-            b.CreatedById == viewerId ? b.Looks : null,
+            viewerIsAdmin || b.CreatedById == viewerId ? b.Looks : null,
             b.References
-                .Where(r => b.CreatedById == viewerId)
+                .Where(r => viewerIsAdmin || b.CreatedById == viewerId)
                 .OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
                 .Select(r => new BotReferenceDto(r.Id, ReferenceUrl(b.Id, r.Id)))
                 .ToList()));
     }
 
-    /// <summary>Where the web app loads a reference picture; only the bot's creator gets it.</summary>
+    /// <summary>Where the web app loads a reference picture; only the bot's creator and admins get it.</summary>
     public static string ReferenceUrl(Guid botId, Guid referenceId) => $"/api/bots/{botId}/references/{referenceId}";
 
     public static BotDto WithModelStatus(this BotDto bot, Func<string, ModelStatus> lookup)

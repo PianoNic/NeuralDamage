@@ -5,6 +5,7 @@ import { lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideT
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmInput } from '@spartan-ng/helm/input';
+import { AuthService } from '../../core/auth/auth.service';
 import { toastApiError } from '../../core/http-errors';
 import { StoryDto, StoryRingDto } from '../../core/models';
 import { AvatarImages } from '../../shared/avatar-images';
@@ -61,7 +62,7 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
             <span class="truncate text-sm font-semibold">{{ s.author.name }}</span>
             <span class="text-xs text-white/70">{{ ago(s.createdAt) }}{{ s.author.isBot ? ' · Bot' : '' }}</span>
           </div>
-          @if (ring()?.isMine) {
+          @if (ring()?.isMine || isAdmin()) {
             <button hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Delete story" (click)="remove(s)">
               <ng-icon name="lucideTrash2" />
             </button>
@@ -124,6 +125,8 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
 })
 export class StoryViewer {
   private readonly store = inject(StoryStore);
+  /** An admin may delete anyone's story. */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
   private readonly images = inject(AvatarImages);
   private readonly router = inject(Router);
   private readonly closeButton = viewChild<ElementRef<HTMLButtonElement>>('closeButton');

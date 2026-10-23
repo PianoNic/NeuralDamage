@@ -19,7 +19,7 @@ public class UpdateChatHandler(NeuralDamageDbContext db, IChatNotificationServic
         if (chat is null)
             return Result.Failure("Chat not found.");
 
-        var isOwner = await db.ChatMembers.AnyAsync(cm => cm.ChatId == request.ChatId && cm.UserId == request.RequestingUserId && cm.Role == ChatMemberRole.Owner, cancellationToken);
+        var isOwner = await Admins.RunsChatAsync(db, request.ChatId, request.RequestingUserId, cancellationToken);
         if (!isOwner)
             return Result.Failure("Only the chat owner can update the chat.");
 

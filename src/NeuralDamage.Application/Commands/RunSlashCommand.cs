@@ -130,7 +130,7 @@ public class RunSlashCommandHandler(
 
             case "/compact":
             {
-                var isOwner = await db.ChatMembers.AnyAsync(cm => cm.ChatId == chatId && cm.UserId == userId && cm.Role == ChatMemberRole.Owner, ct);
+                var isOwner = await Admins.RunsChatAsync(db, chatId, userId, ct);
                 if (!isOwner)
                     return Mistake("Only the chat owner can compact the chat.");
 

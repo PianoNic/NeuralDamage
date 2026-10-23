@@ -24,7 +24,7 @@ public class GetStickersHandler(NeuralDamageDbContext db, AppAdmins admins) : IQ
 {
     public async ValueTask<Result<StickerPageDto>> Handle(GetStickersQuery request, CancellationToken cancellationToken)
     {
-        var admin = await StickerReads.IsAdminAsync(db, admins, request.RequestingUserId, cancellationToken);
+        var admin = await Admins.IsAdminAsync(db, admins, request.RequestingUserId, cancellationToken);
         var query = db.Stickers.Where(s => s.DeletedAt == null);
 
         var search = (request.Search ?? "").Trim().ToLowerInvariant();
@@ -65,7 +65,7 @@ public class GetStickersByIdHandler(NeuralDamageDbContext db, AppAdmins admins) 
         var ids = request.Ids.Distinct().Take(GetStickersByIdQuery.MaxIds).ToList();
         if (ids.Count == 0)
             return Result.Success(new List<StickerDto>());
-        var admin = await StickerReads.IsAdminAsync(db, admins, request.RequestingUserId, cancellationToken);
+        var admin = await Admins.IsAdminAsync(db, admins, request.RequestingUserId, cancellationToken);
         var stickers = await db.Stickers
             .Where(s => s.DeletedAt == null && ids.Contains(s.Id))
             .Include(s => s.UploaderUser)
@@ -89,7 +89,7 @@ public class GetStickerLibraryStatusHandler(NeuralDamageDbContext db, AppAdmins 
         var live = db.Stickers.Where(s => s.DeletedAt == null);
         var count = await live.CountAsync(cancellationToken);
         var describing = await live.CountAsync(s => s.Describing && s.Description == null, cancellationToken);
-        var admin = await StickerReads.IsAdminAsync(db, admins, request.RequestingUserId, cancellationToken);
+        var admin = await Admins.IsAdminAsync(db, admins, request.RequestingUserId, cancellationToken);
         return Result.Success(new StickerLibraryStatusDto(count, describing, admin));
     }
 }
@@ -110,12 +110,6 @@ public class GetRecentStickersHandler(NeuralDamageDbContext db, AppAdmins admins
         var ids = sent.Distinct().Take(request.Limit).ToList();
         return await new GetStickersByIdHandler(db, admins).Handle(new GetStickersByIdQuery(request.UserId, ids), cancellationToken);
     }
-}
-
-internal static class StickerReads
-{
-    public static async Task<bool> IsAdminAsync(NeuralDamageDbContext db, AppAdmins admins, Guid userId, CancellationToken ct) =>
-        admins.IsAdmin(await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync(ct));
 }
 
 public record StickerFile(byte[] Content, string ContentType);
