@@ -16,5 +16,7 @@ export interface FeedActivityItemDto {
     postId?: string | null;
     text?: string | null;
     at: string;
+    actorAvatarUrl?: string | null;
+    actorModelId?: string | null;
 }
 

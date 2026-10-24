@@ -4,7 +4,6 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideEllipsis, lucideHeart, lucideMessageCircle, lucideTrash2 } from '@ng-icons/lucide';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmButton } from '@spartan-ng/helm/button';
-import { HlmCard } from '@spartan-ng/helm/card';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { PkAuthImage } from '@prompt-kit/auth-image';
@@ -17,54 +16,53 @@ import { FeedText } from './feed-text';
 import { generatedImageSrc } from './generate-image';
 
 /**
- * One post: who wrote it and when, the chat it came out of (only for those in that chat), its text
- * and sticker, Like and Comments, and on the feed the last two comments under it.
+ * One post, after Instagram's: who wrote it and when (and the chat it came out of, only for those in
+ * that chat), the picture or the text, Like and Comments, and the caption under a picture.
  */
 @Component({
   selector: 'app-post-card',
-  imports: [RouterLink, NgIcon, PkAuthImage, HlmBadge, HlmButton, HlmCard, HlmDialogImports, HlmDropdownMenuImports, MemberAvatar, StickerImage, FeedText],
+  imports: [RouterLink, NgIcon, PkAuthImage, HlmBadge, HlmButton, HlmDialogImports, HlmDropdownMenuImports, MemberAvatar, StickerImage, FeedText],
   providers: [provideIcons({ lucideEllipsis, lucideHeart, lucideMessageCircle, lucideTrash2 })],
   host: { class: 'block' },
   template: `
-    <article hlmCard class="gap-3 px-4" [attr.aria-label]="'Post by ' + post().author.name" data-testid="post">
-      <header class="flex items-center gap-2.5">
-        <app-member-avatar [name]="post().author.name" [avatarUrl]="post().author.avatarUrl" [modelId]="post().author.modelId" [px]="large() ? 44 : 40" />
-        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div class="flex min-w-0 items-center gap-1.5">
-            <span class="truncate font-semibold" [class.text-[15px]]="large()">{{ post().author.name }}</span>
+    <article class="flex flex-col gap-2.5" [attr.aria-label]="'Post by ' + post().author.name" data-testid="post">
+      <header class="flex items-center gap-2.5 px-3 md:px-0">
+        <app-member-avatar [name]="post().author.name" [avatarUrl]="post().author.avatarUrl" [modelId]="post().author.modelId" [px]="large() ? 40 : 36" />
+        <div class="flex min-w-0 flex-1 flex-col">
+          <div class="flex min-w-0 items-center gap-1.5 text-sm">
             @if (post().author.isBot) {
-              <span hlmBadge variant="outline">Bot</span>
+              <a [routerLink]="['/bots', post().author.id]" class="truncate font-semibold underline-offset-2 hover:underline">{{ post().author.name }}</a>
+            } @else {
+              <span class="truncate font-semibold">{{ post().author.name }}</span>
             }
-            <time class="text-muted-foreground shrink-0 text-[13px]" [attr.datetime]="post().createdAt" [title]="post().createdAt">· {{ ago() }}</time>
+            @if (post().author.isBot) {
+              <span hlmBadge class="bg-bot text-bot-foreground h-4 rounded px-1 text-[10px] font-extrabold tracking-wide">BOT</span>
+            }
+            <time class="text-muted-foreground shrink-0" [attr.datetime]="post().createdAt" [title]="post().createdAt">· {{ ago() }}</time>
           </div>
           @if (sourceChat(); as chat) {
             <span class="text-muted-foreground truncate text-xs" data-testid="source-chat">after the chat in "{{ chat }}"</span>
           }
         </div>
         @if (deletable()) {
-          <div class="shrink-0">
-            <button hlmBtn variant="ghost" size="icon-sm" aria-label="Post options" [hlmDropdownMenuTrigger]="menu">
-              <ng-icon name="lucideEllipsis" />
-            </button>
-            <ng-template #menu>
-              <hlm-dropdown-menu class="w-40">
-                <button hlmDropdownMenuItem variant="destructive" (triggered)="remove.emit()">
-                  <ng-icon name="lucideTrash2" />
-                  Delete post
-                </button>
-              </hlm-dropdown-menu>
-            </ng-template>
-          </div>
+          <button hlmBtn variant="ghost" size="icon-sm" aria-label="Post options" [hlmDropdownMenuTrigger]="menu" align="end">
+            <ng-icon name="lucideEllipsis" />
+          </button>
+          <ng-template #menu>
+            <hlm-dropdown-menu class="w-40">
+              <button hlmDropdownMenuItem variant="destructive" (triggered)="remove.emit()">
+                <ng-icon name="lucideTrash2" />
+                Delete post
+              </button>
+            </hlm-dropdown-menu>
+          </ng-template>
         }
       </header>
 
-      @if (post().content) {
-        <app-feed-text class="leading-normal" [class.text-[15px]]="!large()" [class.text-base]="large()" [text]="post().content" [names]="names()" />
-      }
-      @if (post().image; as image) {
+      @if (showImage() && post().image; as image) {
         <button
           type="button"
-          class="bg-muted focus-visible:ring-ring/50 block w-full overflow-hidden rounded-xl outline-none focus-visible:ring-2"
+          class="bg-muted focus-visible:ring-ring/50 mx-2 block overflow-hidden rounded-2xl outline-none focus-visible:ring-2 md:mx-0"
           [style.aspect-ratio]="image.width && image.height ? image.width + ' / ' + image.height : '1 / 1'"
           [attr.aria-label]="'Open the picture: ' + image.prompt"
           data-testid="post-image"
@@ -81,56 +79,41 @@ import { generatedImageSrc } from './generate-image';
             }
           </hlm-dialog-content>
         </hlm-dialog>
+      } @else if (post().content && (!post().image || showImage())) {
+        <app-feed-text class="px-3 text-[15px] leading-normal md:px-0" [class.text-base]="large()" [text]="post().content" [names]="names()" />
       }
       @if (post().sticker; as sticker) {
-        <app-sticker-image [url]="sticker.url" [alt]="sticker.description || 'Sticker: ' + sticker.name" [px]="160" />
+        <app-sticker-image class="px-3 md:px-0" [url]="sticker.url" [alt]="sticker.description || 'Sticker: ' + sticker.name" [px]="160" />
       }
 
-      <div class="text-muted-foreground -ms-2 flex items-center gap-1 text-[13px]" [class.border-t]="large()" [class.pt-2]="large()">
+      <div class="flex items-center gap-1 px-1 text-sm font-semibold md:-ms-2 md:px-0">
         <button
           hlmBtn
           variant="ghost"
           size="sm"
           type="button"
-          [class.text-destructive]="post().likedByMe"
           [attr.aria-pressed]="post().likedByMe"
           [attr.aria-label]="post().likedByMe ? 'Unlike' : 'Like'"
           (click)="like.emit()"
         >
-          <ng-icon name="lucideHeart" [class.fill-current]="post().likedByMe" />
+          <ng-icon name="lucideHeart" size="22" [class.text-highlight]="post().likedByMe" [class.fill-current]="post().likedByMe" />
           <span class="tabular-nums">{{ post().likeCount }}</span>
         </button>
         @if (large()) {
-          <span class="px-2">{{ post().commentCount }} {{ post().commentCount === 1 ? 'comment' : 'comments' }}</span>
+          <span class="flex items-center gap-1.5 px-2"><ng-icon name="lucideMessageCircle" size="22" class="-scale-x-100" />{{ post().commentCount }}</span>
         } @else {
           <a hlmBtn variant="ghost" size="sm" [routerLink]="['/feed', post().id]" [attr.aria-label]="'Comments: ' + post().commentCount">
-            <ng-icon name="lucideMessageCircle" />
+            <ng-icon name="lucideMessageCircle" size="22" class="-scale-x-100" />
             <span class="tabular-nums">{{ post().commentCount }}</span>
           </a>
         }
       </div>
 
-      @if (!large() && post().previewComments.length) {
-        <div class="flex flex-col gap-2.5 border-t pt-3" data-testid="preview-comments">
-          @for (comment of post().previewComments; track comment.id) {
-            <div class="flex gap-2.5">
-              <app-member-avatar [name]="comment.author.name" [avatarUrl]="comment.author.avatarUrl" [modelId]="comment.author.modelId" [px]="28" />
-              <p class="min-w-0 text-sm leading-snug">
-                <span class="font-semibold">{{ comment.author.name }}</span>
-                @if (comment.content) {
-                  <app-feed-text class="inline" [text]="' ' + comment.content" [names]="names()" />
-                } @else {
-                  <span class="text-muted-foreground"> sent a sticker</span>
-                }
-              </p>
-            </div>
-          }
-          @if (post().commentCount > post().previewComments.length) {
-            <a class="text-muted-foreground hover:text-foreground w-fit text-[13px]" [routerLink]="['/feed', post().id]">
-              View all {{ post().commentCount }} comments
-            </a>
-          }
-        </div>
+      @if (post().image && post().content) {
+        <p class="px-3 text-sm leading-normal md:px-0">
+          <span class="font-semibold">{{ post().author.name }}</span>
+          <app-feed-text class="inline" [text]="' ' + post().content" [names]="names()" />
+        </p>
       }
     </article>
   `,
@@ -142,8 +125,10 @@ export class PostCard {
   /** Names that are @mentions: the bots' and people's. */
   readonly names = input<readonly string[]>([]);
   readonly deletable = input(false);
-  /** The thread's version: bigger, with the counts as text and no preview. */
+  /** The thread's version: bigger, with the comment count as text instead of a link. */
   readonly large = input(false);
+  /** Off where the page shows the picture itself, beside the post (the desktop thread). */
+  readonly showImage = input(true);
   /** For the relative time; the page ticks it. */
   readonly now = input<Date>(new Date());
 

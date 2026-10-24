@@ -1,26 +1,29 @@
-import { Component, inject, OnDestroy } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component, computed, inject, OnDestroy } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideWifiOff } from '@ng-icons/lucide';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
+import { filter, map } from 'rxjs';
 import { SignalRService } from '../../core/signalr/signalr.service';
 import { AppSidebar } from './app-sidebar';
+import { BottomBar } from './bottom-bar';
+
+/** Pages that take the whole phone screen, like an open chat, hide the bottom bar. */
+const FULL_SCREEN = [/^\/chats\/.+/, /^\/feed\/story/];
 
 /**
- * The signed-in frame: helm's inset sidebar on the page, and the content in a rounded panel beside
- * it. A thin banner across the panel's top says when live updates are down.
+ * The signed-in frame: the rail on desktop, the bottom bar on phones, and the page between. A thin
+ * banner across the top says when live updates are down.
  */
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, NgIcon, HlmSidebarImports, HlmSpinner, AppSidebar],
+  imports: [RouterOutlet, NgIcon, HlmSidebarImports, HlmSpinner, AppSidebar, BottomBar],
   providers: [provideIcons({ lucideWifiOff })],
   template: `
-    <app-sidebar>
-      <main
-        hlmSidebarInset
-        class="h-svh min-h-0 overflow-hidden md:h-[calc(100svh-1rem)]"
-      >
+    <app-sidebar [path]="path()">
+      <main hlmSidebarInset class="h-svh min-h-0 overflow-hidden">
         @switch (signalr.state()) {
           @case ('reconnecting') {
             <div role="status" [class]="bannerClass">
@@ -35,15 +38,31 @@ import { AppSidebar } from './app-sidebar';
             </div>
           }
         }
-        <router-outlet />
+        <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] [&>router-outlet]:hidden">
+          <router-outlet />
+        </div>
+        @if (!fullScreen()) {
+          <app-bottom-bar class="md:hidden" [path]="path()" />
+        }
       </main>
     </app-sidebar>
   `,
 })
 export class Shell implements OnDestroy {
   protected readonly signalr = inject(SignalRService);
+  private readonly router = inject(Router);
   protected readonly bannerClass =
-    'bg-muted text-muted-foreground flex shrink-0 items-center justify-center gap-2 border-b px-3 py-1.5 text-xs md:rounded-t-2xl';
+    'bg-muted text-muted-foreground flex shrink-0 items-center justify-center gap-2 border-b px-3 py-1.5 text-xs';
+
+  private readonly url = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => this.router.url),
+    ),
+    { initialValue: this.router.url },
+  );
+  protected readonly path = computed(() => this.url().split(/[?#]/)[0]);
+  protected readonly fullScreen = computed(() => FULL_SCREEN.some((pattern) => pattern.test(this.path())));
 
   /** Leaving the signed-in frame (a sign-out in another tab) drops the live connections. */
   ngOnDestroy(): void {

@@ -15,6 +15,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { toast } from '@spartan-ng/brain/sonner';
+import { describeApiError } from '../../core/http-errors';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { firstValueFrom } from 'rxjs';
 import { ChatsService } from '../../api/api/chats.service';
@@ -71,7 +72,7 @@ const TYPING_TTL_MS = 4000;
 /** How often this client tells the others it is typing. */
 const TYPING_SEND_INTERVAL_MS = 3000;
 
-/** A chat: header, messages, who is typing, and the composer. Serves `/chat/:chatId`. */
+/** A chat: header, messages, who is typing, and the composer. Serves `/chats/:chatId`. */
 @Component({
   selector: 'app-chat',
   imports: [HlmSpinner, ChatHeader, Composer, MentionCard, MessageList, PeopleSheet, TypingRow],
@@ -81,6 +82,9 @@ const TYPING_SEND_INTERVAL_MS = 3000;
       [chatId]="chatId()"
       [name]="chat()?.name ?? ''"
       [members]="members()"
+      [direct]="!!chat()?.isDirect"
+      [avatarUrl]="chat()?.avatarUrl"
+      [currentUserId]="currentUserId()"
       (people)="peopleOpen.set(true)"
     />
 
@@ -102,7 +106,7 @@ const TYPING_SEND_INTERVAL_MS = 3000;
       />
     }
 
-    <div class="mx-auto w-full max-w-3xl shrink-0 px-4 pb-3 md:pb-4">
+    <div class="mx-auto w-full max-w-3xl shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
       <app-typing-row [typers]="typers()" class="min-h-8 ps-1" />
       <app-composer
         [members]="members()"
@@ -123,6 +127,7 @@ const TYPING_SEND_INTERVAL_MS = 3000;
       [chatId]="chatId()"
       [members]="members()"
       [currentUserId]="currentUserId()"
+      [direct]="!!chat()?.isDirect"
       (closed)="peopleOpen.set(false)"
       (mention)="mention($event)"
       (patchMember)="patchMember($event.id, $event.changes)"
@@ -135,6 +140,8 @@ const TYPING_SEND_INTERVAL_MS = 3000;
       (mention)="mention($event.displayName)"
       (toggleMute)="peopleSheet().toggleMute($event)"
       (viewProfile)="viewProfile($event)"
+      [direct]="!!chat()?.isDirect"
+      (message)="messageDirectly($event)"
     />
   `,
 })
@@ -150,7 +157,7 @@ export class Chat implements OnDestroy {
   private readonly reactionsApi = inject(ReactionsService);
   private readonly botDetails = inject(BotDetails);
 
-  /** Route parameter of `/chat/:chatId`. */
+  /** Route parameter of `/chats/:chatId`. */
   readonly chatId = input.required<string>();
 
   private readonly list = viewChild(MessageList);
@@ -184,7 +191,11 @@ export class Chat implements OnDestroy {
     ]);
   });
   protected readonly mentionNames = computed(() => this.mentionTargets().map((t) => t.name));
-  protected readonly placeholder = computed(() => `Message ${this.chat()?.name ?? ''}`.trim());
+  /** The one a direct chat is with, the bot or the other person. */
+  protected readonly other = computed(() =>
+    this.chat()?.isDirect ? (this.members().find((m) => m.userId !== this.currentUserId()) ?? null) : null,
+  );
+  protected readonly placeholder = computed(() => `Message ${this.other()?.displayName ?? this.chat()?.name ?? ''}`.trim());
 
   protected readonly typers = computed<Typer[]>(() => {
     const members = this.members();
@@ -268,7 +279,7 @@ export class Chat implements OnDestroy {
     // Whoever deleted it is already on their way home; everyone else is told why it vanished.
     if (!this.chatList.wasDeletedHere(chatId)) toast.info('This chat is no longer available.');
     this.currentChatId = null;
-    void this.router.navigate(['/']);
+    void this.router.navigate(['/chats']);
   };
 
   private readonly onSystemMessage = (message: SystemMessage) => {
@@ -353,6 +364,16 @@ export class Chat implements OnDestroy {
   protected mention(name: string): void {
     this.peopleOpen.set(false);
     this.composer()?.insertMention(name);
+  }
+
+  /** Into the one direct chat with a member, made the first time. */
+  protected async messageDirectly(member: ChatMember): Promise<void> {
+    try {
+      const chat = await this.chatList.openDirect(member.botId ? { botId: member.botId } : { userId: member.userId ?? undefined });
+      await this.router.navigate(['/chats', chat.id]);
+    } catch (error) {
+      toast.error(describeApiError(error, { fallback: `Could not open a chat with ${member.displayName}.` }));
+    }
   }
 
   protected viewProfile(member: ChatMember): void {

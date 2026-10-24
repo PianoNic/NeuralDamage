@@ -1,6 +1,7 @@
 import { computed, inject, Service, signal } from '@angular/core';
 import { toast } from '@spartan-ng/brain/sonner';
 import { firstValueFrom } from 'rxjs';
+import { ChatMembersService } from '../../api/api/chatMembers.service';
 import { ChatsService } from '../../api/api/chats.service';
 import { MessagesService } from '../../api/api/messages.service';
 import { AuthService } from '../../core/auth/auth.service';
@@ -20,6 +21,7 @@ const SEEN_LIMIT = 2_000;
 @Service()
 export class ChatList {
   private readonly api = inject(ChatsService);
+  private readonly membersApi = inject(ChatMembersService);
   private readonly messagesApi = inject(MessagesService);
   private readonly signalr = inject(SignalRService);
   private readonly auth = inject(AuthService);
@@ -48,6 +50,13 @@ export class ChatList {
   private readonly seen = new Set<string>();
 
   private started = false;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Several members added at once, as a new chat fills up, cost one reload. */
+  private readonly refreshSoon = () => {
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => void this.reload(), 400);
+  };
 
   async start(): Promise<void> {
     if (this.started) return;
@@ -58,6 +67,9 @@ export class ChatList {
     this.signalr.onChatEvent('ChatUpdated', this.upsert);
     this.signalr.onChatEvent('ChatDeleted', this.drop);
     this.signalr.onChatEvent('MessageNew', this.onMessage);
+    // The inbox's faces and head count come with the list, so a change of members fetches it again.
+    this.signalr.onChatEvent('MemberAdded', this.refreshSoon);
+    this.signalr.onChatEvent('MemberRemoved', this.refreshSoon);
     this.signalr.reconnected$.subscribe((event) => void this.catchUp(event));
     await this.reload();
     void this.signalr.start();
@@ -99,6 +111,38 @@ export class ChatList {
     }
   }
 
+  /** The direct chat with a bot or a person: the one there is, or a new one. */
+  async openDirect(to: { botId?: string; userId?: string }): Promise<ChatDto> {
+    const chat = await firstValueFrom(this.api.apiChatsDirectPost({ botId: to.botId ?? null, userId: to.userId ?? null }));
+    if (!this.list().some((c) => c.id === chat.id)) {
+      this.upsert(chat);
+      // The list's preview carries who it is with, for its name and picture.
+      void this.reload();
+    }
+    return chat;
+  }
+
+  /** A group chat's own picture, already cropped square. Everyone in it hears of it from the hub. */
+  async setAvatar(id: string, picture: Blob): Promise<void> {
+    const { avatarUrl } = await firstValueFrom(this.api.apiChatsChatIdAvatarPut(id, picture));
+    this.list.update((list) => list.map((c) => (c.id === id ? { ...c, avatarUrl } : c)));
+  }
+
+  async removeAvatar(id: string): Promise<void> {
+    await firstValueFrom(this.api.apiChatsChatIdAvatarDelete(id));
+    this.list.update((list) => list.map((c) => (c.id === id ? { ...c, avatarUrl: null } : c)));
+  }
+
+  /** Takes you out of a chat someone else runs; the hub's ChatLeft drops it from the list too. */
+  async leave(id: string): Promise<void> {
+    const me = this.auth.user()?.id;
+    const chat = await firstValueFrom(this.api.apiChatsChatIdGet(id));
+    const mine = chat.members.find((m) => m.userId === me);
+    if (!mine) return;
+    await firstValueFrom(this.membersApi.apiChatsChatIdMembersMemberIdDelete(id, mine.id));
+    this.list.update((list) => list.filter((c) => c.id !== id));
+  }
+
   async rename(id: string, name: string): Promise<void> {
     await firstValueFrom(this.api.apiChatsChatIdPut(id, { name }));
     this.list.update((list) => list.map((c) => (c.id === id ? { ...c, name } : c)));
@@ -129,8 +173,8 @@ export class ChatList {
   }
 
   private readonly upsert = (chat: ChatDto) => {
-    const { id, name, createdById, createdAt, updatedAt } = chat;
-    const flat: ChatDto = { id, name, createdById, createdAt, updatedAt };
+    const { id, name, createdById, createdAt, updatedAt, isDirect, avatarUrl } = chat;
+    const flat: ChatDto = { id, name, createdById, createdAt, updatedAt, isDirect, avatarUrl };
     this.list.update((list) =>
       list.some((c) => c.id === id)
         ? list.map((c) => (c.id === id ? { ...c, ...flat } : c))
@@ -168,12 +212,24 @@ export class ChatList {
     if (this.seen.has(message.id)) return;
     this.seen.add(message.id);
     if (this.seen.size > SEEN_LIMIT) this.seen.delete(this.seen.values().next().value!);
+    const mine = message.senderUserId != null && message.senderUserId === this.auth.user()?.id;
     this.list.update((list) =>
       list.map((c) =>
-        c.id === message.chatId ? { ...c, updatedAt: later(c.updatedAt, message.createdAt) } : c,
+        c.id === message.chatId
+          ? {
+              ...c,
+              updatedAt: later(c.updatedAt, message.createdAt),
+              preview: {
+                memberCount: c.preview?.memberCount ?? 0,
+                members: c.preview?.members ?? [],
+                lastMessage: message.content || (message.sticker ? 'Sent a sticker' : message.attachments?.length ? 'Sent a picture' : ''),
+                lastSenderName: mine ? 'You' : (message.senderBot?.name ?? message.senderUser?.displayName ?? null),
+                lastMessageAt: message.createdAt,
+              },
+            }
+          : c,
       ),
     );
-    const mine = message.senderUserId != null && message.senderUserId === this.auth.user()?.id;
     if (mine || message.chatId === this.activeId()) return;
     this.unread.update((map) => new Map(map).set(message.chatId, (map.get(message.chatId) ?? 0) + 1));
   };

@@ -14,6 +14,7 @@ const chat = (id: string, updatedAt = '2026-10-21T11:00:00Z'): ChatDto => ({
   createdById: 'me',
   createdAt: '2026-10-21T10:00:00Z',
   updatedAt,
+  isDirect: false,
 });
 
 const message = (id: string, chatId: string, createdAt: string, senderUserId = 'bob'): MessageDto => ({

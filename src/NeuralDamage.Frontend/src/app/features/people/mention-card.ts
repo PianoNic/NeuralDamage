@@ -1,6 +1,6 @@
 import { afterNextRender, Component, computed, inject, Injector, input, output, signal, viewChild } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideAtSign, lucideUserRound, lucideVolume2, lucideVolumeX } from '@ng-icons/lucide';
+import { lucideAtSign, lucideMessageCircle, lucideUserRound, lucideVolume2, lucideVolumeX } from '@ng-icons/lucide';
 import { BrnPopover } from '@spartan-ng/brain/popover';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmPopoverImports } from '@spartan-ng/helm/popover';
@@ -15,7 +15,7 @@ import { MemberSummary } from './member-summary';
 @Component({
   selector: 'app-mention-card',
   imports: [NgIcon, HlmButton, HlmPopoverImports, MemberSummary],
-  providers: [provideIcons({ lucideAtSign, lucideUserRound, lucideVolume2, lucideVolumeX })],
+  providers: [provideIcons({ lucideAtSign, lucideMessageCircle, lucideUserRound, lucideVolume2, lucideVolumeX })],
   template: `
     <hlm-popover align="start" [sideOffset]="6" [offsetX]="offsetX()" (closed)="onClosed()">
       <hlm-popover-content
@@ -30,6 +30,13 @@ import { MemberSummary } from './member-summary';
               <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="mention.emit(m); ctx.close()">
                 <ng-icon name="lucideAtSign" />
                 Mention
+              </button>
+            }
+            <!-- Out of a group, into the one direct chat with them. A private bot stays in its chat. -->
+            @if (!isSelf() && !direct() && (m.memberType !== 'bot' || bot()?.isPublic)) {
+              <button hlmBtn variant="outline" size="sm" class="flex-1" (click)="message.emit(m); ctx.close()">
+                <ng-icon name="lucideMessageCircle" />
+                Message
               </button>
             }
             @if (m.memberType === 'bot') {
@@ -55,10 +62,13 @@ export class MentionCard {
 
   readonly members = input.required<ChatMember[]>();
   readonly currentUserId = input<string | null>(null);
+  /** Opened in a direct chat, which is already the one with them. */
+  readonly direct = input(false);
 
   readonly mention = output<ChatMember>();
   readonly toggleMute = output<ChatMember>();
   readonly viewProfile = output<ChatMember>();
+  readonly message = output<ChatMember>();
 
   private readonly memberId = signal<string | null>(null);
   protected readonly offsetX = signal(0);

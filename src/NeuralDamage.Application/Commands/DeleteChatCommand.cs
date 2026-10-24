@@ -26,6 +26,7 @@ public class DeleteChatHandler(NeuralDamageDbContext db, IChatNotificationServic
         db.Chats.Remove(chat);
         await db.SaveChangesAsync(cancellationToken);
         attachmentStorage.DeleteChat(request.ChatId);
+        attachmentStorage.DeleteChatAvatar(request.ChatId);
 
         await notifications.NotifyChatDeleted(request.ChatId);
         return Result.Success();

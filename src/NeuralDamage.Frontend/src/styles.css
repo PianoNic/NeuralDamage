@@ -4,11 +4,13 @@
 @import 'tailwindcss/utilities.css';
 
 @import '@spartan-ng/brain/hlm-tailwind-preset.css';
+@import '@fontsource-variable/bricolage-grotesque';
 @plugin '@tailwindcss/typography';
 
 /*
- * Plain Spartan Nova neutrals. `--background` is the content panel and `--sidebar` the page
- * around it, as helm's inset sidebar expects. Only the logo carries colour.
+ * The logo's palette on Spartan's tokens: a warm cream page, ink text and buttons, magenta for
+ * likes and unread counts (highlight), mint for the BOT tag. `--sidebar` matches the page, so the
+ * desktop rail reads as part of it and not as a panel.
  */
 :root {
   color-scheme: light;
@@ -16,65 +18,84 @@
   --font-sans:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
     sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-display: 'Bricolage Grotesque Variable', var(--font-sans);
 
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.75rem;
+  --background: #fbf9f4;
+  --foreground: #0f0f12;
+  --card: #ffffff;
+  --card-foreground: #0f0f12;
+  --popover: #ffffff;
+  --popover-foreground: #0f0f12;
+  --primary: #0f0f12;
+  --primary-foreground: #f5f2ea;
+  --secondary: #eee9df;
+  --secondary-foreground: #0f0f12;
+  --muted: #eee9df;
+  --muted-foreground: #6b6760;
+  --accent: #f3efe6;
+  --accent-foreground: #0f0f12;
+  --destructive: #b4232f;
+  --border: #e8e3d8;
+  --input: #e8e3d8;
+  --ring: #a29e94;
+  --sidebar: #fbf9f4;
+  --sidebar-foreground: #0f0f12;
+  --sidebar-primary: #0f0f12;
+  --sidebar-primary-foreground: #f5f2ea;
+  --sidebar-accent: #eee9df;
+  --sidebar-accent-foreground: #0f0f12;
+  --sidebar-border: #e8e3d8;
+  --sidebar-ring: #a29e94;
+
+  --highlight: #ff3bd4;
+  --highlight-foreground: #0f0f12;
+  --bot: #3cff8a;
+  --bot-foreground: #0f0f12;
+  --link: #b0158f;
+  --story-ring: linear-gradient(45deg, #3cff8a 0%, #3cff8a 25%, #ff3bd4 75%, #ff3bd4 100%);
 }
 
 :root.dark {
   color-scheme: dark;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.985 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0f0f12;
+  --foreground: #f5f2ea;
+  --card: #1a1a1f;
+  --card-foreground: #f5f2ea;
+  --popover: #1a1a1f;
+  --popover-foreground: #f5f2ea;
+  --primary: #f5f2ea;
+  --primary-foreground: #0f0f12;
+  --secondary: #26262c;
+  --secondary-foreground: #f5f2ea;
+  --muted: #26262c;
+  --muted-foreground: #a29e94;
+  --accent: #1f1f24;
+  --accent-foreground: #f5f2ea;
+  --destructive: #ff6b75;
+  --border: #2a2a30;
+  --input: #2a2a30;
+  --ring: #6b6760;
+  --sidebar: #0f0f12;
+  --sidebar-foreground: #f5f2ea;
+  --sidebar-primary: #f5f2ea;
+  --sidebar-primary-foreground: #0f0f12;
+  --sidebar-accent: #26262c;
+  --sidebar-accent-foreground: #f5f2ea;
+  --sidebar-border: #2a2a30;
+  --sidebar-ring: #6b6760;
+
+  --link: #ff7de6;
+}
+
+@theme inline {
+  --font-display: var(--font-display);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-bot: var(--bot);
+  --color-bot-foreground: var(--bot-foreground);
+  --color-link: var(--link);
 }
 
 /*
@@ -226,4 +247,15 @@
       scrollbar-color: var(--scrollbar-thumb) transparent;
     }
   }
+}
+
+/*
+ * Empty states lead with an outlined circle around the icon, as on Instagram. Outside the layers so
+ * it wins over the helm utilities.
+ */
+[data-slot='empty-media'][data-variant='icon'] {
+  @apply border-foreground text-foreground size-20 rounded-full border-2 bg-transparent;
+}
+[data-slot='empty-media'][data-variant='icon'] ng-icon {
+  font-size: 2.25rem;
 }

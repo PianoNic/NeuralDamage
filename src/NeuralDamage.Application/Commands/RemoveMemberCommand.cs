@@ -29,6 +29,10 @@ public class RemoveMemberHandler(NeuralDamageDbContext db, IChatNotificationServ
         if (member.Role == ChatMemberRole.Owner)
             return Result.Failure("Cannot remove the chat owner.");
 
+        // A person may leave a direct chat with another person; nobody is taken out of one.
+        if (!isSelf && await db.Chats.AnyAsync(c => c.Id == request.ChatId && c.DirectKey != null, cancellationToken))
+            return Result.Failure(DirectChatRules.KeepsItsPair);
+
         var removedUserId = member.UserId;
         db.ChatMembers.Remove(member);
         if (member.BotId is { } botId)

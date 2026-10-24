@@ -9,6 +9,7 @@ import {
   lucideMoon,
   lucideSettings,
   lucideSun,
+  lucideUser,
 } from '@ng-icons/lucide';
 import { HlmAvatarImports } from '@spartan-ng/helm/avatar';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
@@ -32,6 +33,7 @@ const GITHUB_URL = 'https://github.com/PianoNic/NeuralDamage';
       lucideMoon,
       lucideSettings,
       lucideSun,
+      lucideUser,
     }),
   ],
   template: `
@@ -41,15 +43,17 @@ const GITHUB_URL = 'https://github.com/PianoNic/NeuralDamage';
           #trigger
           hlmSidebarMenuButton
           size="lg"
+          class="group-data-[collapsible=icon]:size-12! group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:[&>:not(hlm-avatar)]:hidden"
+          [attr.aria-label]="'Account: ' + auth.displayName()"
           [hlmDropdownMenuTrigger]="menu"
           side="top"
           align="start"
         >
-          <hlm-avatar class="rounded-lg after:rounded-lg">
+          <hlm-avatar class="rounded-full after:rounded-full">
             @if (user()?.avatarUrl) {
-              <img hlmAvatarImage [src]="user()!.avatarUrl" alt="" class="rounded-lg" />
+              <img hlmAvatarImage [src]="user()!.avatarUrl" alt="" class="rounded-full" />
             }
-            <span hlmAvatarFallback class="rounded-lg text-xs font-medium">{{ initial() }}</span>
+            <span hlmAvatarFallback class="rounded-full text-xs font-medium">{{ initial() }}</span>
           </hlm-avatar>
           <div class="grid flex-1 text-start leading-tight">
             <span class="truncate font-medium">{{ auth.displayName() }}</span>
@@ -64,11 +68,11 @@ const GITHUB_URL = 'https://github.com/PianoNic/NeuralDamage';
       <hlm-dropdown-menu [style.width.px]="trigger.offsetWidth" class="min-w-56">
         <hlm-dropdown-menu-label>
           <div class="flex items-center gap-2 text-start">
-            <hlm-avatar class="rounded-lg after:rounded-lg">
+            <hlm-avatar class="rounded-full after:rounded-full">
               @if (user()?.avatarUrl) {
-                <img hlmAvatarImage [src]="user()!.avatarUrl" alt="" class="rounded-lg" />
+                <img hlmAvatarImage [src]="user()!.avatarUrl" alt="" class="rounded-full" />
               }
-              <span hlmAvatarFallback class="rounded-lg text-xs font-medium">{{ initial() }}</span>
+              <span hlmAvatarFallback class="rounded-full text-xs font-medium">{{ initial() }}</span>
             </hlm-avatar>
             <div class="grid flex-1 leading-tight">
               <span class="truncate font-medium">{{ auth.displayName() }}</span>
@@ -95,6 +99,10 @@ const GITHUB_URL = 'https://github.com/PianoNic/NeuralDamage';
         </hlm-dropdown-menu-group>
         <hlm-dropdown-menu-separator />
         <hlm-dropdown-menu-group>
+          <a hlmDropdownMenuItem routerLink="/me">
+            <ng-icon name="lucideUser" />
+            Profile
+          </a>
           <a hlmDropdownMenuItem routerLink="/settings">
             <ng-icon name="lucideSettings" />
             Settings

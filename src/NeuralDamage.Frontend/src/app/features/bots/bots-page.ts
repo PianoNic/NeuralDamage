@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideAperture, lucideEllipsis, lucideNewspaper, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert } from '@ng-icons/lucide';
+import { lucideAperture, lucideBot, lucideEllipsis, lucideNewspaper, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert } from '@ng-icons/lucide';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
 import { HlmBadge } from '@spartan-ng/helm/badge';
@@ -8,7 +9,6 @@ import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmEmptyImports } from '@spartan-ng/helm/empty';
 import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
-import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { HlmTableImports } from '@spartan-ng/helm/table';
 import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
@@ -30,6 +30,7 @@ type Filter = 'all' | 'mine';
 @Component({
   selector: 'app-bots-page',
   imports: [
+    RouterLink,
     NgIcon,
     HlmAlertDialogImports,
     HlmBadge,
@@ -37,7 +38,6 @@ type Filter = 'all' | 'mine';
     HlmDropdownMenuImports,
     HlmEmptyImports,
     HlmInputGroupImports,
-    HlmSidebarImports,
     HlmSpinner,
     HlmTableImports,
     HlmToggleGroupImports,
@@ -45,19 +45,14 @@ type Filter = 'all' | 'mine';
     MemberAvatar,
     BotDialog,
   ],
-  providers: [provideIcons({ lucideAperture, lucideEllipsis, lucideNewspaper, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert })],
+  providers: [provideIcons({ lucideAperture, lucideBot, lucideEllipsis, lucideNewspaper, lucidePencil, lucidePlus, lucideSearch, lucideTrash2, lucideTriangleAlert })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
-    <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
-      <button hlmSidebarTrigger></button>
-      <span class="text-sm font-medium">Bots</span>
-    </header>
-
     <div class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
         <div class="flex flex-col gap-3 md:flex-row md:items-end">
           <div class="flex flex-1 flex-col gap-1">
-            <h1 class="text-2xl font-semibold tracking-tight">Bots</h1>
+            <h1 class="font-display text-3xl font-extrabold tracking-tight">Bots</h1>
             <p class="text-muted-foreground text-sm">
               Public bots from everyone. Add any of them to a chat from its People panel.
             </p>
@@ -98,7 +93,8 @@ type Filter = 'all' | 'mine';
         } @else if (!visible().length) {
           <hlm-empty class="rounded-xl border">
             <hlm-empty-header>
-              <h2 hlmEmptyTitle>{{ query().trim() ? 'No bot matches' : filter() === 'mine' ? 'You have no public bots yet' : 'No bots yet' }}</h2>
+              <div hlmEmptyMedia variant="icon"><ng-icon name="lucideBot" /></div>
+              <h2 hlmEmptyTitle class="font-display text-xl font-extrabold">{{ query().trim() ? 'No bot matches' : filter() === 'mine' ? 'You have no public bots yet' : 'No bots yet' }}</h2>
               <p hlmEmptyDescription>Make one with New bot, then add it to a chat from its People panel.</p>
             </hlm-empty-header>
           </hlm-empty>
@@ -123,7 +119,7 @@ type Filter = 'all' | 'mine';
                         <app-member-avatar [name]="bot.name" [avatarUrl]="bot.avatarUrl" [modelId]="bot.modelId" [px]="32" />
                         <div class="flex min-w-0 flex-col leading-snug">
                           <span class="flex min-w-0 items-center gap-1.5">
-                            <span class="truncate text-sm font-medium">{{ bot.name }}</span>
+                            <a [routerLink]="['/bots', bot.id]" class="truncate text-sm font-medium underline-offset-2 hover:underline">{{ bot.name }}</a>
                             @if (broken(bot)) {
                               <!-- Phones have no Model column; the warning moves up here. -->
                               <span hlmBadge variant="destructive" class="sm:hidden">

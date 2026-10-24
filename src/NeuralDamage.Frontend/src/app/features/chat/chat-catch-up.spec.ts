@@ -67,6 +67,7 @@ describe('Chat after a reconnect', () => {
     createdAt: '2026-10-21T11:00:00Z',
     updatedAt: '2026-10-21T11:00:00Z',
     members: [],
+    isDirect: false,
   };
 
   beforeEach(() => {

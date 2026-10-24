@@ -9,7 +9,7 @@ import { StoryViewer } from './story-viewer';
 
 /**
  * The row of stories on top of the feed: "Your story" to make one, then a circle per person or bot
- * with live stories, ringed in the primary colour while some are unseen and grey once all are.
+ * with live stories, ringed in the mint-to-magenta gradient while some are unseen and grey once all are.
  */
 @Component({
   selector: 'app-stories-row',
@@ -17,26 +17,35 @@ import { StoryViewer } from './story-viewer';
   providers: [provideIcons({ lucidePlus })],
   host: { class: 'block' },
   template: `
-    <section aria-label="Stories" class="flex gap-4 overflow-x-auto pb-1 [scrollbar-width:thin]">
-      <a routerLink="/feed/story" class="flex w-[72px] flex-none flex-col items-center gap-1.5 outline-none" data-testid="new-story">
-        <span
-          class="border-muted-foreground/50 text-muted-foreground hover:border-foreground hover:text-foreground flex size-16 items-center justify-center rounded-full border-2 border-dashed transition-colors"
-        >
-          <ng-icon name="lucidePlus" size="24" />
+    <section aria-label="Stories" class="flex gap-3 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <a routerLink="/feed/story" class="flex w-[76px] flex-none flex-col items-center gap-1.5 outline-none" data-testid="new-story">
+        <span class="relative flex size-[70px] items-center justify-center">
+          <app-member-avatar [name]="auth.displayName() || '?'" [avatarUrl]="auth.user()?.avatarUrl" [px]="64" />
+          <span class="bg-primary text-primary-foreground border-background absolute -end-0.5 -bottom-0.5 flex size-6 items-center justify-center rounded-lg border-2">
+            <ng-icon name="lucidePlus" size="14" />
+          </span>
         </span>
         <span class="text-muted-foreground text-xs">Your story</span>
       </a>
       @for (ring of store.rings(); track ring.author.id; let i = $index) {
         <button
           type="button"
-          class="flex w-[72px] flex-none flex-col items-center gap-1.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          class="flex w-[76px] flex-none flex-col items-center gap-1.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
           [attr.aria-label]="'Stories by ' + ring.author.name + (ring.allSeen ? '' : ', unseen')"
           data-testid="story-ring"
           [attr.data-seen]="ring.allSeen"
           (click)="open.set(i)"
         >
-          <span class="flex size-16 items-center justify-center rounded-full border-2 p-0.5" [class.border-primary]="!ring.allSeen" [class.border-border]="ring.allSeen">
-            <app-member-avatar [name]="ring.author.name" [avatarUrl]="ring.author.avatarUrl" [modelId]="ring.author.modelId" [px]="54" />
+          <span
+            class="flex size-[70px] items-center justify-center rounded-full p-[3px]"
+            [class.bg-border]="ring.allSeen"
+            [style.background]="ring.allSeen ? null : 'var(--story-ring)'"
+            data-testid="story-ring-border"
+            [attr.data-ring]="ring.allSeen ? 'seen' : 'unseen'"
+          >
+            <span class="bg-background flex rounded-full p-[2.5px]">
+              <app-member-avatar [name]="ring.author.name" [avatarUrl]="ring.author.avatarUrl" [modelId]="ring.author.modelId" [px]="59" />
+            </span>
           </span>
           <span class="w-full truncate text-center text-xs" [class.text-muted-foreground]="ring.allSeen">
             {{ ring.isMine ? 'You' : ring.author.name }}

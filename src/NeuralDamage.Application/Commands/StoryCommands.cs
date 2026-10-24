@@ -119,7 +119,7 @@ public class DeleteStoryHandler(NeuralDamageDbContext db, IAttachmentStorage sto
 /// </summary>
 public record ReplyToStoryCommand(Guid UserId, Guid StoryId, string Content) : ICommand<Result<StoryReplyResultDto>>;
 
-public class ReplyToStoryHandler(NeuralDamageDbContext db, IAttachmentStorage storage, IChatNotificationService notifications, ISender sender) : ICommandHandler<ReplyToStoryCommand, Result<StoryReplyResultDto>>
+public class ReplyToStoryHandler(NeuralDamageDbContext db, IAttachmentStorage storage, ISender sender) : ICommandHandler<ReplyToStoryCommand, Result<StoryReplyResultDto>>
 {
     public const int MaxReplyLength = 1000;
 
@@ -141,7 +141,10 @@ public class ReplyToStoryHandler(NeuralDamageDbContext db, IAttachmentStorage st
             return Result.Failure<StoryReplyResultDto>("That is your own story.");
 
         var me = await db.Users.FirstAsync(u => u.Id == request.UserId, cancellationToken);
-        var chat = await DirectChatAsync(me, story, cancellationToken);
+        var opened = await sender.Send(new OpenDirectChatCommand(me.Id, story.AuthorBotId, story.AuthorUserId), cancellationToken);
+        if (!opened.IsSuccess)
+            return Result.Failure<StoryReplyResultDto>(opened.Error!);
+        var chat = opened.Value!;
 
         // The story as a picture in the chat, for people. The model gets the
         // reference instead, so it reads as a reply to the story rather than
@@ -174,33 +177,5 @@ public class ReplyToStoryHandler(NeuralDamageDbContext db, IAttachmentStorage st
         return sent.IsSuccess
             ? Result.Success(new StoryReplyResultDto(chat.Id))
             : Result.Failure<StoryReplyResultDto>(sent.Error!);
-    }
-
-    /// <summary>The chat with only the two of them in it, or a new one.</summary>
-    private async Task<Chat> DirectChatAsync(User me, Story story, CancellationToken ct)
-    {
-        var existing = await db.Chats
-            .Where(c => c.Members.Count == 2
-                && c.Members.Any(m => m.UserId == me.Id)
-                && c.Members.Any(m => (story.AuthorBotId != null && m.BotId == story.AuthorBotId) || (story.AuthorUserId != null && m.UserId == story.AuthorUserId)))
-            .OrderBy(c => c.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-        if (existing is not null)
-            return existing;
-
-        var myName = FeedReads.Author(me, null).Name;
-        var theirName = FeedReads.Author(story.AuthorUser, story.AuthorBot).Name;
-        var chat = new Chat { Name = story.AuthorBotId is not null ? theirName : $"{myName} & {theirName}", CreatedById = me.Id };
-        db.Chats.Add(chat);
-        db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = me.Id, Role = ChatMemberRole.Owner });
-        db.ChatMembers.Add(story.AuthorBotId is { } botId
-            ? new ChatMember { ChatId = chat.Id, BotId = botId }
-            : new ChatMember { ChatId = chat.Id, UserId = story.AuthorUserId });
-        await db.SaveChangesAsync(ct);
-
-        await notifications.NotifyUserChatCreated(me.Id, chat.ToDto());
-        if (story.AuthorUserId is { } other)
-            await notifications.NotifyUserChatCreated(other, chat.ToDto());
-        return chat;
     }
 }

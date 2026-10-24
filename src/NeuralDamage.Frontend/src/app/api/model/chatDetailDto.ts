@@ -17,5 +17,7 @@ export interface ChatDetailDto {
     createdAt: string;
     updatedAt: string;
     members: Array<ChatMemberDto>;
+    isDirect: boolean;
+    avatarUrl?: string | null;
 }
 

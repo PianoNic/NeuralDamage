@@ -113,6 +113,19 @@ public sealed class InMemoryAttachmentStorage : IAttachmentStorage
 
     public void DeleteBotAvatar(Guid botId) => BotAvatars.TryRemove(botId, out _);
 
+    public ConcurrentDictionary<Guid, byte[]> ChatAvatars { get; } = new();
+
+    public Task SaveChatAvatarAsync(Guid chatId, byte[] data, CancellationToken ct = default)
+    {
+        ChatAvatars[chatId] = data;
+        return Task.CompletedTask;
+    }
+
+    public Task<byte[]?> ReadChatAvatarAsync(Guid chatId, CancellationToken ct = default) =>
+        Task.FromResult(ChatAvatars.TryGetValue(chatId, out var data) ? data : null);
+
+    public void DeleteChatAvatar(Guid chatId) => ChatAvatars.TryRemove(chatId, out _);
+
     public ConcurrentDictionary<(Guid Bot, Guid Id), byte[]> BotReferences { get; } = new();
 
     public Task SaveBotReferenceAsync(Guid botId, Guid referenceId, byte[] data, CancellationToken ct = default)

@@ -82,7 +82,9 @@ public record FeedReplyNoticeDto(Guid PostId, Guid CommentId, string AuthorName,
 
 /// <summary>One line of the "Happening now" panel.</summary>
 /// <param name="Kind">post, comment or story.</param>
-public record FeedActivityItemDto(string Kind, string ActorName, bool ActorIsBot, Guid? PostId, string? Text, DateTime At);
+/// <param name="ActorModelId">A bot's model, for its provider's logo when it has no picture.</param>
+public record FeedActivityItemDto(string Kind, string ActorName, bool ActorIsBot, Guid? PostId, string? Text, DateTime At,
+    string? ActorAvatarUrl = null, string? ActorModelId = null);
 
 /// <param name="ImageUrl">The rendered 1080×1920 PNG; it needs the sign-in token.</param>
 /// <param name="Description">What it says, as text: its text layers and stickers.</param>

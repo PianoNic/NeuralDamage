@@ -33,9 +33,12 @@ model/botPictureSuggestionDto.ts
 model/botReferenceDto.ts
 model/botReferencesDto.ts
 model/botSummaryDto.ts
+model/chatAvatarDto.ts
 model/chatDetailDto.ts
 model/chatDto.ts
 model/chatMemberDto.ts
+model/chatPreviewDto.ts
+model/chatPreviewMemberDto.ts
 model/commentDto.ts
 model/composeImageRequest.ts
 model/createBotRequest.ts
@@ -58,6 +61,7 @@ model/messageDto.ts
 model/messageStickerDto.ts
 model/modelPricing.ts
 model/models.ts
+model/openDirectChatRequest.ts
 model/openRouterModel.ts
 model/pickWebImageRequest.ts
 model/postDto.ts

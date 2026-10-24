@@ -111,6 +111,9 @@ public class StoryFlowTests
 
         var sender = Substitute.For<ISender>();
         var chatNotifications = Substitute.For<IChatNotificationService>();
+        var directChats = new OpenDirectChatHandler(h.Db, chatNotifications);
+        sender.Send(Arg.Any<OpenDirectChatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => directChats.Handle(call.Arg<OpenDirectChatCommand>(), default));
         return new World
         {
             H = h,
@@ -216,7 +219,7 @@ public class StoryFlowTests
         var bot = w.H.Bots[0];
         var story = (await w.Publisher.PublishAsync(Spec("kimchi day"), null, bot.Id)).Value!;
         w.Sender.Send(Arg.Any<SendMessageCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        var handler = new ReplyToStoryHandler(w.H.Db, w.Storage, w.ChatNotifications, w.Sender);
+        var handler = new ReplyToStoryHandler(w.H.Db, w.Storage, w.Sender);
 
         var first = await handler.Handle(new ReplyToStoryCommand(w.H.User.Id, story.Id, "looks great"), default);
         var second = await handler.Handle(new ReplyToStoryCommand(w.H.User.Id, story.Id, "🔥"), default);
@@ -241,7 +244,7 @@ public class StoryFlowTests
         var send = new SendMessageHandler(w.H.Db, w.ChatNotifications, Substitute.For<IBotResponseOrchestrator>(), Substitute.For<IBotResponseQueue>(), Substitute.For<ISender>(), new ChatBotState());
         w.Sender.Send(Arg.Any<SendMessageCommand>(), Arg.Any<CancellationToken>()).Returns(call => send.Handle(call.Arg<SendMessageCommand>(), default));
 
-        var replied = await new ReplyToStoryHandler(w.H.Db, w.Storage, w.ChatNotifications, w.Sender)
+        var replied = await new ReplyToStoryHandler(w.H.Db, w.Storage, w.Sender)
             .Handle(new ReplyToStoryCommand(w.H.User.Id, story.Id, "💀"), default);
         await Assert.That(replied.IsSuccess).IsTrue();
 

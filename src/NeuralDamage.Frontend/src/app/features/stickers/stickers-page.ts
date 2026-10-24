@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideEllipsis, lucideFolderUp, lucidePencil, lucideSearch, lucideTrash2, lucideUpload, lucideX } from '@ng-icons/lucide';
+import { lucideEllipsis, lucideFolderUp, lucidePencil, lucideSearch, lucideSticker, lucideTrash2, lucideUpload, lucideX } from '@ng-icons/lucide';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
 import { HlmButton } from '@spartan-ng/helm/button';
@@ -12,7 +12,6 @@ import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
 import { HlmProgressImports } from '@spartan-ng/helm/progress';
-import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { HlmTextarea } from '@spartan-ng/helm/textarea';
 import { AuthService } from '../../core/auth/auth.service';
@@ -46,25 +45,19 @@ const MAX_DESCRIPTION = 200;
     HlmInput,
     HlmInputGroupImports,
     HlmProgressImports,
-    HlmSidebarImports,
     HlmSpinner,
     HlmTextarea,
     StickerImage,
     InView,
   ],
-  providers: [StickerFeed, provideIcons({ lucideEllipsis, lucideFolderUp, lucidePencil, lucideSearch, lucideTrash2, lucideUpload, lucideX })],
+  providers: [StickerFeed, provideIcons({ lucideEllipsis, lucideFolderUp, lucidePencil, lucideSearch, lucideSticker, lucideTrash2, lucideUpload, lucideX })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
-    <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
-      <button hlmSidebarTrigger></button>
-      <span class="text-sm font-medium">Stickers</span>
-    </header>
-
     <div #scroller class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 md:px-8">
         <div class="flex flex-col gap-3 md:flex-row md:items-end">
           <div class="flex flex-1 flex-col gap-1">
-            <h1 class="text-2xl font-semibold tracking-tight">Stickers</h1>
+            <h1 class="font-display text-3xl font-extrabold tracking-tight">Stickers</h1>
             <p class="text-muted-foreground text-sm">
               One library for everyone. People and bots can send any of them from the chat.
             </p>
@@ -132,7 +125,8 @@ const MAX_DESCRIPTION = 200;
         } @else if (!feed.items().length) {
           <hlm-empty class="rounded-xl border">
             <hlm-empty-header>
-              <h2 hlmEmptyTitle>{{ feed.searched() ? 'No sticker matches' : 'No stickers yet' }}</h2>
+              <div hlmEmptyMedia variant="icon"><ng-icon name="lucideSticker" /></div>
+              <h2 hlmEmptyTitle class="font-display text-xl font-extrabold">{{ feed.searched() ? 'No sticker matches' : 'No stickers yet' }}</h2>
               <p hlmEmptyDescription>Add PNG, WebP or GIF images. Animated ones keep moving.</p>
             </hlm-empty-header>
           </hlm-empty>

@@ -1,24 +1,24 @@
-import { afterNextRender, Component, inject, signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideMessageCircle } from '@ng-icons/lucide';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmEmptyImports } from '@spartan-ng/helm/empty';
-import { HlmSidebarImports, HlmSidebarService } from '@spartan-ng/helm/sidebar';
-import { Logo } from '../../shared/logo';
 import { NewChatDialog } from './chat-dialogs';
 
-/** `/`: nothing open yet. On a phone the chat list is the home screen, so the sidebar opens. */
+/** `/chats` with no chat open: on desktop the space beside the inbox. Phones show only the inbox. */
 @Component({
   selector: 'app-home',
-  imports: [HlmButton, HlmEmptyImports, HlmSidebarImports, Logo, NewChatDialog],
+  imports: [NgIcon, HlmButton, HlmEmptyImports, NewChatDialog],
+  providers: [provideIcons({ lucideMessageCircle })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
-    <header class="flex h-12 shrink-0 items-center border-b px-2 md:px-3">
-      <button hlmSidebarTrigger></button>
-    </header>
     <hlm-empty class="flex-1">
       <hlm-empty-header>
-        <app-logo [size]="56" class="mb-2" />
-        <h1 hlmEmptyTitle>Neural Damage</h1>
-        <p hlmEmptyDescription>Pick a chat from the sidebar, or start a new one and bring some bots.</p>
+        <div hlmEmptyMedia variant="icon">
+          <ng-icon name="lucideMessageCircle" />
+        </div>
+        <h1 hlmEmptyTitle class="font-display text-2xl font-extrabold">Your chats</h1>
+        <p hlmEmptyDescription>Pick a chat, or start a new one and bring some bots.</p>
       </hlm-empty-header>
       <button hlmBtn (click)="creating.set(true)">New chat</button>
     </hlm-empty>
@@ -27,11 +27,4 @@ import { NewChatDialog } from './chat-dialogs';
 })
 export class Home {
   protected readonly creating = signal(false);
-
-  constructor() {
-    const sidebar = inject(HlmSidebarService);
-    afterNextRender(() => {
-      if (sidebar.isMobile()) sidebar.setOpenMobile(true);
-    });
-  }
 }

@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideImagePlus } from '@ng-icons/lucide';
+import { lucideImagePlus, lucideMessageCircle } from '@ng-icons/lucide';
 import { PkChatContainerImports, PkChatContainerRoot } from '@prompt-kit/chat-container';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmEmptyImports } from '@spartan-ng/helm/empty';
@@ -31,13 +31,13 @@ const HIGHLIGHT_MS = 1500;
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
 export type TimelineItem =
-  | { kind: 'message'; key: string; at: number; message: Message; first: boolean; showReply: boolean }
+  | { kind: 'message'; key: string; at: number; message: Message; first: boolean; last: boolean; showReply: boolean }
   | { kind: 'system'; key: string; at: number; content: string }
   | { kind: 'day'; key: string; at: number; label: string };
 
 /**
  * Persisted messages and ephemeral system notices slotted in by time, day separators between days,
- * and each message flagged as the first of its sender's run or not. The one-line reply reference
+ * and each message flagged as the first and the last of its sender's run or not. The one-line reply reference
  * is only shown when the reply target is not the message right above, where it would be noise.
  */
 export function buildTimeline(
@@ -80,7 +80,9 @@ export function buildTimeline(
       const replyToId = entry.message.replyTo?.id ?? null;
       const showReply = !!replyToId && replyToId !== previousMessageId;
       previousMessageId = entry.message.id;
-      previous = { ...entry, first, showReply };
+      previous = { ...entry, first, last: true, showReply };
+      const before = items.at(-1);
+      if (!first && before?.kind === 'message') before.last = false;
     } else {
       previous = entry;
     }
@@ -97,7 +99,7 @@ function senderOf(message: Message): string {
 @Component({
   selector: 'app-message-list',
   imports: [NgIcon, PkChatContainerImports, HlmEmptyImports, HlmSpinner, MessageItem],
-  providers: [provideIcons({ lucideImagePlus })],
+  providers: [provideIcons({ lucideImagePlus, lucideMessageCircle })],
   host: {
     class: 'relative flex min-h-0 flex-1 flex-col',
     '(dragenter)': 'onDragOver($event)',
@@ -119,14 +121,15 @@ function senderOf(message: Message): string {
     @if (timeline().length === 0) {
       <hlm-empty class="flex-1">
         <hlm-empty-header>
-          <h2 hlmEmptyTitle>No messages yet</h2>
+          <div hlmEmptyMedia variant="icon"><ng-icon name="lucideMessageCircle" /></div>
+          <h2 hlmEmptyTitle class="font-display text-xl font-extrabold">No messages yet</h2>
           <p hlmEmptyDescription>
             Say something, or mention a bot with &#64; to pull it into the conversation.
           </p>
         </hlm-empty-header>
       </hlm-empty>
     } @else {
-      <pk-chat-container-root class="min-h-0 flex-1" (scroll)="onScroll()">
+      <pk-chat-container-root class="min-h-0 flex-1 overflow-x-hidden" (scroll)="onScroll()">
         <pk-chat-container-content class="mx-auto w-full max-w-3xl px-4 pt-4 pb-2">
           @if (loadingOlder()) {
             <div class="flex justify-center py-2"><hlm-spinner /></div>
@@ -137,6 +140,7 @@ function senderOf(message: Message): string {
                 <app-message-item
                   [message]="item.message"
                   [first]="item.first"
+                  [last]="item.last"
                   [showReply]="item.showReply"
                   [currentUserId]="currentUserId()"
                   [mentionTargets]="mentionTargets()"
