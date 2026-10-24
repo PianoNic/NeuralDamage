@@ -147,7 +147,7 @@ describe('stories row model', () => {
 });
 
 describe('StoriesRow', () => {
-  it('rings unseen stories in the primary colour and seen ones in grey', async () => {
+  it('rings unseen stories in the gradient and seen ones in grey', async () => {
     const rings = [ring([story('s1')]), ring([story('s2', { author: bot('b2', 'Gordon'), seen: true })])];
     await TestBed.configureTestingModule({ imports: [StoriesRow], providers: providers({ apiStoriesGet: () => of(rings) }) }).compileComponents();
     const fixture = TestBed.createComponent(StoriesRow);
@@ -156,7 +156,8 @@ describe('StoriesRow', () => {
 
     const buttons = [...el.querySelectorAll('[data-testid=story-ring]')];
     expect(buttons.map((b) => b.getAttribute('data-seen'))).toEqual(['false', 'true']);
-    expect(buttons[0].querySelector('.border-primary')).not.toBeNull();
+    expect(buttons[0].querySelector('[data-ring=unseen]')).not.toBeNull();
+    expect(buttons[1].querySelector('[data-ring=seen]')).not.toBeNull();
     expect(el.querySelector('[data-testid=new-story]')?.textContent).toContain('Your story');
   });
 });
@@ -177,8 +178,10 @@ describe('StoryViewer', () => {
     expect(el.querySelector('[data-testid=story-image]')?.getAttribute('src')).toBe('blob:/api/stories/s2/image');
     expect(el.getAttribute('aria-label')).toBe('Story by Kim');
     expect(seen).toHaveBeenCalledWith('s2');
-    expect(el.textContent).toContain('Replies go to a direct chat with Kim');
+    expect(el.querySelector('#story-reply')?.getAttribute('placeholder')).toBe('Reply to Kim…');
 
+    el.querySelector<HTMLButtonElement>('[aria-label=React]')!.click();
+    fixture.detectChanges();
     [...el.querySelectorAll<HTMLButtonElement>('[role=group] button')].find((b) => b.textContent?.includes('🔥'))!.click();
     await settle(fixture);
     expect(reply).toHaveBeenCalledWith('s2', { content: '🔥' });

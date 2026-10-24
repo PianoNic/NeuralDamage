@@ -7,6 +7,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { ChatPreviewDto } from './chatPreviewDto';
 
 
 export interface ChatDto { 
@@ -15,5 +16,8 @@ export interface ChatDto {
     createdById: string;
     createdAt: string;
     updatedAt: string;
+    isDirect: boolean;
+    preview?: ChatPreviewDto;
+    avatarUrl?: string | null;
 }
 

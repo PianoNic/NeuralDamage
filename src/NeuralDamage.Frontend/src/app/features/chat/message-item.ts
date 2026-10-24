@@ -38,15 +38,15 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
     class: 'group/message flex gap-3 rounded-lg transition-colors duration-500',
     '[class.flex-row-reverse]': 'own()',
     '[class.mt-4]': 'first()',
-    '[class.mt-1]': '!first()',
+    '[class.mt-1.5]': '!first()',
     '[class.bg-accent]': 'highlighted()',
     '[attr.data-message-id]': 'message().id',
   },
   template: `
     @if (!own()) {
-      <div class="w-8 shrink-0">
+      <div class="w-9 shrink-0">
         @if (first()) {
-          <app-member-avatar [name]="message().senderName" [avatarUrl]="message().senderAvatar" [modelId]="message().senderModelId" [px]="32" />
+          <app-member-avatar [name]="message().senderName" [avatarUrl]="message().senderAvatar" [modelId]="message().senderModelId" [px]="36" />
         }
       </div>
     }
@@ -59,7 +59,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
           <div class="flex items-center gap-1.5 text-sm leading-none">
             <span class="font-semibold">{{ message().senderName }}</span>
             @if (isBot()) {
-              <span hlmBadge variant="secondary">Bot</span>
+              <span hlmBadge class="bg-bot text-bot-foreground h-4 rounded px-1 text-[10px] font-extrabold tracking-wide">BOT</span>
             }
             <time class="text-muted-foreground text-xs" [attr.datetime]="message().createdAt">{{ sentAt() }}</time>
           </div>
@@ -84,7 +84,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
       }
 
       <div class="flex max-w-full items-center gap-1" [class.flex-row-reverse]="own()">
-        <div class="flex max-w-[min(36rem,calc(100vw-7rem))] flex-col gap-1" [class.items-end]="own()" [class.items-start]="!own()">
+        <div class="flex max-w-[min(36rem,calc(100vw-9.5rem))] flex-col gap-1 md:max-w-[min(36rem,calc(100vw-7rem))]" [class.items-end]="own()" [class.items-start]="!own()">
           @if (message().sticker; as sticker) {
             <!-- A sticker stands on its own, large and without a bubble, as in WhatsApp. -->
             <app-sticker-image
@@ -100,7 +100,11 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉'] as co
           }
           @if (message().content) {
             <div
-              class="max-w-full rounded-2xl px-3 py-2 wrap-anywhere"
+              class="max-w-full rounded-[18px] px-3.5 py-2 wrap-anywhere"
+              [class.rounded-bl-md]="!own() && !last()"
+              [class.rounded-tl-md]="!own() && !first()"
+              [class.rounded-br-md]="own() && !last()"
+              [class.rounded-tr-md]="own() && !first()"
               [class.bg-primary]="own()"
               [class.text-primary-foreground]="own()"
               [class.bg-muted]="!own()"
@@ -189,6 +193,8 @@ export class MessageItem {
   readonly currentUserId = input<string | null>(null);
   /** The first of a run from one sender, which carries the name and time. */
   readonly first = input(true);
+  /** The last of its sender's run: bubbles above it in the run get tighter corners where they meet. */
+  readonly last = input(true);
   readonly highlighted = input(false);
   /** Show the one-line reference to the replied-to message (off when it is the message right above). */
   readonly showReply = input(true);

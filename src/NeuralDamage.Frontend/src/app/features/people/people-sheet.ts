@@ -118,6 +118,8 @@ const PROFILE_HEIGHT = 340;
                   <h3 class="text-muted-foreground flex flex-1 items-center gap-1.5 text-xs font-medium">
                     {{ group.label }}<span class="tabular-nums">{{ group.members.length }}</span>
                   </h3>
+                  <!-- A direct chat stays between the two of them. -->
+                  @if (!direct()) {
                   <hlm-popover
                     align="end"
                     [sideOffset]="6"
@@ -198,6 +200,7 @@ const PROFILE_HEIGHT = 340;
                       }
                     </hlm-popover-content>
                   </hlm-popover>
+                  }
                 </div>
                 <ul class="-mx-1 flex flex-col gap-0.5">
                   @for (member of group.members; track member.id) {
@@ -376,6 +379,8 @@ export class PeopleSheet implements OnDestroy {
   readonly chatId = input.required<string>();
   readonly members = input.required<ChatMember[]>();
   readonly currentUserId = input<string | null>(null);
+  /** A direct chat: nobody is added or taken out, though a person may still leave one with another person. */
+  readonly direct = input(false);
 
   readonly closed = output();
   /** Put `@name` in the composer. */
@@ -513,6 +518,7 @@ export class PeopleSheet implements OnDestroy {
   }
 
   protected canRemove(member: ChatMember): boolean {
+    if (this.direct() && member.userId !== this.currentUserId()) return false;
     return canRemoveMember(member, this.members(), this.currentUserId(), this.auth.isAdmin());
   }
 

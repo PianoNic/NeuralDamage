@@ -29,15 +29,16 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
 }
 
 /**
- * The full-screen viewer: progress bars, who and when, the story, tap left or right to go back or
- * on, quick reactions and "Reply to X", which go to a direct chat with them.
+ * The full-screen viewer: the story edge to edge with the progress bars and who and when on top, tap
+ * left or right to go back or on, and "Reply to X" with a heart for quick reactions. Replies go to a
+ * direct chat with them.
  */
 @Component({
   selector: 'app-story-viewer',
   imports: [NgIcon, HlmButton, HlmInput, MemberAvatar],
   providers: [provideIcons({ lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideTrash2, lucideX })],
   host: {
-    class: 'fixed inset-0 z-50 flex items-center justify-center bg-black/95 text-white',
+    class: 'fixed inset-0 z-50 flex items-center justify-center bg-black text-white',
     role: 'dialog',
     'aria-modal': 'true',
     '[attr.aria-label]': '"Story by " + (story()?.author?.name ?? "")',
@@ -47,37 +48,15 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
   },
   template: `
     @if (story(); as s) {
-      <div class="flex h-full max-h-[min(100svh,900px)] w-full max-w-[min(100vw,440px)] flex-col gap-3 px-3 pt-3 pb-4" data-testid="story-viewer">
-        <div class="grid gap-1 transition-opacity duration-200" [class.opacity-0]="holding()" [style.grid-template-columns]="'repeat(' + count() + ', minmax(0, 1fr))'" [attr.aria-label]="'Story ' + (index() + 1) + ' of ' + count()">
-          @for (bar of bars(); track $index) {
-            <div class="h-[3px] overflow-hidden rounded-full bg-white/30">
-              <div class="h-full bg-white" [style.width.%]="bar"></div>
-            </div>
-          }
-        </div>
-
-        <header class="flex items-center gap-2.5 transition-opacity duration-200" [class.opacity-0]="holding()">
-          <app-member-avatar [name]="s.author.name" [avatarUrl]="s.author.avatarUrl" [modelId]="s.author.modelId" [px]="36" />
-          <div class="flex min-w-0 flex-1 flex-col leading-tight">
-            <span class="truncate text-sm font-semibold">{{ s.author.name }}</span>
-            <span class="text-xs text-white/70">{{ ago(s.createdAt) }}{{ s.author.isBot ? ' · Bot' : '' }}</span>
-          </div>
-          @if (ring()?.isMine || isAdmin()) {
-            <button hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Delete story" (click)="remove(s)">
-              <ng-icon name="lucideTrash2" />
-            </button>
-          }
-          <button #closeButton hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Close story" (click)="close.emit()">
-            <ng-icon name="lucideX" size="22" />
-          </button>
-        </header>
-
-        <div class="relative min-h-0 flex-1">
+      <div class="relative flex h-full max-h-[min(100svh,900px)] w-full max-w-[min(100vw,480px)] flex-col sm:py-4" data-testid="story-viewer">
+        <div class="relative min-h-0 flex-1 overflow-hidden sm:rounded-2xl">
           @if (src(); as url) {
-            <img [src]="url" [alt]="s.description || 'Story by ' + s.author.name" class="size-full rounded-2xl object-contain" data-testid="story-image" />
+            <img [src]="url" [alt]="s.description || 'Story by ' + s.author.name" class="absolute inset-0 size-full object-cover" data-testid="story-image" />
           } @else {
-            <div class="size-full animate-pulse rounded-2xl bg-white/10"></div>
+            <div class="absolute inset-0 animate-pulse bg-white/10"></div>
           }
+          <div class="pointer-events-none absolute inset-x-0 top-0 h-36 bg-linear-to-b from-black/60 to-transparent"></div>
+
           <!-- Tap left or right to go back or on; press and hold anywhere to pause and look. -->
           <button type="button" class="absolute inset-y-0 left-0 w-1/3 select-none [-webkit-touch-callout:none]" aria-label="Previous story"
             (pointerdown)="hold()" (pointerup)="release()" (pointercancel)="release()" (pointerleave)="release()"
@@ -85,39 +64,67 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
           <button type="button" class="absolute inset-y-0 right-0 w-2/3 select-none [-webkit-touch-callout:none]" aria-label="Next story"
             (pointerdown)="hold()" (pointerup)="release()" (pointercancel)="release()" (pointerleave)="release()"
             (contextmenu)="$event.preventDefault()" (click)="tap(1)"></button>
+
+          <div class="absolute inset-x-2 top-2.5 grid gap-1 transition-opacity duration-200" [class.opacity-0]="holding()" [style.grid-template-columns]="'repeat(' + count() + ', minmax(0, 1fr))'" [attr.aria-label]="'Story ' + (index() + 1) + ' of ' + count()">
+            @for (bar of bars(); track $index) {
+              <div class="h-[3px] overflow-hidden rounded-full bg-white/35">
+                <div class="h-full bg-white" [style.width.%]="bar"></div>
+              </div>
+            }
+          </div>
+
+          <header class="absolute inset-x-3 top-6 flex items-center gap-2.5 transition-opacity duration-200" [class.opacity-0]="holding()">
+            <app-member-avatar [name]="s.author.name" [avatarUrl]="s.author.avatarUrl" [modelId]="s.author.modelId" [px]="34" />
+            <div class="flex min-w-0 flex-1 items-baseline gap-1.5 text-sm drop-shadow">
+              <span class="truncate font-semibold">{{ s.author.name }}</span>
+              <span class="shrink-0 text-white/80">· {{ ago(s.createdAt) }}</span>
+            </div>
+            @if (ring()?.isMine || isAdmin()) {
+              <button hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Delete story" (click)="remove(s)">
+                <ng-icon name="lucideTrash2" />
+              </button>
+            }
+            <button #closeButton hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Close story" (click)="close.emit()">
+              <ng-icon name="lucideX" size="24" />
+            </button>
+          </header>
         </div>
 
         @if (!ring()?.isMine) {
-          <div class="flex justify-center gap-2 transition-opacity duration-200" [class.opacity-0]="holding()" role="group" aria-label="Quick reactions">
-            @for (emoji of reactions; track emoji) {
-              <button
-                type="button"
-                class="h-10 min-w-12 rounded-full border border-white/20 bg-white/10 px-3 text-lg transition-colors hover:bg-white/20"
-                [attr.aria-label]="'React with ' + emoji"
-                (click)="send(emoji)"
-              >
-                {{ emoji }}
-              </button>
-            }
-          </div>
-          <form class="flex items-center gap-2 transition-opacity duration-200" [class.opacity-0]="holding()" (submit)="$event.preventDefault(); send(draft())">
+          @if (reacting()) {
+            <div class="absolute inset-x-0 bottom-20 flex justify-center gap-3" role="group" aria-label="Quick reactions">
+              @for (emoji of reactions; track emoji) {
+                <button
+                  type="button"
+                  class="flex size-12 items-center justify-center rounded-full bg-white/15 text-2xl backdrop-blur transition-colors hover:bg-white/25"
+                  [attr.aria-label]="'React with ' + emoji"
+                  (click)="reacting.set(false); send(emoji)"
+                >
+                  {{ emoji }}
+                </button>
+              }
+            </div>
+          }
+          <form class="flex items-center gap-2 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-opacity duration-200" [class.opacity-0]="holding()" (submit)="$event.preventDefault(); send(draft())">
             <label class="sr-only" for="story-reply">Reply to {{ s.author.name }}</label>
             <input
               id="story-reply"
               hlmInput
-              class="h-11 flex-1 rounded-full border-white/30 bg-transparent px-4 text-white placeholder:text-white/60"
-              [placeholder]="'Reply to ' + s.author.name"
+              class="h-11 flex-1 rounded-full border-white/50 bg-transparent px-4 text-white placeholder:text-white/70"
+              [placeholder]="'Reply to ' + firstName() + '…'"
               autocomplete="off"
               [value]="draft()"
               (input)="draft.set($any($event.target).value)"
               (focus)="paused.set(true)"
               (blur)="paused.set(false)"
             />
-            <button hlmBtn size="icon" class="size-11 rounded-full" type="submit" aria-label="Send reply" [disabled]="!draft().trim() || sending()">
-              <ng-icon name="lucideSend" />
+            <button hlmBtn variant="ghost" size="icon" type="button" class="size-11 text-white hover:bg-white/10 hover:text-white" aria-label="React" [attr.aria-expanded]="reacting()" (click)="reacting.update((open) => !open)">
+              <ng-icon name="lucideHeart" size="24" />
+            </button>
+            <button hlmBtn variant="ghost" size="icon" type="submit" class="size-11 text-white hover:bg-white/10 hover:text-white" aria-label="Send reply" [disabled]="!draft().trim() || sending()">
+              <ng-icon name="lucideSend" size="22" />
             </button>
           </form>
-          <p class="text-center text-xs text-white/60 transition-opacity duration-200" [class.opacity-0]="holding()">Replies go to a direct chat with {{ firstName() }}</p>
         }
       </div>
     }
@@ -146,6 +153,8 @@ export class StoryViewer {
   protected readonly holding = signal(false);
   private holdStart = 0;
   private heldLong = false;
+  /** The quick reactions are open above the reply box. */
+  protected readonly reacting = signal(false);
   protected readonly draft = signal('');
   protected readonly sending = signal(false);
 
@@ -159,7 +168,7 @@ export class StoryViewer {
     const s = this.story();
     return s ? this.images.get(s.imageUrl)() : null;
   });
-  protected readonly firstName = computed(() => this.story()?.author.name ?? '');
+  protected readonly firstName = computed(() => this.story()?.author.name.split(' ')[0] ?? '');
 
   constructor() {
     effect(() => {
@@ -232,7 +241,7 @@ export class StoryViewer {
       const chatId = await this.store.reply(s, content.trim());
       this.draft.set('');
       toast.success(`Sent to ${s.author.name}`, {
-        action: { label: 'Open chat', onClick: () => void this.router.navigate(['/chat', chatId]) },
+        action: { label: 'Open chat', onClick: () => void this.router.navigate(['/chats', chatId]) },
       });
     } catch (error) {
       toastApiError(error, { network: 'Not sent. Check your connection and try again.' });

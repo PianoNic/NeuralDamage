@@ -18,7 +18,6 @@ import { HlmCardImports } from '@spartan-ng/helm/card';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
 import { HlmPopoverImports } from '@spartan-ng/helm/popover';
-import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSliderImports } from '@spartan-ng/helm/slider';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { HlmTextarea } from '@spartan-ng/helm/textarea';
@@ -81,7 +80,6 @@ import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
     HlmInput,
     HlmInputGroupImports,
     HlmPopoverImports,
-    HlmSidebarImports,
     HlmSliderImports,
     HlmSpinner,
     HlmTextarea,
@@ -109,8 +107,7 @@ import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
   template: `
     @if (!isPost()) {
       <header class="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-3">
-        <button hlmSidebarTrigger></button>
-        <a routerLink="/feed" class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
+        <a routerLink="/" class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
           <ng-icon name="lucideChevronLeft" />
           Feed
         </a>
@@ -686,7 +683,7 @@ export class StoryEditor implements OnInit {
     try {
       await this.store.publish(toSpec(this.draft()));
       toast.success('Story posted. It stays up for 24 hours.');
-      void this.router.navigate(['/feed']);
+      void this.router.navigate(['/']);
     } catch (error) {
       toastApiError(error, { network: 'Not posted. Check your connection and try again.' });
     } finally {

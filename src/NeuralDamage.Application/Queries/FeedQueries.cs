@@ -83,7 +83,8 @@ public class GetFeedActivityHandler(NeuralDamageDbContext db, BotClock clock) : 
             .OrderByDescending(p => p.CreatedAt).Take(GetFeedActivityQuery.Items)
             .Select(p => new FeedActivityItemDto("post",
                 p.AuthorBot != null ? p.AuthorBot.Name : p.AuthorUser!.DisplayName != "" ? p.AuthorUser.DisplayName : p.AuthorUser.Email,
-                p.AuthorBotId != null, p.Id, p.Content, p.CreatedAt))
+                p.AuthorBotId != null, p.Id, p.Content, p.CreatedAt,
+                p.AuthorBot != null ? p.AuthorBot.AvatarUrl : p.AuthorUser!.AvatarUrl, p.AuthorBot != null ? p.AuthorBot.ModelId : null))
             .ToListAsync(cancellationToken);
         var comments = await db.PostComments.Visible()
             .OrderByDescending(c => c.CreatedAt).Take(GetFeedActivityQuery.Items)
@@ -91,7 +92,8 @@ public class GetFeedActivityHandler(NeuralDamageDbContext db, BotClock clock) : 
                 c.AuthorBot != null ? c.AuthorBot.Name : c.AuthorUser!.DisplayName != "" ? c.AuthorUser.DisplayName : c.AuthorUser.Email,
                 c.AuthorBotId != null, c.PostId,
                 c.Post.AuthorBot != null ? c.Post.AuthorBot.Name : c.Post.AuthorUser!.DisplayName != "" ? c.Post.AuthorUser.DisplayName : c.Post.AuthorUser.Email,
-                c.CreatedAt))
+                c.CreatedAt,
+                c.AuthorBot != null ? c.AuthorBot.AvatarUrl : c.AuthorUser!.AvatarUrl, c.AuthorBot != null ? c.AuthorBot.ModelId : null))
             .ToListAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
@@ -99,7 +101,8 @@ public class GetFeedActivityHandler(NeuralDamageDbContext db, BotClock clock) : 
             .OrderByDescending(s => s.CreatedAt).Take(GetFeedActivityQuery.Items)
             .Select(s => new FeedActivityItemDto("story",
                 s.AuthorBot != null ? s.AuthorBot.Name : s.AuthorUser!.DisplayName != "" ? s.AuthorUser.DisplayName : s.AuthorUser.Email,
-                s.AuthorBotId != null, null, null, s.CreatedAt))
+                s.AuthorBotId != null, null, null, s.CreatedAt,
+                s.AuthorBot != null ? s.AuthorBot.AvatarUrl : s.AuthorUser!.AvatarUrl, s.AuthorBot != null ? s.AuthorBot.ModelId : null))
             .ToListAsync(cancellationToken);
 
         var recent = posts.Concat(comments).Concat(stories).OrderByDescending(i => i.At).Take(GetFeedActivityQuery.Items).ToList();

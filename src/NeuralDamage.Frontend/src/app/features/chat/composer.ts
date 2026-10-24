@@ -189,7 +189,8 @@ export interface Suggestion {
     }
 
     <div
-      class="border-input bg-background focus-within:border-ring flex cursor-text flex-col gap-1 rounded-2xl border px-3 pt-2.5 pb-2 shadow-xs transition-colors"
+      class="border-input bg-card focus-within:border-ring flex cursor-text flex-col gap-1 rounded-2xl border px-3 pt-2.5 pb-2 shadow-xs transition-colors"
+      [class]="pill() ? 'max-md:min-h-12 max-md:flex-row max-md:flex-wrap max-md:items-center max-md:gap-x-0.5 max-md:rounded-3xl max-md:px-1.5 max-md:py-1' : ''"
       [class.border-ring]="dragging()"
       [class.bg-accent]="dragging()"
       (click)="focusFromChrome($event)"
@@ -199,7 +200,7 @@ export interface Suggestion {
       (drop)="onDrop($event)"
     >
       @if (images().length) {
-        <ul class="flex flex-wrap gap-2 pt-1" aria-label="Attached images">
+        <ul class="flex min-w-0 flex-wrap gap-2 pt-1 max-md:basis-full max-md:px-1.5" aria-label="Attached images">
           @for (image of images(); track image.key) {
             <li class="relative size-16 shrink-0">
               <img
@@ -233,7 +234,7 @@ export interface Suggestion {
       <ng-content select="[composerAttachment]" />
 
       @if (replyingTo(); as reply) {
-        <div class="bg-muted flex items-center gap-2 rounded-lg py-1 ps-2 pe-1 text-xs">
+        <div class="bg-muted flex min-w-0 items-center gap-2 rounded-lg py-1 ps-2 pe-1 text-xs max-md:my-0.5 max-md:basis-full max-md:rounded-2xl">
           <ng-icon name="lucideReply" class="text-muted-foreground shrink-0" />
           <span class="min-w-0 flex-1 truncate">
             <span class="text-muted-foreground">Replying to </span>
@@ -258,7 +259,7 @@ export interface Suggestion {
         Mentions are chips: the textarea keeps the plain "@Name" text (so typing, IME, undo, paste and
         mobile keyboards stay native), and this copy of it behind, laid out identically, tints them.
       -->
-      <div class="relative">
+      <div class="relative" [class]="pill() ? 'max-md:order-2 max-md:min-w-0 max-md:flex-1 max-md:px-1.5' : ''">
         <div
           #mirror
           aria-hidden="true"
@@ -291,7 +292,7 @@ export interface Suggestion {
       ></textarea>
       </div>
 
-      <div class="flex items-center gap-0.5">
+      <div class="flex items-center gap-0.5" [class.max-md:contents]="pill()">
         <input
           #fileInput
           type="file"
@@ -308,6 +309,7 @@ export interface Suggestion {
             type="button"
             aria-label="Attach images"
             hlmTooltip="Attach images"
+            [class]="pill() ? 'max-md:bg-primary max-md:text-primary-foreground max-md:hover:bg-primary/90 max-md:order-1 max-md:size-9 max-md:rounded-full' : ''"
             [disabled]="!chatId()"
             (click)="fileInput.click()"
           >
@@ -320,6 +322,7 @@ export interface Suggestion {
             type="button"
             aria-label="Commands"
             hlmTooltip="Commands"
+            [class]="pill() ? (drafting() ? 'max-md:hidden' : 'max-md:order-3') : ''"
             (click)="insertTrigger('/')"
           >
             <ng-icon name="lucideSlash" />
@@ -332,11 +335,12 @@ export interface Suggestion {
           type="button"
           aria-label="Mention someone"
           hlmTooltip="Mention"
+          [class.max-md:hidden]="pill()"
           (click)="insertTrigger('@')"
         >
           <ng-icon name="lucideAtSign" />
         </button>
-        <hlm-popover align="start" [sideOffset]="8">
+        <hlm-popover align="start" [sideOffset]="8" [class.max-md:order-3]="pill()">
           <button
             hlmPopoverTrigger
             hlmBtn
@@ -353,7 +357,7 @@ export interface Suggestion {
             <app-emoji-picker (pick)="insertEmoji($event); ctx.close()" />
           </hlm-popover-content>
         </hlm-popover>
-        <hlm-popover align="start" [sideOffset]="8">
+        <hlm-popover align="start" [sideOffset]="8" [class]="pill() ? (drafting() ? 'max-md:hidden' : 'max-md:order-3') : ''">
           <button
             hlmPopoverTrigger
             hlmBtn
@@ -372,12 +376,12 @@ export interface Suggestion {
         </hlm-popover>
         <ng-content select="[composerTool]" />
 
-        <span class="flex-1"></span>
+        <span class="flex-1" [class.max-md:hidden]="pill()"></span>
 
         @if (showCounter()) {
           <span
             [id]="counterId"
-            class="me-2 text-xs tabular-nums"
+            class="me-2 text-xs tabular-nums max-md:order-3"
             [class.text-destructive]="tooLong()"
             [class.text-muted-foreground]="!tooLong()"
           >
@@ -393,6 +397,7 @@ export interface Suggestion {
           size="icon-sm"
           type="button"
           class="rounded-full"
+          [class]="pill() ? (drafting() ? 'max-md:order-4 max-md:size-9' : 'max-md:hidden') : ''"
           aria-label="Send message"
           [disabled]="!canSend()"
           (click)="onSend()"
@@ -440,6 +445,12 @@ export class Composer {
    * `ready` lets it go out without any text.
    */
   readonly attachment = input<'none' | 'busy' | 'ready'>('none');
+  /**
+   * On phones, one rounded bar like Instagram's: images on the left, the text, then the tools, which
+   * make way for Send once there is something to send. Off, it keeps the text above the tools, for a
+   * caption.
+   */
+  readonly pill = input(true);
   protected readonly maxLength = MAX_MESSAGE_LENGTH;
   private readonly limits = inject(AppConfig).uploadLimits;
   protected readonly imageTypes = computed(() => this.limits().contentTypes.join(','));
@@ -479,6 +490,8 @@ export class Composer {
     () => this.content().length > (this.limit() === MAX_MESSAGE_LENGTH ? COUNTER_FROM : this.limit() * 0.8),
   );
   private readonly uploading = computed(() => this.images().some((i) => !i.id));
+  /** Something typed or attached: the phone bar swaps its tools for Send. */
+  protected readonly drafting = computed(() => !!this.content() || this.images().length > 0);
   readonly canSend = computed(
     () =>
       (!!this.content().trim() || this.images().length > 0 || this.attachment() === 'ready') &&

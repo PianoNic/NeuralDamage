@@ -21,9 +21,11 @@ public class AddMemberHandler(NeuralDamageDbContext db, IChatNotificationService
         if (request.UserId is not null && request.BotId is not null)
             return Result.Failure("Only one of UserId or BotId can be provided.");
 
-        var chatExists = await db.Chats.AnyAsync(c => c.Id == request.ChatId, cancellationToken);
-        if (!chatExists)
+        var direct = await db.Chats.Where(c => c.Id == request.ChatId).Select(c => (bool?)(c.DirectKey != null)).FirstOrDefaultAsync(cancellationToken);
+        if (direct is null)
             return Result.Failure("Chat not found.");
+        if (direct.Value)
+            return Result.Failure(DirectChatRules.KeepsItsPair);
 
         var isOwner = await Admins.RunsChatAsync(db, request.ChatId, request.RequestingUserId, cancellationToken);
         if (!isOwner)

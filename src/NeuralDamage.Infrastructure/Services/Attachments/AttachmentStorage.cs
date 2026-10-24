@@ -24,6 +24,13 @@ public interface IAttachmentStorage
 
     void DeleteBotAvatar(Guid botId);
 
+    /// <summary>Stores a group chat's picture, replacing the one it had. Kept apart from its attachments, so /clear leaves it.</summary>
+    Task SaveChatAvatarAsync(Guid chatId, byte[] data, CancellationToken ct = default);
+
+    Task<byte[]?> ReadChatAvatarAsync(Guid chatId, CancellationToken ct = default);
+
+    void DeleteChatAvatar(Guid chatId);
+
     /// <summary>Stores one of a bot's reference pictures (<see cref="Domain.BotReference"/>).</summary>
     Task SaveBotReferenceAsync(Guid botId, Guid referenceId, byte[] data, CancellationToken ct = default);
 
@@ -203,6 +210,30 @@ public class FileSystemAttachmentStorage(string root) : IAttachmentStorage
     // Both parts are GUIDs, so nothing from the request can steer the path.
     private string PathOf(Guid chatId, Guid attachmentId) =>
         Path.Combine(root, chatId.ToString("N"), attachmentId.ToString("N"));
+
+    public async Task SaveChatAvatarAsync(Guid chatId, byte[] data, CancellationToken ct = default)
+    {
+        var path = ChatAvatarPathOf(chatId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, data, ct);
+    }
+
+    public async Task<byte[]?> ReadChatAvatarAsync(Guid chatId, CancellationToken ct = default)
+    {
+        var path = ChatAvatarPathOf(chatId);
+        return File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
+    }
+
+    public void DeleteChatAvatar(Guid chatId)
+    {
+        var path = ChatAvatarPathOf(chatId);
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    // Like "bots", "chat-avatars" can never be a chat's folder.
+    private string ChatAvatarPathOf(Guid chatId) =>
+        Path.Combine(root, "chat-avatars", chatId.ToString("N"));
 
     // "bots" can never be a chat's folder, which is always 32 hex digits.
     private string AvatarPathOf(Guid botId) =>

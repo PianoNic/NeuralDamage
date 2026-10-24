@@ -19,6 +19,7 @@ import { canDelete, formatAgo, mergePosts, threadOf, withComment, withLike } fro
 import { textParts } from './feed-text';
 import { PostCard } from './post-card';
 import { PostThread } from './post-thread';
+import { NewPostPage } from './new-post';
 
 const author = (id: string, name: string, isBot = true) => ({ id, name, avatarUrl: null, isBot, modelId: isBot ? 'm/x' : null });
 
@@ -155,13 +156,13 @@ describe('PostCard', () => {
     const member = await render(p, [{ id: 'chat-1', name: 'cook' }]);
     expect(member.querySelector('[data-testid=source-chat]')?.textContent).toContain('after the chat in "cook"');
     expect(member.querySelector('[data-testid=mention]')?.textContent).toBe('@Kim');
-    expect(member.textContent).toContain('Bot');
+    expect(member.textContent).toContain('BOT');
   });
 
-  it('shows the last comments under the post', async () => {
+  it('leaves comments to the thread and links there with the count', async () => {
     const el = await render(post('p1', { commentCount: 5, previewComments: [comment('c1')] }));
-    expect(el.querySelector('[data-testid=preview-comments]')?.textContent).toContain('comment c1');
-    expect(el.textContent).toContain('View all 5 comments');
+    expect(el.querySelector('[data-testid=preview-comments]')).toBeNull();
+    expect(el.querySelector('[aria-label="Comments: 5"]')).not.toBeNull();
   });
 });
 
@@ -197,7 +198,7 @@ function providers(api: ReturnType<typeof feedApi>, hub: ReturnType<typeof fakeH
 }
 
 describe('FeedPage', () => {
-  it('lists the posts, the panel and today’s counts, and adds live posts on top', async () => {
+  it('lists the posts and the panel, and adds live posts on top', async () => {
     const api = feedApi([post('p1'), post('p2', { createdAt: '2026-10-21T09:00:00Z' })]);
     const hub = fakeHub();
     await TestBed.configureTestingModule({ imports: [FeedPage], providers: providers(api, hub) }).compileComponents();
@@ -206,7 +207,6 @@ describe('FeedPage', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect([...el.querySelectorAll('[data-testid=post]')].length).toBe(2);
-    expect(el.querySelector('[data-testid=posts-today]')?.textContent?.trim()).toBe('3');
     expect(el.textContent).toContain('Happening now');
     expect(api.apiFeedSeenPost).toHaveBeenCalled();
 
@@ -216,7 +216,7 @@ describe('FeedPage', () => {
   });
 });
 
-describe('FeedPage composing a picture', () => {
+describe('NewPostPage composing a picture', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('opens the layer editor in 4:5, renders a square picture into the post, and opens it again', async () => {
@@ -236,7 +236,7 @@ describe('FeedPage composing a picture', () => {
       }),
     );
     await TestBed.configureTestingModule({
-      imports: [FeedPage],
+      imports: [NewPostPage],
       providers: [
         ...providers(api, hub),
         { provide: ImagesService, useValue: { apiImagesComposePost: compose, apiImagesImageIdDelete: () => of(null) } },
@@ -245,7 +245,7 @@ describe('FeedPage composing a picture', () => {
         { provide: AvatarImages, useValue: { get: (url: string) => signal(`blob:${url}`) } },
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(FeedPage);
+    const fixture = TestBed.createComponent(NewPostPage);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const body = document.body;
@@ -306,7 +306,7 @@ describe('PostThread', () => {
     expect(el.textContent).toContain('live comment');
     expect(el.textContent).not.toMatch(/Kim\s+is typing/);
 
-    (top.querySelector('button:nth-of-type(2)') as HTMLButtonElement).click();
+    [...top.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Reply')!.click();
     await settle(fixture);
     await (fixture.componentInstance as unknown as { comment(c: string): Promise<void> }).comment('rematch?');
     expect(api.apiFeedPostsPostIdCommentsPost).toHaveBeenCalledWith('p1', { content: 'rematch?', parentId: 'c1', stickerId: null });

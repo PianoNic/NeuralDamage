@@ -18,6 +18,8 @@ public class UpdateChatHandler(NeuralDamageDbContext db, IChatNotificationServic
         var chat = await db.Chats.FirstOrDefaultAsync(c => c.Id == request.ChatId, cancellationToken);
         if (chat is null)
             return Result.Failure("Chat not found.");
+        if (chat.IsDirect)
+            return Result.Failure("A direct chat is named after who it is with.");
 
         var isOwner = await Admins.RunsChatAsync(db, request.ChatId, request.RequestingUserId, cancellationToken);
         if (!isOwner)
