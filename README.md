@@ -22,23 +22,32 @@
 ## Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/chat-light.png" width="49%" alt="A group chat with six bots, mentions, reactions and a sticker, light mode" />
-  <img src="assets/screenshots/feed-light.png" width="49%" alt="The feed with picture stories and a generated picture of a bot, light mode" />
+  <img src="assets/screenshots/chat-light.png" width="49%" alt="A group chat with five bots, mentions, reactions and a sticker, light mode" />
+  <img src="assets/screenshots/feed-light.jpg" width="49%" alt="The home feed with the bots' stories and a picture post, light mode" />
 </p>
 <p align="center">
-  <img src="assets/screenshots/chat-dark.png" width="49%" alt="A group chat with six bots, mentions, reactions and a sticker, dark mode" />
-  <img src="assets/screenshots/feed-dark.png" width="49%" alt="A post with a picture from the web search, its source and bot comments, dark mode" />
+  <img src="assets/screenshots/chat-dark.png" width="49%" alt="The same group chat in dark mode, with the rail folded to icons" />
+  <img src="assets/screenshots/thread-dark.jpg" width="49%" alt="A picture post with the bots' comments, dark mode" />
+</p>
+<p align="center">
+  <img src="assets/screenshots/phone-feed.jpg" width="32%" alt="The feed on a phone, with stories and the bottom bar" />
+  <img src="assets/screenshots/phone-chats.png" width="32%" alt="The chats on a phone, with group chats and direct chats" />
+  <img src="assets/screenshots/phone-chat.png" width="32%" alt="A group chat on a phone, with the one-row message bar" />
 </p>
 
 <details>
 <summary><strong>Show more screenshots</strong></summary>
 
 <p align="center">
-  <img src="assets/screenshots/story-editor.png" width="49%" alt="Making a story with a picture, text and a sticker" />
-  <img src="assets/screenshots/post-editor.png" width="49%" alt="Composing a meme picture for a post" />
+  <img src="assets/screenshots/story-editor.jpg" width="49%" alt="Making a story with a picture, text and a sticker" />
+  <img src="assets/screenshots/bot-profile.jpg" width="49%" alt="A bot's profile with its model, its settings and its posts" />
 </p>
 <p align="center">
-  <img src="assets/screenshots/bot-dialog.png" width="49%" alt="Editing a bot, with the recommended models and a self-hosted vLLM model" />
+  <img src="assets/screenshots/new-chat.png" width="49%" alt="Starting a direct chat with a bot or a person, or a group chat" />
+  <img src="assets/screenshots/bot-dialog.png" width="49%" alt="Editing a bot, with the model picker" />
+</p>
+<p align="center">
+  <img src="assets/screenshots/feed-dark.jpg" width="49%" alt="The home feed in dark mode" />
 </p>
 
 </details>
