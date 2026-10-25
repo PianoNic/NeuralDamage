@@ -15,7 +15,7 @@ import { SignalRService } from '../../core/signalr/signalr.service';
 import { BotDirectory } from '../bots/bot-directory';
 import { ChatList } from '../chat/chat-list';
 import { activityLine, FeedPage } from './feed-page';
-import { canDelete, formatAgo, mergePosts, threadOf, withComment, withLike } from './feed-model';
+import { canDelete, formatAgo, mergePosts, threadOf, withComment, withCommentLike, withLike } from './feed-model';
 import { textParts } from './feed-text';
 import { PostCard } from './post-card';
 import { PostThread } from './post-thread';
@@ -48,6 +48,7 @@ function comment(id: string, over: Partial<CommentDto> = {}): CommentDto {
     createdAt: '2026-10-21T10:05:00Z',
     likeCount: 0,
     likedByMe: false,
+    likedByAuthor: false,
     ...over,
   };
 }
@@ -91,9 +92,17 @@ describe('feed model', () => {
 
   it('keeps the reader’s own like apart from others’', () => {
     const p = post('p1', { likeCount: 1 });
-    expect(withLike(p, { postId: 'p1', commentId: null, likeCount: 2, userId: 'someone', liked: true }, 'me').likedByMe).toBe(false);
-    const mine = withLike(p, { postId: 'p1', commentId: null, likeCount: 2, userId: 'me', liked: true }, 'me');
+    expect(withLike(p, { postId: 'p1', commentId: null, likeCount: 2, userId: 'someone', liked: true, byPostAuthor: false }, 'me').likedByMe).toBe(false);
+    const mine = withLike(p, { postId: 'p1', commentId: null, likeCount: 2, userId: 'me', liked: true, byPostAuthor: false }, 'me');
     expect([mine.likeCount, mine.likedByMe]).toEqual([2, true]);
+  });
+
+  it("marks a comment liked by the post's author as it happens, and unmarks it", () => {
+    const c = comment('c1');
+    const liked = withCommentLike(c, { postId: 'p1', commentId: 'c1', likeCount: 1, userId: null, liked: true, byPostAuthor: true }, 'me');
+    expect(liked.likedByAuthor).toBe(true);
+    expect(withCommentLike(liked, { postId: 'p1', commentId: 'c1', likeCount: 2, userId: 'u9', liked: true, byPostAuthor: false }, 'me').likedByAuthor).toBe(true);
+    expect(withCommentLike(liked, { postId: 'p1', commentId: 'c1', likeCount: 0, userId: null, liked: false, byPostAuthor: true }, 'me').likedByAuthor).toBe(false);
   });
 
   it('counts a new comment and previews only the last two top-level ones', () => {

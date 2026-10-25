@@ -168,7 +168,9 @@ public class ToggleFeedLikeHandler(NeuralDamageDbContext db, IFeedNotifier notif
         await db.SaveChangesAsync(cancellationToken);
 
         var count = await db.FeedLikes.CountAsync(l => l.PostId == request.PostId && l.CommentId == request.CommentId, cancellationToken);
-        var dto = new FeedLikeDto(request.PostId, request.CommentId, count, request.UserId, like is null);
+        var byAuthor = request.CommentId is { } liked
+            && await db.PostComments.AnyAsync(c => c.Id == liked && c.Post.AuthorUserId == request.UserId && c.AuthorUserId != request.UserId, cancellationToken);
+        var dto = new FeedLikeDto(request.PostId, request.CommentId, count, request.UserId, like is null, byAuthor);
         await notifier.LikeUpdated(dto);
         return Result<FeedLikeDto>.Success(dto);
     }

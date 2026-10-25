@@ -15,5 +15,6 @@ export interface FeedLikeDto {
     likeCount: number;
     userId?: string | null;
     liked: boolean;
+    byPostAuthor: boolean;
 }
 

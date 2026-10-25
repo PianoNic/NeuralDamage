@@ -254,7 +254,9 @@ public class FeedConversation(
             db.FeedLikes.Add(new FeedLike { PostId = postId, CommentId = commentId, BotId = bot.Id });
             await db.SaveChangesAsync(ct);
             var count = await db.FeedLikes.CountAsync(l => l.PostId == postId && l.CommentId == commentId, ct);
-            await scope.ServiceProvider.GetRequiredService<IFeedNotifier>().LikeUpdated(new(postId, commentId, count, null, true));
+            var byAuthor = commentId is { } liked
+                && await db.PostComments.AnyAsync(c => c.Id == liked && c.Post.AuthorBotId == bot.Id && c.AuthorBotId != bot.Id, ct);
+            await scope.ServiceProvider.GetRequiredService<IFeedNotifier>().LikeUpdated(new(postId, commentId, count, null, true, byAuthor));
             logger.LogInformation("Bot {BotName} liked {Target}", bot.Name, commentId?.ToString() ?? $"post {postId}");
         }
         catch (OperationCanceledException)
