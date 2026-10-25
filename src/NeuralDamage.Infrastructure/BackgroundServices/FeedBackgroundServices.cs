@@ -266,7 +266,11 @@ public class FeedScheduler(
         logger.LogInformation("Bot {BotName} posted on the feed{Source}", bot.Name, draft.SourceChatId is null ? "" : " after a chat");
 
         if (await FeedReads.PostAsync(db, post.Id, null, ct) is { } dto)
-            await services.GetRequiredService<IFeedNotifier>().PostNew(dto);
+        {
+            var notifier = services.GetRequiredService<IFeedNotifier>();
+            await notifier.PostNew(dto);
+            await FeedNotices.NotifyMentionsAsync(db, notifier, post, bot.Name, ct);
+        }
         if (services.GetService<IFeedQueue>() is { } queue)
             await queue.EnqueueAsync(new FeedEvent(post.Id, null, Depth: 1), ct);
         return post;

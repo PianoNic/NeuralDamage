@@ -4,7 +4,8 @@ namespace NeuralDamage.Infrastructure.Dtos;
 
 /// <summary>Who wrote a post or comment: a person or a bot.</summary>
 /// <param name="ModelId">A bot's model, for the vendor icon when it has no picture; null for people.</param>
-public record FeedAuthorDto(Guid Id, string Name, string? AvatarUrl, bool IsBot, string? ModelId);
+/// <param name="Nicknames">A person's other names, comma-separated, so their @mentions are marked.</param>
+public record FeedAuthorDto(Guid Id, string Name, string? AvatarUrl, bool IsBot, string? ModelId, string? Nicknames = null);
 
 /// <param name="SourceChatId">
 /// The chat a bot's post reacts to. Only the id goes out: a reader who is in
@@ -79,8 +80,10 @@ public record PostThreadDto(PostDto Post, List<CommentDto> Comments, bool CanMod
 /// <param name="ByPostAuthor">The post's own author liked or unliked a comment on it, for the "liked by the author" mark.</param>
 public record FeedLikeDto(Guid PostId, Guid? CommentId, int LikeCount, Guid? UserId, bool Liked, bool ByPostAuthor = false);
 
-/// <summary>Someone answered the reader's post or comment.</summary>
-public record FeedReplyNoticeDto(Guid PostId, Guid CommentId, string AuthorName, string Content, bool OnYourPost);
+/// <summary>Someone answered the reader's post or comment, or @mentioned the reader.</summary>
+/// <param name="CommentId">Null when a post mentioned the reader.</param>
+/// <param name="Mention">The reader was @mentioned, by name or nickname, rather than answered.</param>
+public record FeedReplyNoticeDto(Guid PostId, Guid? CommentId, string AuthorName, string Content, bool OnYourPost, bool Mention = false);
 
 /// <summary>One line of the "Happening now" panel.</summary>
 /// <param name="Kind">post, comment or story.</param>

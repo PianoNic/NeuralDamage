@@ -50,13 +50,16 @@ export interface ChatHubEvents {
   StoryDeleted: [storyId: string];
 }
 
-/** Mirrors `FeedReplyNoticeDto`, which only travels over the hub: someone answered your post or comment. */
+/** Mirrors `FeedReplyNoticeDto`, which only travels over the hub: someone answered your post or comment, or @mentioned you. */
 export interface FeedReplyNoticeDto {
   postId: string;
-  commentId: string;
+  /** Null when a post mentioned you. */
+  commentId: string | null;
   authorName: string;
   content: string;
   onYourPost: boolean;
+  /** You were @mentioned, by name or nickname, rather than answered. */
+  mention?: boolean;
 }
 
 export interface SystemMessage {

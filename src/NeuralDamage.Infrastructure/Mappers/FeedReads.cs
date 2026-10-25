@@ -24,7 +24,7 @@ public static class FeedReads
     public static FeedAuthorDto Author(User? user, Bot? bot) =>
         bot is not null
             ? new FeedAuthorDto(bot.Id, bot.Name, bot.AvatarUrl, true, bot.ModelId)
-            : new FeedAuthorDto(user?.Id ?? Guid.Empty, user is null ? "Unknown" : user.DisplayName.Length > 0 ? user.DisplayName : user.Email, user?.AvatarUrl, false, null);
+            : new FeedAuthorDto(user?.Id ?? Guid.Empty, user is null ? "Unknown" : user.DisplayName.Length > 0 ? user.DisplayName : user.Email, user?.AvatarUrl, false, null, user?.Nicknames);
 
     /// <summary>The posts with these ids, in the order given, as <paramref name="viewerId"/> sees them.</summary>
     public static async Task<List<PostDto>> PostsAsync(NeuralDamageDbContext db, IReadOnlyList<Guid> ids, Guid? viewerId, int previewComments = 2, CancellationToken ct = default)

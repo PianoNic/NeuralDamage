@@ -1,12 +1,16 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideGithub, lucideLogOut, lucideSticker } from '@ng-icons/lucide';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmCardImports } from '@spartan-ng/helm/card';
+import { toast } from '@spartan-ng/brain/sonner';
 import { HlmFieldImports } from '@spartan-ng/helm/field';
+import { HlmInput } from '@spartan-ng/helm/input';
+import { HlmSpinner } from '@spartan-ng/helm/spinner';
 import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { AuthService } from '../../core/auth/auth.service';
+import { describeApiError } from '../../core/http-errors';
 import { Theme, ThemeMode } from '../../core/theme';
 
 /**
@@ -15,7 +19,7 @@ import { Theme, ThemeMode } from '../../core/theme';
  */
 @Component({
   selector: 'app-settings',
-  imports: [RouterLink, NgIcon, HlmButton, HlmCardImports, HlmFieldImports, HlmToggleGroupImports],
+  imports: [RouterLink, NgIcon, HlmButton, HlmCardImports, HlmFieldImports, HlmInput, HlmSpinner, HlmToggleGroupImports],
   providers: [provideIcons({ lucideGithub, lucideLogOut, lucideSticker })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
@@ -33,6 +37,28 @@ import { Theme, ThemeMode } from '../../core/theme';
             <div><span class="text-muted-foreground">Name:</span> {{ auth.displayName() }}</div>
             <div><span class="text-muted-foreground">Email:</span> {{ auth.user()?.email }}</div>
           </div>
+        </section>
+        <section hlmCard>
+          <div hlmCardHeader>
+            <h2 hlmCardTitle>Nicknames</h2>
+            <p hlmCardDescription>
+              Other names you go by. Bots and people can &#64;mention you by them too, and bots in your chats are told them,
+              so a bot that knows you as Niclas reaches you with &#64;Niclas.
+            </p>
+          </div>
+          <form hlmCardContent class="flex flex-col gap-3 sm:flex-row sm:items-end" (submit)="$event.preventDefault(); saveNicknames()">
+            <div hlmField class="flex-1">
+              <label hlmFieldLabel for="nicknames">Nicknames</label>
+              <input hlmInput id="nicknames" placeholder="e.g. Niclas, Nic" [value]="nicknames()" (input)="nicknames.set($any($event.target).value)" />
+              <p hlmFieldDescription>Separate them with commas, up to 5.</p>
+            </div>
+            <button hlmBtn type="submit" class="sm:mb-6" [disabled]="saving() || nicknames().trim() === (auth.user()?.nicknames ?? '')">
+              @if (saving()) {
+                <hlm-spinner />
+              }
+              Save
+            </button>
+          </form>
         </section>
         <section hlmCard>
           <div hlmCardHeader>
@@ -79,6 +105,25 @@ export class Settings {
   protected readonly auth = inject(AuthService);
   protected readonly theme = inject(Theme);
   protected readonly githubUrl = 'https://github.com/PianoNic/NeuralDamage';
+  protected readonly nicknames = signal('');
+  protected readonly saving = signal(false);
+
+  constructor() {
+    // What is saved, once the account has loaded and after each save.
+    effect(() => this.nicknames.set(this.auth.user()?.nicknames ?? ''));
+  }
+
+  protected async saveNicknames(): Promise<void> {
+    this.saving.set(true);
+    try {
+      await this.auth.updateNicknames(this.nicknames());
+      toast.success('Nicknames saved.');
+    } catch (error) {
+      toast.error(describeApiError(error, { fallback: 'Could not save the nicknames.' }));
+    } finally {
+      this.saving.set(false);
+    }
+  }
 
   protected setTheme(value: unknown): void {
     if (value === 'light' || value === 'dark' || value === 'system') this.theme.set(value as ThemeMode);

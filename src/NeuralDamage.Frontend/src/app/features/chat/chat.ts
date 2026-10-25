@@ -182,12 +182,12 @@ export class Chat implements OnDestroy {
   private lastTypingSent = 0;
 
   protected readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
-  /** Every name that @mentions a member: display names, and bots' nicknames once their details are in. */
+  /** Every name that @mentions a member: display names, people's nicknames, and bots' once their details are in. */
   protected readonly mentionTargets = computed<MentionTarget[]>(() => {
     const bots = this.botDetails.byId();
     return this.members().flatMap((m) => [
       { name: m.displayName, memberId: m.id },
-      ...nicknames(m.botId ? bots.get(m.botId)?.aliases : null).map((name) => ({ name, memberId: m.id })),
+      ...nicknames(m.botId ? bots.get(m.botId)?.aliases : m.nicknames).map((name) => ({ name, memberId: m.id })),
     ]);
   });
   protected readonly mentionNames = computed(() => this.mentionTargets().map((t) => t.name));

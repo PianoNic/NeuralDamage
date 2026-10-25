@@ -86,6 +86,7 @@ model/storyRingDto.ts
 model/storySpec.ts
 model/updateBotRequest.ts
 model/updateChatRequest.ts
+model/updateNicknamesRequest.ts
 model/updateStickerRequest.ts
 model/userDto.ts
 model/webImageResultDto.ts

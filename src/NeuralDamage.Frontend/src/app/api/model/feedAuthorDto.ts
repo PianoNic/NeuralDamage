@@ -15,5 +15,6 @@ export interface FeedAuthorDto {
     avatarUrl?: string | null;
     isBot: boolean;
     modelId?: string | null;
+    nicknames?: string | null;
 }
 

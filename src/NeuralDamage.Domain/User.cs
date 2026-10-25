@@ -17,6 +17,12 @@ public class User : BaseEntity
     /// <summary>When the user last opened the feed; what is newer counts as unread.</summary>
     public DateTime? FeedSeenAt { get; set; }
 
+    /// <summary>
+    /// Comma-separated names the person also goes by, like a bot's aliases: "@Niclas" mentions
+    /// PianoNic when Niclas is one, and bots are told them next to the handle.
+    /// </summary>
+    public string? Nicknames { get; set; }
+
     public ICollection<Bot> CreatedBots { get; set; } = [];
     public ICollection<Chat> CreatedChats { get; set; } = [];
     public ICollection<ChatMember> ChatMembers { get; set; } = [];

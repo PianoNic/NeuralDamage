@@ -61,6 +61,7 @@ export function toChatMember(dto: ChatMemberDto): ChatMember {
     isMuted: dto.isMuted ?? false,
     modelStatus: dto.modelStatus ?? null,
     modelStatusReason: dto.modelStatusReason ?? null,
+    nicknames: isBot ? null : (dto.user?.nicknames ?? null),
   };
 }
 

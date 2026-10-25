@@ -103,7 +103,8 @@ public class BotResponseOrchestrator(
                 .Include(cm => cm.Bot)
                 .AsNoTracking()
                 .ToListAsync(cts.Token);
-            var participantNames = members.Select(m => m.User?.DisplayName ?? m.Bot?.Name ?? "Unknown").Order(StringComparer.Ordinal).ToList();
+            // People with nicknames are listed with them, so a bot that knows "Niclas" mentions "@Niclas" and it reaches PianoNic.
+            var participantNames = members.Select(m => m.User is { } user ? PeopleNames.ForPrompt(user) : m.Bot?.Name ?? "Unknown").Order(StringComparer.Ordinal).ToList();
             var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
             var canSee = await VisionModelsAsync(openRouter, cts.Token);
             var stickers = await StickerCatalog.LoadAsync(db, cts.Token);

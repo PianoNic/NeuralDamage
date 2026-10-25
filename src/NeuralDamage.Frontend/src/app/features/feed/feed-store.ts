@@ -157,7 +157,8 @@ export class FeedStore {
     if (!this.open()) this.unread.update((n) => n + 1);
     // On the thread itself the comment shows up anyway.
     if (this.router.url.startsWith(`/feed/${notice.postId}`)) return;
-    toast(`${notice.authorName} ${notice.onYourPost ? 'commented on your post' : 'replied to you'}`, {
+    const what = notice.mention ? 'mentioned you' : notice.onYourPost ? 'commented on your post' : 'replied to you';
+    toast(`${notice.authorName} ${what}`, {
       description: notice.content,
       action: { label: 'View', onClick: () => void this.router.navigate(['/feed', notice.postId]) },
     });
