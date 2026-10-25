@@ -33,6 +33,7 @@ export function withCommentLike(comment: CommentDto, like: FeedLikeDto, me: stri
     ...comment,
     likeCount: like.likeCount,
     likedByMe: like.userId && like.userId === me ? like.liked : comment.likedByMe,
+    likedByAuthor: like.byPostAuthor ? like.liked : comment.likedByAuthor,
   };
 }
 

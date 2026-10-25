@@ -126,6 +126,14 @@ public static class FeedReads
             .Select(g => new { CommentId = g.Key, Count = g.Count(), Mine = g.Any(l => viewerId != null && l.UserId == viewerId) })
             .ToDictionaryAsync(g => g.CommentId, ct);
 
+        // The post's author liking a comment, as Instagram's "liked by the creator"; their own comments don't count.
+        var authorLiked = (await db.FeedLikes
+            .Where(l => l.CommentId != null && ids.Contains(l.CommentId.Value))
+            .Where(l => (l.UserId != null && l.UserId == l.Post.AuthorUserId && l.Comment!.AuthorUserId != l.UserId)
+                || (l.BotId != null && l.BotId == l.Post.AuthorBotId && l.Comment!.AuthorBotId != l.BotId))
+            .Select(l => l.CommentId!.Value)
+            .ToListAsync(ct)).ToHashSet();
+
         return comments
             .OrderBy(c => c.CreatedAt)
             .ThenBy(c => c.Id)
@@ -138,7 +146,8 @@ public static class FeedReads
                 c.Sticker?.ToMessageDto(),
                 c.CreatedAt,
                 likes.GetValueOrDefault(c.Id)?.Count ?? 0,
-                likes.GetValueOrDefault(c.Id)?.Mine ?? false))
+                likes.GetValueOrDefault(c.Id)?.Mine ?? false,
+                authorLiked.Contains(c.Id)))
             .ToList();
     }
 

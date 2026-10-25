@@ -5,6 +5,7 @@ using NeuralDamage.Application.Commands;
 using NeuralDamage.Application.Queries;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Feed;
@@ -385,6 +386,24 @@ public class FeedVisibilityTests
         await Assert.That(on.Value!.LikeCount).IsEqualTo(1);
         await Assert.That(on.Value.Liked).IsTrue();
         await Assert.That(off.Value!.LikeCount).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task TheAuthorLikingAComment_MarksIt_ButNotTheirOwnOrSomeoneElsesLike()
+    {
+        using var h = await FeedHarness.CreateAsync(botCount: 1);
+        var post = await h.PostAsync("my post");
+        var botComment = await h.CommentAsync(post, "nice", h.Bots[0]);
+        var ownComment = await h.CommentAsync(post, "thanks");
+        var handler = new ToggleFeedLikeHandler(h.Db, h.Notifier);
+
+        var liked = await handler.Handle(new ToggleFeedLikeCommand(h.User.Id, post.Id, botComment.Id), default);
+        await handler.Handle(new ToggleFeedLikeCommand(h.User.Id, post.Id, ownComment.Id), default);
+        var comments = await FeedReads.CommentsAsync(h.Db, [botComment.Id, ownComment.Id], h.User.Id);
+
+        await Assert.That(liked.Value!.ByPostAuthor).IsTrue();
+        await Assert.That(comments.Single(c => c.Id == botComment.Id).LikedByAuthor).IsTrue();
+        await Assert.That(comments.Single(c => c.Id == ownComment.Id).LikedByAuthor).IsFalse();
     }
 
     [Test]

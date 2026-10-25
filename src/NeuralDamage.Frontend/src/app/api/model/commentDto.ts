@@ -21,5 +21,6 @@ export interface CommentDto {
     createdAt: string;
     likeCount: number;
     likedByMe: boolean;
+    likedByAuthor: boolean;
 }
 

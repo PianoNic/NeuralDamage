@@ -140,6 +140,15 @@ const TYPING_SEND_INTERVAL_MS = 3000;
               <span>{{ c.likeCount }} {{ c.likeCount === 1 ? 'like' : 'likes' }}</span>
             }
             <button type="button" class="hover:text-foreground" (click)="replyingTo.set(c)">Reply</button>
+            @if (c.likedByAuthor && post(); as p) {
+              <!-- Instagram's "liked by the creator": the post's author, with a small heart. -->
+              <span class="relative flex" [attr.title]="'Liked by ' + p.author.name" role="img" [attr.aria-label]="'Liked by ' + p.author.name">
+                <app-member-avatar [name]="p.author.name" [avatarUrl]="p.author.avatarUrl" [modelId]="p.author.modelId" [px]="18" />
+                <span class="bg-background absolute -end-1 -bottom-1 flex rounded-full p-px">
+                  <ng-icon name="lucideHeart" size="9" class="text-highlight [&_svg]:fill-current" />
+                </span>
+              </span>
+            }
             @if (deletable(c.author)) {
               <button type="button" class="hover:text-destructive" [attr.aria-label]="'Delete comment by ' + c.author.name" (click)="removeComment(c)">
                 <ng-icon name="lucideTrash2" />
@@ -154,7 +163,7 @@ const TYPING_SEND_INTERVAL_MS = 3000;
           [attr.aria-label]="(c.likedByMe ? 'Unlike' : 'Like') + ' comment by ' + c.author.name"
           (click)="likeComment(c)"
         >
-          <ng-icon name="lucideHeart" size="14" [class.text-highlight]="c.likedByMe" [class.fill-current]="c.likedByMe" />
+          <ng-icon name="lucideHeart" size="14" [class]="c.likedByMe ? 'text-highlight [&_svg]:fill-current' : ''" />
         </button>
       </div>
     </ng-template>

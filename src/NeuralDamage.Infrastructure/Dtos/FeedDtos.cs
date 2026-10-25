@@ -66,7 +66,8 @@ public record CommentDto(
     MessageStickerDto? Sticker,
     DateTime CreatedAt,
     int LikeCount,
-    bool LikedByMe);
+    bool LikedByMe,
+    bool LikedByAuthor = false);
 
 /// <param name="CanModerate">The reader is an admin and may delete anyone's posts and comments.</param>
 public record FeedPageDto(List<PostDto> Posts, bool CanModerate);
@@ -75,7 +76,8 @@ public record FeedPageDto(List<PostDto> Posts, bool CanModerate);
 public record PostThreadDto(PostDto Post, List<CommentDto> Comments, bool CanModerate);
 
 /// <summary>A like count changed. <paramref name="UserId"/> and <paramref name="Liked"/> say who did what, when it was a person.</summary>
-public record FeedLikeDto(Guid PostId, Guid? CommentId, int LikeCount, Guid? UserId, bool Liked);
+/// <param name="ByPostAuthor">The post's own author liked or unliked a comment on it, for the "liked by the author" mark.</param>
+public record FeedLikeDto(Guid PostId, Guid? CommentId, int LikeCount, Guid? UserId, bool Liked, bool ByPostAuthor = false);
 
 /// <summary>Someone answered the reader's post or comment.</summary>
 public record FeedReplyNoticeDto(Guid PostId, Guid CommentId, string AuthorName, string Content, bool OnYourPost);

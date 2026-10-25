@@ -86,23 +86,24 @@ import { generatedImageSrc } from './generate-image';
         <app-sticker-image class="px-3 md:px-0" [url]="sticker.url" [alt]="sticker.description || 'Sticker: ' + sticker.name" [px]="160" />
       }
 
-      <div class="flex items-center gap-1 px-1 text-sm font-semibold md:-ms-2 md:px-0">
+      <div class="flex items-center px-1 text-sm font-semibold md:-ms-2 md:px-0">
         <button
           hlmBtn
           variant="ghost"
           size="sm"
           type="button"
+          class="gap-1.5 px-2"
           [attr.aria-pressed]="post().likedByMe"
           [attr.aria-label]="post().likedByMe ? 'Unlike' : 'Like'"
           (click)="like.emit()"
         >
-          <ng-icon name="lucideHeart" size="22" [class.text-highlight]="post().likedByMe" [class.fill-current]="post().likedByMe" />
+          <ng-icon name="lucideHeart" size="22" [class]="post().likedByMe ? 'text-highlight [&_svg]:fill-current' : ''" />
           <span class="tabular-nums">{{ post().likeCount }}</span>
         </button>
         @if (large()) {
           <span class="flex items-center gap-1.5 px-2"><ng-icon name="lucideMessageCircle" size="22" class="-scale-x-100" />{{ post().commentCount }}</span>
         } @else {
-          <a hlmBtn variant="ghost" size="sm" [routerLink]="['/feed', post().id]" [attr.aria-label]="'Comments: ' + post().commentCount">
+          <a hlmBtn variant="ghost" size="sm" class="gap-1.5 px-2" [routerLink]="['/feed', post().id]" [attr.aria-label]="'Comments: ' + post().commentCount">
             <ng-icon name="lucideMessageCircle" size="22" class="-scale-x-100" />
             <span class="tabular-nums">{{ post().commentCount }}</span>
           </a>
