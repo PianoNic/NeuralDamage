@@ -11,6 +11,7 @@ using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Extensions;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.Memory;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Stickers;
@@ -60,6 +61,10 @@ builder.Services.AddHttpClient<IDecisionsClient, DecisionsClient>((sp, client) =
 builder.Services.Configure<BotBehaviorOptions>(builder.Configuration.GetSection(BotBehaviorOptions.SectionName));
 builder.Services.Configure<HistoryOptions>(builder.Configuration.GetSection(HistoryOptions.SectionName));
 builder.Services.AddSingleton<IChatCompactor, ChatCompactor>();
+// Bots remember: facts picked out of their chats in the background, their own posts and stories.
+builder.Services.Configure<MemoryOptions>(builder.Configuration.GetSection(MemoryOptions.SectionName));
+builder.Services.AddSingleton<IMemoryExtractor, MemoryExtractor>();
+builder.Services.AddHostedService<MemorySweeper>();
 builder.Services.AddScoped<IBotDecisionEngine, BotDecisionEngine>();
 builder.Services.AddSingleton(sp => BotClock.FromConfiguration(builder.Configuration, sp.GetRequiredService<ILogger<BotClock>>()));
 builder.Services.AddSingleton<BotResponseQueue>();
@@ -76,7 +81,8 @@ builder.Services.AddScoped<FeedPostWriter>(sp => new FeedPostWriter(
     sp.GetRequiredService<IConfiguration>(),
     sp.GetRequiredService<ILogger<FeedPostWriter>>(),
     sp.GetRequiredService<IOptions<FeedOptions>>(),
-    sp.GetRequiredService<BotClock>()));
+    sp.GetRequiredService<BotClock>(),
+    sp.GetRequiredService<IOptions<MemoryOptions>>()));
 builder.Services.AddSingleton<FeedQueue>();
 builder.Services.AddSingleton<IFeedQueue>(sp => sp.GetRequiredService<FeedQueue>());
 builder.Services.AddSingleton(sp => new FeedConversation(

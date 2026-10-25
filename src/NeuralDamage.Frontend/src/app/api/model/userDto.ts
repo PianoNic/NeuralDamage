@@ -16,5 +16,6 @@ export interface UserDto {
     avatarUrl?: string | null;
     isAdmin: boolean;
     nicknames?: string | null;
+    allowBotMemory: boolean;
 }
 

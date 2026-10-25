@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.Memory;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Stories;
@@ -264,6 +265,7 @@ public class FeedScheduler(
         db.Posts.Add(post);
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Bot {BotName} posted on the feed{Source}", bot.Name, draft.SourceChatId is null ? "" : " after a chat");
+        await BotMemories.RememberOwnPostAsync(db, bot, MemorySource.Feed, draft.Content, writer.Memory, ct);
 
         if (await FeedReads.PostAsync(db, post.Id, null, ct) is { } dto)
         {

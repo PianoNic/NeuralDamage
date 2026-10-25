@@ -40,6 +40,17 @@ public class Bot : BaseEntity
     public string? Aliases { get; set; }
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Whether the bot keeps memories of its chats, posts and stories (<see cref="BotMemory"/>).</summary>
+    public bool MemoryEnabled { get; set; } = true;
+
+    /// <summary>
+    /// What the bot always remembers, written by its maker: a short block that goes into every
+    /// prompt next to what it picked up itself.
+    /// </summary>
+    public string? MemoryNotes { get; set; }
+
+    public const int MaxMemoryNotesLength = 1000;
+
     /// <summary>Public bots are listed for everyone and can join any chat.</summary>
     public bool IsPublic { get; set; } = true;
 

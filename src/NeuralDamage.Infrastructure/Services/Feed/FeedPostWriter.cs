@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Mappers;
+using NeuralDamage.Infrastructure.Services.Memory;
 using NeuralDamage.Infrastructure.Services.Stickers;
 
 namespace NeuralDamage.Infrastructure.Services.Feed;
@@ -29,8 +30,12 @@ public partial class FeedPostWriter(
     IConfiguration configuration,
     ILogger<FeedPostWriter> logger,
     IOptions<FeedOptions>? options = null,
-    BotClock? clock = null)
+    BotClock? clock = null,
+    IOptions<MemoryOptions>? memory = null)
 {
+    /// <summary>How bots remember, shared with the stories, which are written in the same voice.</summary>
+    public MemoryOptions Memory { get; } = memory?.Value ?? new();
+
     /// <summary>Messages of the chat a post reacts to that the model reads.</summary>
     public const int ChatMessages = 12;
 
@@ -63,6 +68,11 @@ public partial class FeedPostWriter(
         var system = SystemPrompt(bot, stickers.ForPrompt);
         var imageNote = offerImage ? FeedPostOutput.Instruction(canIncludeMe: bot.AvatarUrl is not null, canGenerate, canSearch) : null;
         var turns = Turns(bot, material, recent, now, _clock, language, imageNote);
+        // What the bot remembers about itself, its earlier posts above all, so it doesn't repeat them.
+        // Never what it knows about people: the feed doesn't name them.
+        var self = await BotMemories.RecallSelfAsync(db, bot, string.Join(" ", recent.Select(p => p.Content)), Memory, ct);
+        if (BotMemories.Note(bot, self) is { } remembered)
+            turns = [.. turns[..^1], new ChatMessage("user", remembered), turns[^1]];
         var model = ModelFor(bot);
         var temperature = Math.Min(bot.Temperature, 1.2);
 

@@ -2,7 +2,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, effect, inject, input, OnInit, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideAperture, lucideBot, lucideCamera, lucideChevronLeft, lucideEllipsis, lucideMessageCircle, lucideNewspaper, lucidePencil, lucideTrash2 } from '@ng-icons/lucide';
+import { lucideAperture, lucideBot, lucideBrain, lucideCamera, lucideChevronLeft, lucideEllipsis, lucideMessageCircle, lucideNewspaper, lucidePencil, lucideTrash2 } from '@ng-icons/lucide';
 import { PkAuthImage } from '@prompt-kit/auth-image';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmAlertDialogImports } from '@spartan-ng/helm/alert-dialog';
@@ -23,6 +23,7 @@ import { FeedStore } from '../feed/feed-store';
 import { generatedImageSrc } from '../feed/generate-image';
 import { ChatList } from '../chat/chat-list';
 import { BotDialog } from './bot-dialog';
+import { BotMemory } from './bot-memory';
 import { BotDirectory } from './bot-directory';
 import { formatPricing, hasModelProblem, modelProblemLabel } from './bot-meta';
 import { ModelCatalog } from './model-catalog';
@@ -47,8 +48,9 @@ import { ModelCatalog } from './model-catalog';
     HlmItemImports,
     MemberAvatar,
     BotDialog,
+    BotMemory,
   ],
-  providers: [AuthorPosts, provideIcons({ lucideAperture, lucideBot, lucideCamera, lucideChevronLeft, lucideEllipsis, lucideMessageCircle, lucideNewspaper, lucidePencil, lucideTrash2 })],
+  providers: [AuthorPosts, provideIcons({ lucideAperture, lucideBot, lucideBrain, lucideCamera, lucideChevronLeft, lucideEllipsis, lucideMessageCircle, lucideNewspaper, lucidePencil, lucideTrash2 })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-14 shrink-0 items-center gap-1 px-2 md:hidden">
@@ -90,6 +92,10 @@ import { ModelCatalog } from './model-catalog';
                     <button hlmBtn variant="secondary" size="sm" (click)="editing.set(true)">
                       <ng-icon name="lucidePencil" />
                       {{ broken() ? 'Update model' : 'Edit bot' }}
+                    </button>
+                    <button hlmBtn variant="secondary" size="sm" aria-label="Memory" (click)="remembering.set(true)">
+                      <ng-icon name="lucideBrain" />
+                      <span class="max-md:sr-only">Memory</span>
                     </button>
                     <button hlmBtn variant="secondary" size="icon-sm" aria-label="More for this bot" [hlmDropdownMenuTrigger]="menu" align="end">
                       <ng-icon name="lucideEllipsis" />
@@ -195,6 +201,7 @@ import { ModelCatalog } from './model-catalog';
           </hlm-alert-dialog-content>
         </hlm-alert-dialog>
 
+        <app-bot-memory [botId]="remembering() ? b.id : null" [botName]="b.name" (closed)="remembering.set(false)" />
         <app-bot-dialog [open]="editing()" [bot]="b" [focusModel]="broken()" (closed)="editing.set(false)" (saved)="directory.reload()" />
       } @else {
         <hlm-empty class="py-20">
@@ -226,6 +233,7 @@ export class BotProfile implements OnInit {
   protected readonly reading = signal(false);
   protected readonly deleting = signal(false);
   protected readonly opening = signal(false);
+  protected readonly remembering = signal(false);
 
   protected readonly bot = computed<BotDto | null>(() => this.directory.bots().find((b) => b.id === this.botId()) ?? null);
   protected readonly posts = this.authorPosts.posts;

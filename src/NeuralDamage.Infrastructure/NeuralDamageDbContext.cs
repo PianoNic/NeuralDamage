@@ -23,6 +23,8 @@ public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> optio
     public DbSet<StoryView> StoryViews => Set<StoryView>();
     public DbSet<StoryImage> StoryImages => Set<StoryImage>();
     public DbSet<GeneratedImage> GeneratedImages => Set<GeneratedImage>();
+    public DbSet<BotMemory> BotMemories => Set<BotMemory>();
+    public DbSet<BotMemoryCursor> BotMemoryCursors => Set<BotMemoryCursor>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(NeuralDamageDbContext).Assembly);
 

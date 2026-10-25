@@ -3,6 +3,7 @@ using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Images;
+using NeuralDamage.Infrastructure.Services.Memory;
 using NeuralDamage.Infrastructure.Services.Stickers;
 using NeuralDamage.Infrastructure.Services.WebImages;
 
@@ -63,6 +64,10 @@ public class StoryWriter(
         [
             new(ChatMessage.Note, $"(It is {_clock.Describe(now)}. {BotPromptBuilder.Reminder(bot)} Make one story for today, in character: a thought, a mood, a show-off, a joke. Keep the text short, the way stories are.)"),
         ];
+        // What the bot remembers about itself, as for its posts; nothing about people.
+        var self = await BotMemories.RecallSelfAsync(db, bot, "", posts.Memory, ct);
+        if (BotMemories.Note(bot, self) is { } remembered)
+            turns.Insert(0, new ChatMessage("user", remembered));
 
         var reply = await BotResponseOrchestrator.GenerateAsync(openRouter, bot.Name, posts.ModelFor(bot), Math.Min(bot.Temperature, 1.0), system, turns, logger, ct);
         var json = ExtractJson(reply);
@@ -82,6 +87,7 @@ public class StoryWriter(
             logger.LogInformation("Bot {BotName}'s story was dropped: {Error}", bot.Name, result.Error);
             return null;
         }
+        await BotMemories.RememberOwnPostAsync(db, bot, MemorySource.Story, StorySpecRules.Describe(spec), posts.Memory, ct);
         return result.Value;
     }
 

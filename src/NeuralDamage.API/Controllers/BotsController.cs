@@ -189,6 +189,53 @@ public class BotsController(ISender sender, IUserService userService, Attachment
         return File(result.Value!.Content, result.Value.ContentType);
     }
 
+    /// <summary>The bot's memory, for its maker: on or off, its notes, and what it remembers from chats you are in.</summary>
+    [HttpGet("{botId:guid}/memories")]
+    [ProducesResponseType<BotMemoriesDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<BotMemoriesDto>> GetMemories(Guid botId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetBotMemoriesQuery(botId, userId), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    [HttpPut("{botId:guid}/memory")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> UpdateMemorySettings(Guid botId, UpdateBotMemorySettingsRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new UpdateBotMemorySettingsCommand(botId, userId, request.Enabled, request.Notes), ct);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+    }
+
+    [HttpPatch("{botId:guid}/memories/{memoryId:guid}")]
+    [ProducesResponseType<BotMemoryDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<BotMemoryDto>> UpdateMemory(Guid botId, Guid memoryId, UpdateBotMemoryRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new UpdateBotMemoryCommand(botId, memoryId, userId, request.Text, request.Pinned), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    [HttpDelete("{botId:guid}/memories/{memoryId:guid}")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> DeleteMemory(Guid botId, Guid memoryId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new DeleteBotMemoryCommand(memoryId, userId), ct);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+    }
+
+    /// <summary>Wipes everything the bot picked up; its notes stay.</summary>
+    [HttpDelete("{botId:guid}/memories")]
+    [ProducesResponseType<int>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<int>> ClearMemories(Guid botId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new ClearBotMemoryCommand(botId, userId), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpDelete("{botId:guid}")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> Delete(Guid botId, CancellationToken ct)
