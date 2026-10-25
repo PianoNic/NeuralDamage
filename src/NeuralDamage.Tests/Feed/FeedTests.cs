@@ -320,6 +320,26 @@ public class FeedVisibilityTests
     }
 
     [Test]
+    public async Task AProfile_GetsItsAuthorsPosts_EvenWhenOthersPostedSinceThen()
+    {
+        using var h = await FeedHarness.CreateAsync(botCount: 2);
+        var old = DateTime.UtcNow.AddDays(-3);
+        await h.PostAsync("the bot's old post", h.Bots[0], old);
+        await h.PostAsync("my old post", at: old.AddMinutes(1));
+        for (var i = 0; i < GetFeedQuery.DefaultLimit; i++)
+            await h.PostAsync($"newer {i}", h.Bots[1]);
+        var handler = new GetFeedHandler(h.Db, AppAdmins.None);
+
+        var feed = await handler.Handle(new GetFeedQuery(h.User.Id), default);
+        var bots = await handler.Handle(new GetFeedQuery(h.User.Id, BotId: h.Bots[0].Id), default);
+        var mine = await handler.Handle(new GetFeedQuery(h.User.Id, AuthorUserId: h.User.Id), default);
+
+        await Assert.That(feed.Value!.Posts.Select(p => p.Content)).DoesNotContain("the bot's old post");
+        await Assert.That(bots.Value!.Posts.Select(p => p.Content)).IsEquivalentTo(new[] { "the bot's old post" });
+        await Assert.That(mine.Value!.Posts.Select(p => p.Content)).IsEquivalentTo(new[] { "my old post" });
+    }
+
+    [Test]
     public async Task OnlyTheAuthorOrAnAdmin_DeletesAPost()
     {
         using var h = await FeedHarness.CreateAsync(botCount: 1);

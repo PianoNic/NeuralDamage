@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, OnInit, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideAperture, lucideBot, lucideCamera, lucideChevronLeft, lucideEllipsis, lucideMessageCircle, lucideNewspaper, lucidePencil, lucideTrash2 } from '@ng-icons/lucide';
@@ -18,6 +18,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { describeApiError } from '../../core/http-errors';
 import { BotDto } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
+import { AuthorPosts } from '../feed/author-posts';
 import { FeedStore } from '../feed/feed-store';
 import { generatedImageSrc } from '../feed/generate-image';
 import { ChatList } from '../chat/chat-list';
@@ -47,7 +48,7 @@ import { ModelCatalog } from './model-catalog';
     MemberAvatar,
     BotDialog,
   ],
-  providers: [provideIcons({ lucideAperture, lucideBot, lucideCamera, lucideChevronLeft, lucideEllipsis, lucideMessageCircle, lucideNewspaper, lucidePencil, lucideTrash2 })],
+  providers: [AuthorPosts, provideIcons({ lucideAperture, lucideBot, lucideCamera, lucideChevronLeft, lucideEllipsis, lucideMessageCircle, lucideNewspaper, lucidePencil, lucideTrash2 })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-14 shrink-0 items-center gap-1 px-2 md:hidden">
@@ -55,6 +56,9 @@ import { ModelCatalog } from './model-catalog';
         <ng-icon name="lucideChevronLeft" />
       </a>
       <h1 class="font-display truncate text-xl font-extrabold tracking-tight">{{ bot()?.name ?? 'Bot' }}</h1>
+      @if (bot()) {
+        <span hlmBadge class="bg-bot text-bot-foreground ms-1.5 shrink-0 rounded px-1.5 text-[11px] font-extrabold tracking-wide">BOT</span>
+      }
     </header>
 
     <div class="min-h-0 flex-1 overflow-y-auto">
@@ -63,7 +67,7 @@ import { ModelCatalog } from './model-catalog';
           <section class="flex flex-col gap-4 px-4 md:flex-row md:items-start md:gap-14 md:px-6">
             <div class="flex items-center gap-6 md:block">
               <app-member-avatar [name]="b.name" [avatarUrl]="b.avatarUrl" [modelId]="b.modelId" [px]="avatarPx()" />
-              <div class="flex flex-1 justify-around text-center md:hidden">
+              <div class="grid flex-1 grid-cols-3 text-center md:hidden">
                 <ng-container *ngTemplateOutlet="stats" />
               </div>
             </div>
@@ -71,7 +75,7 @@ import { ModelCatalog } from './model-catalog';
             <div class="flex min-w-0 flex-1 flex-col gap-4">
               <div class="flex flex-wrap items-center gap-3">
                 <h2 class="font-display text-2xl font-extrabold tracking-tight max-md:hidden">{{ b.name }}</h2>
-                <span hlmBadge class="bg-bot text-bot-foreground rounded px-1.5 text-[11px] font-extrabold tracking-wide">BOT</span>
+                <span hlmBadge class="bg-bot text-bot-foreground rounded px-1.5 text-[11px] font-extrabold tracking-wide max-md:hidden">BOT</span>
                 @if (broken()) {
                   <span hlmBadge variant="destructive">{{ problem() }}</span>
                 }
@@ -141,10 +145,11 @@ import { ModelCatalog } from './model-catalog';
           </section>
         </div>
 
+        <!-- Stacked on phones, number over label, as on Instagram; one line each on desktop. -->
         <ng-template #stats>
-          <span><strong>{{ posts().length }}</strong> {{ posts().length === 1 ? 'post' : 'posts' }}</span>
-          <span><strong>{{ b.chatCount }}</strong> {{ b.chatCount === 1 ? 'chat' : 'chats' }}</span>
-          <span><strong>{{ b.repliesLast7Days }}</strong> replies this week</span>
+          <span class="flex flex-col leading-tight md:block"><strong class="text-base md:text-[15px]">{{ posts().length }}</strong> {{ posts().length === 1 ? 'post' : 'posts' }}</span>
+          <span class="flex flex-col leading-tight md:block"><strong class="text-base md:text-[15px]">{{ b.chatCount }}</strong> {{ b.chatCount === 1 ? 'chat' : 'chats' }}</span>
+          <span class="flex flex-col leading-tight md:block"><strong class="text-base md:text-[15px]">{{ b.repliesLast7Days }}</strong> replies<span class="max-md:sr-only"> this week</span></span>
         </ng-template>
 
         <ng-template #menu>
@@ -209,6 +214,7 @@ export class BotProfile implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly feed = inject(FeedStore);
+  private readonly authorPosts = inject(AuthorPosts);
   protected readonly directory = inject(BotDirectory);
   private readonly chatList = inject(ChatList);
   protected readonly catalog = inject(ModelCatalog);
@@ -222,7 +228,7 @@ export class BotProfile implements OnInit {
   protected readonly opening = signal(false);
 
   protected readonly bot = computed<BotDto | null>(() => this.directory.bots().find((b) => b.id === this.botId()) ?? null);
-  protected readonly posts = computed(() => this.feed.posts().filter((post) => post.author.isBot && post.author.id === this.botId()));
+  protected readonly posts = this.authorPosts.posts;
   protected readonly broken = computed(() => hasModelProblem(this.bot()?.modelStatus ?? ''));
   protected readonly problem = computed(() => modelProblemLabel(this.bot()?.modelStatus ?? ''));
   protected readonly price = computed(() => formatPricing(this.catalog.find(this.bot()?.modelId)?.pricing));
@@ -237,10 +243,17 @@ export class BotProfile implements OnInit {
   });
   protected readonly avatarPx = signal(typeof window !== 'undefined' && window.innerWidth >= 768 ? 150 : 86);
 
+  constructor() {
+    // Its own posts, not the feed's first page, so older ones show too. Again when another bot opens here.
+    effect(() => {
+      const botId = this.botId();
+      untracked(() => void this.authorPosts.load({ botId }));
+    });
+  }
+
   ngOnInit(): void {
     void this.directory.load();
     void this.feed.start();
-    void this.feed.loadFirst();
   }
 
   protected src(url: string): string {

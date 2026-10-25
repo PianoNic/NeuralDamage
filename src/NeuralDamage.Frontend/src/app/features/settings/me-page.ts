@@ -10,6 +10,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { BotDirectory } from '../bots/bot-directory';
 import { ChatList } from '../chat/chat-list';
+import { AuthorPosts } from '../feed/author-posts';
 import { FeedStore } from '../feed/feed-store';
 import { generatedImageSrc } from '../feed/generate-image';
 
@@ -17,7 +18,7 @@ import { generatedImageSrc } from '../feed/generate-image';
 @Component({
   selector: 'app-me-page',
   imports: [RouterLink, NgIcon, PkAuthImage, HlmBadge, HlmButton, HlmEmptyImports, MemberAvatar],
-  providers: [provideIcons({ lucideCamera, lucideMenu, lucidePlus })],
+  providers: [AuthorPosts, provideIcons({ lucideCamera, lucideMenu, lucidePlus })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-14 shrink-0 items-center gap-2 ps-4 pe-2 md:hidden">
@@ -44,10 +45,11 @@ import { generatedImageSrc } from '../feed/generate-image';
               }
               <a hlmBtn variant="secondary" size="sm" routerLink="/settings">Settings</a>
             </div>
-            <div class="flex justify-around gap-9 text-center text-[15px] md:justify-start md:text-start">
-              <span><strong>{{ posts().length }}</strong> {{ posts().length === 1 ? 'post' : 'posts' }}</span>
-              <span><strong>{{ botCount() }}</strong> {{ botCount() === 1 ? 'bot' : 'bots' }}</span>
-              <span><strong>{{ chatList.chats().length }}</strong> {{ chatList.chats().length === 1 ? 'chat' : 'chats' }}</span>
+            <!-- Stacked on phones, number over label, as on Instagram; one line each on desktop. -->
+            <div class="grid grid-cols-3 text-center text-[15px] md:flex md:gap-9 md:text-start">
+              <span class="flex flex-col leading-tight md:block"><strong class="text-base md:text-[15px]">{{ posts().length }}</strong> {{ posts().length === 1 ? 'post' : 'posts' }}</span>
+              <span class="flex flex-col leading-tight md:block"><strong class="text-base md:text-[15px]">{{ botCount() }}</strong> {{ botCount() === 1 ? 'bot' : 'bots' }}</span>
+              <span class="flex flex-col leading-tight md:block"><strong class="text-base md:text-[15px]">{{ chatList.chats().length }}</strong> {{ chatList.chats().length === 1 ? 'chat' : 'chats' }}</span>
             </div>
           </div>
         </section>
@@ -93,19 +95,19 @@ export class MePage implements OnInit {
   protected readonly auth = inject(AuthService);
   protected readonly chatList = inject(ChatList);
   private readonly feed = inject(FeedStore);
+  private readonly authorPosts = inject(AuthorPosts);
   private readonly directory = inject(BotDirectory);
 
   protected readonly avatarPx = typeof window !== 'undefined' && window.innerWidth >= 768 ? 150 : 86;
-  protected readonly posts = computed(() => {
-    const me = this.auth.user()?.id;
-    return this.feed.posts().filter((post) => !post.author.isBot && post.author.id === me);
-  });
+  protected readonly posts = this.authorPosts.posts;
   protected readonly botCount = computed(() => this.directory.bots().filter((bot) => bot.createdById === this.auth.user()?.id).length);
 
   ngOnInit(): void {
     void this.directory.load();
     void this.feed.start();
-    void this.feed.loadFirst();
+    // Your own posts, not the feed's first page, so older ones show too.
+    const me = this.auth.user()?.id;
+    if (me) void this.authorPosts.load({ userId: me });
   }
 
   protected src(url: string): string {
