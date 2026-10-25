@@ -77,6 +77,8 @@ export const SLASH_COMMANDS = [
   { command: '/rename', description: 'Rename this chat', arg: '<name>' },
   { command: '/bots', description: 'List the bots in this chat', arg: null },
   { command: '/summarize', description: 'Get a recap of the chat, just for you', arg: null },
+  { command: '/remember', description: 'Have a bot remember something for good, in this chat', arg: '<bot> <what>' },
+  { command: '/forget', description: 'Have a bot forget something it remembers', arg: '<bot> <what>' },
   { command: '/help', description: 'Show available commands', arg: null },
 ] as const;
 

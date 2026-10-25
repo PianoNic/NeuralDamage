@@ -23,12 +23,15 @@ encoder.ts
 git_push.sh
 index.ts
 model/addMemberRequest.ts
+model/allowBotMemoryRequest.ts
 model/appConfigurationDto.ts
 model/attachmentDto.ts
 model/attachmentLimitsDto.ts
 model/botAvatarDto.ts
 model/botCreatorDto.ts
 model/botDto.ts
+model/botMemoriesDto.ts
+model/botMemoryDto.ts
 model/botPictureSuggestionDto.ts
 model/botReferenceDto.ts
 model/botReferencesDto.ts
@@ -84,6 +87,8 @@ model/storyReplyRequest.ts
 model/storyReplyResultDto.ts
 model/storyRingDto.ts
 model/storySpec.ts
+model/updateBotMemoryRequest.ts
+model/updateBotMemorySettingsRequest.ts
 model/updateBotRequest.ts
 model/updateChatRequest.ts
 model/updateNicknamesRequest.ts

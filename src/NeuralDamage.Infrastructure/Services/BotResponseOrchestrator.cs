@@ -9,6 +9,7 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
+using NeuralDamage.Infrastructure.Services.Memory;
 using NeuralDamage.Infrastructure.Services.Stickers;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Domain;
@@ -21,8 +22,10 @@ public class BotResponseOrchestrator(
     ILogger<BotResponseOrchestrator> logger,
     IOptions<BotBehaviorOptions>? options = null,
     BotClock? clock = null,
-    IOptions<HistoryOptions>? history = null) : IBotResponseOrchestrator
+    IOptions<HistoryOptions>? history = null,
+    IOptions<MemoryOptions>? memory = null) : IBotResponseOrchestrator
 {
+    private readonly MemoryOptions _memory = memory?.Value ?? new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeTasks = new();
     private readonly BotBehaviorOptions _options = options?.Value ?? new();
     private readonly HistoryOptions _history = history?.Value ?? new();
@@ -175,11 +178,15 @@ public class BotResponseOrchestrator(
 
             using var scope = scopeFactory.CreateScope();
             var services = scope.ServiceProvider;
-            return await RespondAsync(
+            var sent = await RespondAsync(
                 services.GetRequiredService<NeuralDamageDbContext>(),
                 services.GetRequiredService<IOpenRouterService>(),
                 services.GetRequiredService<IChatNotificationService>(),
                 round, bot, canSee ? services.GetService<IAttachmentStorage>() : null, ct);
+            // Every few of its messages, the bot's memory reads the chat, in the background.
+            if (sent.Count > 0)
+                _ = services.GetService<IMemoryExtractor>()?.BotSpoke(round.ChatId, bot.Id);
+            return sent;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -296,7 +303,12 @@ public class BotResponseOrchestrator(
             var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures, summary, budget);
 
             var language = ChatLanguage.OfPeople(recentMessages);
-            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, BotPromptBuilder.BuildNote(instruction: BotPromptBuilder.ChatLength, clock: _clock, bot: bot, language: language)], ct);
+            // What the bot remembers, matched to the last few messages. A note rather than part of
+            // the system prompt, which stays the same from one message to the next for the cache.
+            var said = string.Join(" ", window.TakeLast(4).Select(m => m.Content));
+            var recalled = await BotMemories.RecallForChatAsync(db, bot, chatId, said, _memory, ct);
+            List<ChatMessage> remembered = BotMemories.Note(bot, recalled) is { } note ? [new ChatMessage("user", note)] : [];
+            var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, .. remembered, BotPromptBuilder.BuildNote(instruction: BotPromptBuilder.ChatLength, clock: _clock, bot: bot, language: language)], ct);
             if (string.IsNullOrWhiteSpace(responseText))
             {
                 // Both attempts failed or came back empty: say so rather than

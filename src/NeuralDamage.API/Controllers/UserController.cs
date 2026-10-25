@@ -36,6 +36,36 @@ public class UserController(ISender sender, IUserService userService) : Controll
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    /// <summary>What every bot remembers about you.</summary>
+    [HttpGet("me/memories", Name = "GetMemoriesAboutMe")]
+    [ProducesResponseType<List<BotMemoryDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<BotMemoryDto>>> GetMemoriesAboutMe(CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetMemoriesAboutMeQuery(userId), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    /// <summary>Makes a bot forget one thing it remembers about you.</summary>
+    [HttpDelete("me/memories/{memoryId:guid}", Name = "ForgetMemoryAboutMe")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> ForgetMemoryAboutMe(Guid memoryId, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new DeleteBotMemoryCommand(memoryId, userId), ct);
+        return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+    }
+
+    /// <summary>Whether bots may remember things about you; turning it off forgets what they had.</summary>
+    [HttpPut("me/bot-memory", Name = "AllowBotMemory")]
+    [ProducesResponseType<UserDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserDto>> AllowBotMemory(AllowBotMemoryRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new AllowBotMemoryCommand(userId, request.Allowed), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     /// <summary>
     /// Other users, for inviting into a chat. Pass <paramref name="chatId"/> to
     /// leave out that chat's current members.

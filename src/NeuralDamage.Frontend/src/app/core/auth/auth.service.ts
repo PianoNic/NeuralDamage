@@ -92,4 +92,9 @@ export class AuthService {
   async updateNicknames(nicknames: string): Promise<void> {
     this._user.set(await firstValueFrom(this.users.updateNicknames({ nicknames })));
   }
+
+  /** Whether bots may remember things about you; turning it off forgets what they had. */
+  async allowBotMemory(allowed: boolean): Promise<void> {
+    this._user.set(await firstValueFrom(this.users.allowBotMemory({ allowed })));
+  }
 }

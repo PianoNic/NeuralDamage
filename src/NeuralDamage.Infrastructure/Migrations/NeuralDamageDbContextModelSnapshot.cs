@@ -123,6 +123,15 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
 
+                    b.Property<bool>("MemoryEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("MemoryNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("ModelId")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -155,6 +164,96 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.HasIndex("CreatedById");
 
                     b.ToTable("Bots");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.BotMemory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ChatId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Importance")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Pinned")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("StaysInChat")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("SubjectUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatId");
+
+                    b.HasIndex("SubjectUserId");
+
+                    b.HasIndex("BotId", "Scope");
+
+                    b.ToTable("BotMemories");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.BotMemoryCursor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChatId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ProcessedBefore")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatId");
+
+                    b.HasIndex("BotId", "ChatId")
+                        .IsUnique();
+
+                    b.ToTable("BotMemoryCursors");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.BotReference", b =>
@@ -820,6 +919,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AllowBotMemory")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
@@ -911,6 +1015,44 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("Chat");
 
                     b.Navigation("CreatedBy");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.BotMemory", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", "Bot")
+                        .WithMany()
+                        .HasForeignKey("BotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NeuralDamage.Domain.Chat", null)
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("NeuralDamage.Domain.User", "SubjectUser")
+                        .WithMany()
+                        .HasForeignKey("SubjectUserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Bot");
+
+                    b.Navigation("SubjectUser");
+                });
+
+            modelBuilder.Entity("NeuralDamage.Domain.BotMemoryCursor", b =>
+                {
+                    b.HasOne("NeuralDamage.Domain.Bot", null)
+                        .WithMany()
+                        .HasForeignKey("BotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NeuralDamage.Domain.Chat", null)
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.BotReference", b =>

@@ -12,6 +12,7 @@ import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { AuthService } from '../../core/auth/auth.service';
 import { describeApiError } from '../../core/http-errors';
 import { Theme, ThemeMode } from '../../core/theme';
+import { MemoriesAboutMe } from './memories-about-me';
 
 /**
  * `/settings`: the account as the identity provider reports it, the theme, and on phones, where the
@@ -19,7 +20,7 @@ import { Theme, ThemeMode } from '../../core/theme';
  */
 @Component({
   selector: 'app-settings',
-  imports: [RouterLink, NgIcon, HlmButton, HlmCardImports, HlmFieldImports, HlmInput, HlmSpinner, HlmToggleGroupImports],
+  imports: [RouterLink, NgIcon, HlmButton, HlmCardImports, HlmFieldImports, HlmInput, HlmSpinner, HlmToggleGroupImports, MemoriesAboutMe],
   providers: [provideIcons({ lucideGithub, lucideLogOut, lucideSticker })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
@@ -60,6 +61,7 @@ import { Theme, ThemeMode } from '../../core/theme';
             </button>
           </form>
         </section>
+        <app-memories-about-me />
         <section hlmCard>
           <div hlmCardHeader>
             <h2 hlmCardTitle>Appearance</h2>

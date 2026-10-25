@@ -2,6 +2,7 @@ using Mediator;
 using NeuralDamage.Application.Validators;
 using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Infrastructure.Services;
+using NeuralDamage.Infrastructure.Services.Memory;
 using NeuralDamage.Infrastructure;
 using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Domain;
@@ -24,6 +25,8 @@ public record SlashCommand(string Name, string Argument)
         ("/rename New Name", "Rename the chat"),
         ("/bots", "List the bots in this chat"),
         ("/summarize", "Get a recap of the chat so far, just for you"),
+        ("/remember BotName something", "Have a bot remember something for good in this chat"),
+        ("/forget BotName something", "Have a bot forget what it remembers about that, in this chat"),
         ("/help", "Show available commands"),
     ];
 
@@ -160,6 +163,17 @@ public class RunSlashCommandHandler(
                 _ = compactor.Summarize(chatId, userId);
                 return null;
 
+            case "/remember":
+            case "/forget":
+            {
+                var (bot, what) = await SplitBotAsync(chatId, command.Argument, ct);
+                if (bot is null || what.Length == 0)
+                    return Mistake($"Usage: {command.Name} BotName something");
+                return command.Name == "/remember"
+                    ? await RememberAsync(chatId, bot, what, userName, ct)
+                    : await ForgetAsync(chatId, bot, what, ct);
+            }
+
             case "/kick":
             {
                 if (command.Argument.Length == 0)
@@ -204,6 +218,64 @@ public class RunSlashCommandHandler(
             default:
                 return new Feedback($"Unknown command {command.Name}. Type /help to see available commands.", CallerOnly: true);
         }
+    }
+
+    /// <summary>
+    /// A memory the bot keeps for good, pinned, as this chat's own: someone typed it in, so it is
+    /// trusted, and kept to the chat it was said in.
+    /// </summary>
+    private async Task<Feedback> RememberAsync(Guid chatId, Bot bot, string what, string userName, CancellationToken ct)
+    {
+        if (!bot.MemoryEnabled)
+            return Mistake($"{bot.Name}'s memory is off.");
+        var memory = new BotMemory
+        {
+            BotId = bot.Id,
+            Scope = MemoryScope.Chat,
+            ChatId = chatId,
+            StaysInChat = true,
+            Source = MemorySource.Manual,
+            Text = what,
+            Importance = BotMemory.MaxImportance,
+            Pinned = true,
+        };
+        return await BotMemories.AddAsync(db, memory, ct)
+            ? $"{userName} asked {bot.Name} to remember: {memory.Text}"
+            : Mistake($"{bot.Name} already remembers that.");
+    }
+
+    /// <summary>
+    /// Forgets the memory of this chat, or about anyone, that shares the most words with what was
+    /// typed; what was learned in another private chat is out of reach from here.
+    /// </summary>
+    private async Task<Feedback> ForgetAsync(Guid chatId, Bot bot, string what, CancellationToken ct)
+    {
+        var words = BotMemories.Words(what);
+        var candidates = await db.BotMemories
+            .Where(m => m.BotId == bot.Id && (!m.StaysInChat || m.ChatId == chatId) && (m.Scope != MemoryScope.Chat || m.ChatId == chatId))
+            .ToListAsync(ct);
+        var best = candidates
+            .Select(m => (Memory: m, Overlap: BotMemories.Overlap(BotMemories.Words(m.Text), words)))
+            .Where(x => x.Overlap >= 0.2 || x.Memory.Text.Contains(what, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(x => x.Overlap)
+            .Select(x => x.Memory)
+            .FirstOrDefault();
+        if (best is null)
+            return Mistake($"{bot.Name} doesn't remember anything like that here.");
+        db.BotMemories.Remove(best);
+        await db.SaveChangesAsync(ct);
+        return $"{bot.Name} forgot: {best.Text}";
+    }
+
+    /// <summary>"Rex Jr likes pizza" as the chat's bot Rex Jr and "likes pizza": the longest bot name the argument starts with.</summary>
+    private async Task<(Bot? Bot, string What)> SplitBotAsync(Guid chatId, string argument, CancellationToken ct)
+    {
+        var bots = await LoadBotsAsync(chatId, ct);
+        var bot = bots
+            .Where(b => argument.StartsWith(b.Name, StringComparison.OrdinalIgnoreCase)
+                && (argument.Length == b.Name.Length || !char.IsLetterOrDigit(argument[b.Name.Length])))
+            .MaxBy(b => b.Name.Length);
+        return bot is null ? (null, "") : (bot, argument[bot.Name.Length..].Trim().TrimStart(':', ',').Trim());
     }
 
     private Task<List<Bot>> LoadBotsAsync(Guid chatId, CancellationToken ct) =>

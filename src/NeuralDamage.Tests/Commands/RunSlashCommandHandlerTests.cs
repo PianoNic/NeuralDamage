@@ -1,4 +1,5 @@
 using Mediator;
+using Microsoft.EntityFrameworkCore;
 using NeuralDamage.Application.Commands;
 using NeuralDamage.Domain;
 using NeuralDamage.Domain.Enums;
@@ -75,6 +76,37 @@ public class RunSlashCommandHandlerTests
     {
         var result = await h.Handler.Handle(new RunSlashCommand(h.ChatId, h.UserId, content), CancellationToken.None);
         await Assert.That(result.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task Remember_PinsAMemoryForThisChat_AndForget_DropsIt()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+
+        await RunAsync(h, "/remember grumpy: Alice's birthday is on the 3rd of June");
+        var memory = await h.Db.BotMemories.SingleAsync();
+        await Assert.That(memory.Text).IsEqualTo("Alice's birthday is on the 3rd of June");
+        await Assert.That(memory.Pinned).IsTrue();
+        await Assert.That(memory.ChatId).IsEqualTo(h.ChatId);
+        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Alice asked Grumpy to remember: Alice's birthday is on the 3rd of June");
+
+        await RunAsync(h, "/forget Grumpy birthday june");
+        await Assert.That(await h.Db.BotMemories.AnyAsync()).IsFalse();
+        await h.Notifications.Received(1).NotifySystemMessage(h.ChatId, "Grumpy forgot: Alice's birthday is on the 3rd of June");
+    }
+
+    [Test]
+    public async Task Remember_WithoutABotOrAThing_ExplainsHow()
+    {
+        var h = await BuildAsync();
+        using var _ = h.Db;
+
+        await RunAsync(h, "/remember nobody likes tea");
+        await RunAsync(h, "/remember Grumpy");
+
+        await h.Notifications.Received(2).NotifyUserSystemMessage(h.ChatId, h.UserId, "Usage: /remember BotName something");
+        await Assert.That(await h.Db.BotMemories.AnyAsync()).IsFalse();
     }
 
     [Test]

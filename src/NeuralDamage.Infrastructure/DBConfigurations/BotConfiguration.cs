@@ -26,9 +26,38 @@ public class BotConfiguration : IEntityTypeConfiguration<Bot>
         builder.Property(b => b.FeedEnabled).HasDefaultValue(true).HasSentinel(true);
         builder.Property(b => b.MaxPostsPerDay).HasDefaultValue(Bot.DefaultPostsPerDay).HasSentinel(Bot.DefaultPostsPerDay);
         builder.Property(b => b.MaxStoriesPerDay).HasDefaultValue(Bot.DefaultStoriesPerDay).HasSentinel(Bot.DefaultStoriesPerDay);
+        builder.Property(b => b.MemoryEnabled).HasDefaultValue(true).HasSentinel(true);
+        builder.Property(b => b.MemoryNotes).HasMaxLength(Bot.MaxMemoryNotesLength);
 
         builder.HasOne(b => b.CreatedBy).WithMany(u => u.CreatedBots).HasForeignKey(b => b.CreatedById).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(b => b.Chat).WithMany().HasForeignKey(b => b.ChatId).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+public class BotMemoryConfiguration : IEntityTypeConfiguration<BotMemory>
+{
+    public void Configure(EntityTypeBuilder<BotMemory> builder)
+    {
+        builder.HasKey(m => m.Id);
+        builder.Property(m => m.Text).HasMaxLength(BotMemory.MaxTextLength).IsRequired();
+        builder.Property(m => m.Scope).HasConversion<string>().HasMaxLength(16);
+        builder.Property(m => m.Source).HasConversion<string>().HasMaxLength(16);
+        builder.HasOne(m => m.Bot).WithMany().HasForeignKey(m => m.BotId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(m => m.SubjectUser).WithMany().HasForeignKey(m => m.SubjectUserId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Chat>().WithMany().HasForeignKey(m => m.ChatId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(m => new { m.BotId, m.Scope });
+        builder.HasIndex(m => m.SubjectUserId);
+    }
+}
+
+public class BotMemoryCursorConfiguration : IEntityTypeConfiguration<BotMemoryCursor>
+{
+    public void Configure(EntityTypeBuilder<BotMemoryCursor> builder)
+    {
+        builder.HasKey(c => c.Id);
+        builder.HasOne<Bot>().WithMany().HasForeignKey(c => c.BotId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Chat>().WithMany().HasForeignKey(c => c.ChatId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(c => new { c.BotId, c.ChatId }).IsUnique();
     }
 }
 

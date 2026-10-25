@@ -23,6 +23,9 @@ public class User : BaseEntity
     /// </summary>
     public string? Nicknames { get; set; }
 
+    /// <summary>Whether bots may keep memories about the person; off drops what they had too.</summary>
+    public bool AllowBotMemory { get; set; } = true;
+
     public ICollection<Bot> CreatedBots { get; set; } = [];
     public ICollection<Chat> CreatedChats { get; set; } = [];
     public ICollection<ChatMember> ChatMembers { get; set; } = [];
