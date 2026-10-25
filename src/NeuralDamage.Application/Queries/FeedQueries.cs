@@ -9,8 +9,12 @@ using NeuralDamage.Infrastructure.Services.Stories;
 
 namespace NeuralDamage.Application.Queries;
 
-/// <summary>A page of the feed, newest first, older than <paramref name="Before"/> when it is set.</summary>
-public record GetFeedQuery(Guid UserId, DateTime? Before = null, int Limit = GetFeedQuery.DefaultLimit) : IQuery<Result<FeedPageDto>>
+/// <summary>
+/// A page of the feed, newest first, older than <paramref name="Before"/> when it is set. With an
+/// author, only theirs, for a profile.
+/// </summary>
+public record GetFeedQuery(Guid UserId, DateTime? Before = null, int Limit = GetFeedQuery.DefaultLimit, Guid? BotId = null, Guid? AuthorUserId = null)
+    : IQuery<Result<FeedPageDto>>
 {
     public const int DefaultLimit = 20;
     public const int MaxLimit = 50;
@@ -24,6 +28,10 @@ public class GetFeedHandler(NeuralDamageDbContext db, AppAdmins admins) : IQuery
         var query = db.Posts.Visible();
         if (request.Before is { } before)
             query = query.Where(p => p.CreatedAt < before);
+        if (request.BotId is { } botId)
+            query = query.Where(p => p.AuthorBotId == botId);
+        if (request.AuthorUserId is { } authorUserId)
+            query = query.Where(p => p.AuthorUserId == authorUserId);
         var ids = await query.OrderByDescending(p => p.CreatedAt).Take(limit).Select(p => p.Id).ToListAsync(cancellationToken);
 
         var posts = await FeedReads.PostsAsync(db, ids, request.UserId, ct: cancellationToken);

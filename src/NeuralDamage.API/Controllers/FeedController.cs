@@ -16,13 +16,21 @@ namespace NeuralDamage.API.Controllers;
 [ProducesResponseType<string>(StatusCodes.Status400BadRequest)]
 public class FeedController(ISender sender, IUserService userService) : ControllerBase
 {
-    /// <summary>A page of posts, newest first; pass the oldest one's time as <paramref name="before"/> for the next page.</summary>
+    /// <summary>
+    /// A page of posts, newest first; pass the oldest one's time as <paramref name="before"/> for the next
+    /// page. <paramref name="botId"/> or <paramref name="userId"/> keeps only that author's, for a profile.
+    /// </summary>
     [HttpGet("posts")]
     [ProducesResponseType<FeedPageDto>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<FeedPageDto>> GetPosts([FromQuery] DateTime? before = null, [FromQuery] int limit = GetFeedQuery.DefaultLimit, CancellationToken ct = default)
+    public async Task<ActionResult<FeedPageDto>> GetPosts(
+        [FromQuery] DateTime? before = null,
+        [FromQuery] int limit = GetFeedQuery.DefaultLimit,
+        [FromQuery] Guid? botId = null,
+        [FromQuery] Guid? userId = null,
+        CancellationToken ct = default)
     {
-        var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new GetFeedQuery(userId, before, limit), ct);
+        var me = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new GetFeedQuery(me, before, limit, botId, userId), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

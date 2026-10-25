@@ -23,6 +23,8 @@ export class FeedStore {
   private readonly router = inject(Router);
 
   readonly posts = signal<PostDto[]>([]);
+  /** Posts deleted while the app is open, so a profile's own copy drops them too. */
+  readonly removed = signal<ReadonlySet<string>>(new Set());
   readonly loading = signal(false);
   readonly hasMore = signal(true);
   readonly canModerate = signal(false);
@@ -44,7 +46,7 @@ export class FeedStore {
     if (this.started) return;
     this.started = true;
     this.signalr.onChatEvent('FeedPostNew', (post) => this.onPost(post));
-    this.signalr.onChatEvent('FeedPostDeleted', (postId) => this.posts.update((list) => list.filter((p) => p.id !== postId)));
+    this.signalr.onChatEvent('FeedPostDeleted', (postId) => this.drop(postId));
     this.signalr.onChatEvent('FeedCommentNew', (comment) => this.onComment(comment));
     this.signalr.onChatEvent('FeedCommentDeleted', (postId, commentId) =>
       this.posts.update((list) => list.map((p) => (p.id === postId ? withoutComment(p, commentId) : p))),
@@ -131,7 +133,12 @@ export class FeedStore {
 
   async remove(post: PostDto): Promise<void> {
     await firstValueFrom(this.api.apiFeedPostsPostIdDelete(post.id));
-    this.posts.update((list) => list.filter((p) => p.id !== post.id));
+    this.drop(post.id);
+  }
+
+  private drop(postId: string): void {
+    this.posts.update((list) => list.filter((p) => p.id !== postId));
+    this.removed.update((ids) => new Set(ids).add(postId));
   }
 
   private onPost(post: PostDto): void {
