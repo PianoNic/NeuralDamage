@@ -7,7 +7,7 @@ public static class UserMapper
 {
     public static UserDto ToDto(this User user)
     {
-        return new UserDto(user.Id, user.Email, user.DisplayName, user.AvatarUrl);
+        return new UserDto(user.Id, user.Email, user.DisplayName, user.AvatarUrl, Nicknames: user.Nicknames);
     }
 
     public static User ToDomain(this UserDto dto)

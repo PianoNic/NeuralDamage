@@ -5,7 +5,10 @@ using NeuralDamage.Infrastructure.Mappers;
 
 namespace NeuralDamage.Infrastructure.Services.Feed;
 
-/// <summary>Who hears about a new comment: the person whose post it is under, and the person whose comment it answers.</summary>
+/// <summary>
+/// Who hears about a new comment: the person whose post it is under, the person whose comment it
+/// answers, and anyone it @mentions by name or nickname. A new post tells the people it mentions.
+/// </summary>
 public static class FeedNotices
 {
     /// <param name="answeredUserId">
@@ -30,6 +33,17 @@ public static class FeedNotices
         foreach (var answered in new[] { answeredUserId, parentAuthor })
             if (answered is { } id && id != comment.AuthorUserId && told.Add(id))
                 await notifier.Reply(id, new FeedReplyNoticeDto(comment.PostId, comment.Id, author, Preview(comment), OnYourPost: false));
+        foreach (var id in await PeopleNames.MentionedAsync(db, comment.Content, ct))
+            if (id != comment.AuthorUserId && told.Add(id))
+                await notifier.Reply(id, new FeedReplyNoticeDto(comment.PostId, comment.Id, author, Preview(comment), OnYourPost: false, Mention: true));
+    }
+
+    /// <summary>Tells the people a new post @mentions, by name or nickname, all but its author.</summary>
+    public static async Task NotifyMentionsAsync(NeuralDamageDbContext db, IFeedNotifier notifier, Post post, string authorName, CancellationToken ct = default)
+    {
+        foreach (var id in await PeopleNames.MentionedAsync(db, post.Content, ct))
+            if (id != post.AuthorUserId)
+                await notifier.Reply(id, new FeedReplyNoticeDto(post.Id, null, authorName, Preview(post.Content), OnYourPost: false, Mention: true));
     }
 
     private static async Task<string> AuthorNameAsync(NeuralDamageDbContext db, PostComment comment, CancellationToken ct)
@@ -40,6 +54,8 @@ public static class FeedNotices
         return FeedReads.Author(user, null).Name;
     }
 
-    private static string Preview(PostComment comment) =>
-        comment.Content.Length == 0 ? "Sticker" : comment.Content.Length > 140 ? comment.Content[..140] + "..." : comment.Content;
+    private static string Preview(PostComment comment) => Preview(comment.Content);
+
+    private static string Preview(string content) =>
+        content.Length == 0 ? "Sticker" : content.Length > 140 ? content[..140] + "..." : content;
 }

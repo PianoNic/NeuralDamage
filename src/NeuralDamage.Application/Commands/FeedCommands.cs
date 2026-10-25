@@ -44,6 +44,7 @@ public class CreatePostHandler(NeuralDamageDbContext db, IFeedNotifier notifier,
 
         var dto = (await FeedReads.PostAsync(db, post.Id, request.UserId, cancellationToken))!;
         await notifier.PostNew(dto with { LikedByMe = false });
+        await FeedNotices.NotifyMentionsAsync(db, notifier, post, dto.Author.Name, cancellationToken);
         await queue.EnqueueAsync(new FeedEvent(post.Id, null), cancellationToken);
         return Result<PostDto>.Success(dto);
     }

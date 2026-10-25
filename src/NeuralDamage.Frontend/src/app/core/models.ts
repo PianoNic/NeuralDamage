@@ -95,4 +95,6 @@ export interface ChatMember {
   /** `available`, `missing` or `notAllowed` for bots; null for people. */
   modelStatus: string | null;
   modelStatusReason: string | null;
+  /** A person's other names, comma-separated: "@Niclas" mentions PianoNic when Niclas is one. */
+  nicknames?: string | null;
 }

@@ -15,5 +15,6 @@ export interface UserDto {
     displayName: string;
     avatarUrl?: string | null;
     isAdmin: boolean;
+    nicknames?: string | null;
 }
 

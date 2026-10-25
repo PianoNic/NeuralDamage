@@ -1,7 +1,9 @@
 using Mediator;
 using Microsoft.AspNetCore.Mvc;
+using NeuralDamage.Application.Commands;
 using NeuralDamage.Application.Queries;
 using NeuralDamage.Infrastructure.Dtos;
+using NeuralDamage.Infrastructure.Dtos.Requests;
 using NeuralDamage.Infrastructure.Services;
 
 namespace NeuralDamage.API.Controllers;
@@ -21,6 +23,16 @@ public class UserController(ISender sender, IUserService userService) : Controll
     public async Task<ActionResult<UserDto>> GetCurrentUser(CancellationToken ct)
     {
         var result = await sender.Send(new GetCurrentUserQuery(), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
+    /// <summary>The names you also go by, so "@Niclas" mentions you when you are PianoNic.</summary>
+    [HttpPut("me/nicknames", Name = "UpdateNicknames")]
+    [ProducesResponseType<UserDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserDto>> UpdateNicknames(UpdateNicknamesRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new UpdateNicknamesCommand(userId, request.Nicknames), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

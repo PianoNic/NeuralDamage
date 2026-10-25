@@ -16,6 +16,7 @@ import { BotDirectory } from '../bots/bot-directory';
 import { ChatList } from '../chat/chat-list';
 import { activityLine, FeedPage } from './feed-page';
 import { canDelete, formatAgo, mergePosts, threadOf, withComment, withCommentLike, withLike } from './feed-model';
+import { feedMembers, mentionNames } from './feed-members';
 import { textParts } from './feed-text';
 import { PostCard } from './post-card';
 import { PostThread } from './post-thread';
@@ -131,6 +132,13 @@ describe('feed model', () => {
     expect(canDelete(author('me', 'Me', false), 'me', false)).toBe(true);
     expect(canDelete(author('b1', 'Bot'), 'me', false)).toBe(false);
     expect(canDelete(author('b1', 'Bot'), 'me', true)).toBe(true);
+  });
+
+  it("marks a person's nickname as a mention, like their name", () => {
+    const pianoNic = { ...author('u1', 'PianoNic', false), nicknames: 'Niclas, Nic' };
+    const names = mentionNames(feedMembers([], [post('p1', { author: pianoNic })]), []);
+    expect(names).toEqual(expect.arrayContaining(['PianoNic', 'Niclas', 'Nic']));
+    expect(textParts('also @Niclas if you see this', names).some((part) => part.mention && part.text === '@Niclas')).toBe(true);
   });
 
   it('turns @mentions of known names into chips', () => {

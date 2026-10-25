@@ -87,4 +87,9 @@ export class AuthService {
     this.oidc.logoffLocal();
     void this.router.navigate(['/login']);
   }
+
+  /** The names you also go by; bots and people @mention you by them too. */
+  async updateNicknames(nicknames: string): Promise<void> {
+    this._user.set(await firstValueFrom(this.users.updateNicknames({ nicknames })));
+  }
 }

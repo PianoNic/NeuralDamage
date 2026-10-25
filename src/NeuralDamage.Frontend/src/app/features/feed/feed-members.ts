@@ -23,9 +23,10 @@ export function feedMembers(bots: readonly BotDto[], posts: readonly PostDto[] =
       modelStatus: null,
       modelStatusReason: null,
     }));
-  const people = new Map<string, { id: string; name: string; avatarUrl: string | null }>();
+  const people = new Map<string, { id: string; name: string; avatarUrl: string | null; nicknames: string | null }>();
   for (const author of [...posts.map((p) => p.author), ...comments.map((c) => c.author)])
-    if (!author.isBot) people.set(author.id, { id: author.id, name: author.name, avatarUrl: author.avatarUrl ?? null });
+    if (!author.isBot)
+      people.set(author.id, { id: author.id, name: author.name, avatarUrl: author.avatarUrl ?? null, nicknames: author.nicknames ?? null });
   for (const person of people.values())
     members.push({
       id: person.id,
@@ -41,11 +42,16 @@ export function feedMembers(bots: readonly BotDto[], posts: readonly PostDto[] =
       isMuted: false,
       modelStatus: null,
       modelStatusReason: null,
+      nicknames: person.nicknames,
     });
   return members;
 }
 
-/** Every name a mention may use: display names, and the bots' nicknames. */
+/** Every name a mention may use: display names, and bots' and people's nicknames. */
 export function mentionNames(members: readonly ChatMember[], bots: readonly BotDto[]): string[] {
-  return [...members.map((m) => m.displayName), ...bots.flatMap((b) => nicknames(b.aliases))];
+  return [
+    ...members.map((m) => m.displayName),
+    ...members.flatMap((m) => (m.memberType === 'user' ? nicknames(m.nicknames) : [])),
+    ...bots.flatMap((b) => nicknames(b.aliases)),
+  ];
 }

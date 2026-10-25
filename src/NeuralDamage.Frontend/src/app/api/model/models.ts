@@ -61,6 +61,7 @@ export * from './storyRingDto';
 export * from './storySpec';
 export * from './updateBotRequest';
 export * from './updateChatRequest';
+export * from './updateNicknamesRequest';
 export * from './updateStickerRequest';
 export * from './userDto';
 export * from './webImageResultDto';
