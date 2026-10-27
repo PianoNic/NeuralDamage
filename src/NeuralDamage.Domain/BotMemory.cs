@@ -54,7 +54,7 @@ public class BotMemory : BaseEntity
     /// <summary>1 to <see cref="MaxImportance"/>: how much it matters, as the extractor or the person judged it.</summary>
     public int Importance { get; set; } = 5;
 
-    public MemorySource Source { get; init; }
+    public MemorySource Source { get; set; }
 
     /// <summary>Kept whatever happens, and always read where it applies.</summary>
     public bool Pinned { get; set; }

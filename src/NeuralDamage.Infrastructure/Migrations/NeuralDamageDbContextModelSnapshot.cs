@@ -128,10 +128,6 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<string>("MemoryNotes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
                     b.Property<string>("ModelId")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -918,6 +914,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("AllowBotDirectMessages")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("AllowBotMemory")
                         .ValueGeneratedOnAdd()

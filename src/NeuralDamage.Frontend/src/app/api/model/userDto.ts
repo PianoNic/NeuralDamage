@@ -17,5 +17,6 @@ export interface UserDto {
     isAdmin: boolean;
     nicknames?: string | null;
     allowBotMemory: boolean;
+    allowBotDirectMessages: boolean;
 }
 

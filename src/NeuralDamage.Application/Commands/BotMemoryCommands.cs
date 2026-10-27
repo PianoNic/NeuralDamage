@@ -62,12 +62,12 @@ public class GetBotMemoriesHandler(NeuralDamageDbContext db) : IQueryHandler<Get
         var readable = all.Where(m => MemoryAccess.CanRead(m, request.RequestingUserId, chats))
             .OrderByDescending(m => m.Pinned).ThenByDescending(m => m.CreatedAt);
         var dtos = await MemoryAccess.ToDtosAsync(db, readable, chats, cancellationToken);
-        return Result.Success(new BotMemoriesDto(bot.MemoryEnabled, bot.MemoryNotes, dtos, all.Count - dtos.Count));
+        return Result.Success(new BotMemoriesDto(bot.MemoryEnabled, dtos, all.Count - dtos.Count));
     }
 }
 
-/// <summary>Turns a bot's memory on or off and sets the notes it always keeps.</summary>
-public record UpdateBotMemorySettingsCommand(Guid BotId, Guid RequestingUserId, bool Enabled, string? Notes) : ICommand<Result>;
+/// <summary>Turns a bot's memory on or off.</summary>
+public record UpdateBotMemorySettingsCommand(Guid BotId, Guid RequestingUserId, bool Enabled) : ICommand<Result>;
 
 public class UpdateBotMemorySettingsHandler(NeuralDamageDbContext db) : ICommandHandler<UpdateBotMemorySettingsCommand, Result>
 {
@@ -78,14 +78,41 @@ public class UpdateBotMemorySettingsHandler(NeuralDamageDbContext db) : ICommand
             return Result.Failure("Bot not found.");
         if (!await Admins.RunsBotAsync(db, bot, request.RequestingUserId, cancellationToken))
             return Result.Failure("Only the bot's maker can change its memory.");
-        var notes = request.Notes?.Trim();
-        if (notes is { Length: > Bot.MaxMemoryNotesLength })
-            return Result.Failure($"The notes can be at most {Bot.MaxMemoryNotesLength} characters.");
 
         bot.MemoryEnabled = request.Enabled;
-        bot.MemoryNotes = string.IsNullOrEmpty(notes) ? null : notes;
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+}
+
+/// <summary>
+/// The bot's maker tells it something in plain words; the memory model turns it into memories,
+/// the way it picks them up from a chat, which then work like any other. Returns the new ones.
+/// </summary>
+public record TeachBotMemoryCommand(Guid BotId, Guid RequestingUserId, string Text) : ICommand<Result<List<BotMemoryDto>>>;
+
+public class TeachBotMemoryHandler(NeuralDamageDbContext db, IMemoryExtractor extractor) : ICommandHandler<TeachBotMemoryCommand, Result<List<BotMemoryDto>>>
+{
+    public const int MaxLength = 2000;
+
+    public async ValueTask<Result<List<BotMemoryDto>>> Handle(TeachBotMemoryCommand request, CancellationToken cancellationToken)
+    {
+        var bot = await db.Bots.AsNoTracking().FirstOrDefaultAsync(b => b.Id == request.BotId && b.IsActive, cancellationToken);
+        if (bot is null)
+            return Result.Failure<List<BotMemoryDto>>("Bot not found.");
+        if (!await Admins.RunsBotAsync(db, bot, request.RequestingUserId, cancellationToken))
+            return Result.Failure<List<BotMemoryDto>>("Only the bot's maker can teach it.");
+        var text = request.Text.Trim();
+        if (text.Length == 0)
+            return Result.Failure<List<BotMemoryDto>>("Write what the bot should remember.");
+        if (text.Length > MaxLength)
+            return Result.Failure<List<BotMemoryDto>>($"Keep it under {MaxLength} characters.");
+
+        var taught = await extractor.TeachAsync(bot.Id, text, cancellationToken);
+        var ids = taught.Select(m => m.Id).ToList();
+        var memories = await db.BotMemories.Where(m => ids.Contains(m.Id)).Include(m => m.Bot).Include(m => m.SubjectUser).AsNoTracking().ToListAsync(cancellationToken);
+        var chats = await MemoryAccess.ChatsOfAsync(db, request.RequestingUserId, cancellationToken);
+        return Result.Success(await MemoryAccess.ToDtosAsync(db, memories, chats, cancellationToken));
     }
 }
 

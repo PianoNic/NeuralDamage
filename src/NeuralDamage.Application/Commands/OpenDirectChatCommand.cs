@@ -50,47 +50,8 @@ public class OpenDirectChatHandler(NeuralDamageDbContext db, IChatNotificationSe
             name = $"{NameOf(me)} & {NameOf(other)}";
         }
 
-        var key = Chat.DirectKeyOf(me.Id, otherId);
-        var chat = await db.Chats.FirstOrDefaultAsync(c => c.DirectKey == key, cancellationToken);
-        if (chat is not null)
-        {
-            await RejoinAsync(chat, me.Id, cancellationToken);
-            return Result.Success(chat.ToDto());
-        }
-
-        chat = new Chat { Name = name, CreatedById = me.Id, DirectKey = key };
-        db.Chats.Add(chat);
-        db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = me.Id, Role = ChatMemberRole.Owner });
-        db.ChatMembers.Add(request.BotId is not null
-            ? new ChatMember { ChatId = chat.Id, BotId = otherId }
-            : new ChatMember { ChatId = chat.Id, UserId = otherId });
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // Opened twice at once: the other request made it, so that one is the chat.
-            db.ChangeTracker.Clear();
-            var made = await db.Chats.AsNoTracking().FirstOrDefaultAsync(c => c.DirectKey == key, cancellationToken);
-            return made is null ? Result.Failure<ChatDto>("Could not open the chat.") : Result.Success(made.ToDto());
-        }
-
-        var dto = chat.ToDto();
-        await notifications.NotifyUserChatCreated(me.Id, dto);
-        if (request.OtherUserId is { } person)
-            await notifications.NotifyUserChatCreated(person, dto);
-        return Result.Success(dto);
-    }
-
-    /// <summary>Someone who left their side of a direct chat with a person is back in it when they open it.</summary>
-    private async Task RejoinAsync(Chat chat, Guid userId, CancellationToken ct)
-    {
-        if (await db.ChatMembers.AnyAsync(cm => cm.ChatId == chat.Id && cm.UserId == userId, ct))
-            return;
-        db.ChatMembers.Add(new ChatMember { ChatId = chat.Id, UserId = userId, Role = ChatMemberRole.Member });
-        await db.SaveChangesAsync(ct);
-        await notifications.NotifyUserChatCreated(userId, chat.ToDto());
+        var chat = await DirectChats.OpenAsync(db, notifications, me, otherId, otherIsBot: request.BotId is not null, name, cancellationToken);
+        return chat is null ? Result.Failure<ChatDto>("Could not open the chat.") : Result.Success(chat.ToDto());
     }
 
     private static string NameOf(User user) => user.DisplayName != "" ? user.DisplayName : user.Email;

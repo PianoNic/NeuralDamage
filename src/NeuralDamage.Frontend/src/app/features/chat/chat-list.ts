@@ -61,7 +61,13 @@ export class ChatList {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-    this.signalr.onUserEvent('ChatCreated', this.upsert);
+    // A chat made elsewhere, like a direct chat a bot opened to text you, is joined straight away so
+    // its messages arrive, and the list reloads for its preview.
+    this.signalr.onUserEvent('ChatCreated', (chat: ChatDto) => {
+      this.upsert(chat);
+      void this.signalr.joinChat(chat.id);
+      this.refreshSoon();
+    });
     this.signalr.onUserEvent('ChatJoined', (chat: ChatDetailDto) => this.upsert(chat));
     this.signalr.onUserEvent('ChatLeft', this.drop);
     this.signalr.onChatEvent('ChatUpdated', this.upsert);

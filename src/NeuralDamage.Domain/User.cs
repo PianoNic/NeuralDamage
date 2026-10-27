@@ -26,6 +26,9 @@ public class User : BaseEntity
     /// <summary>Whether bots may keep memories about the person; off drops what they had too.</summary>
     public bool AllowBotMemory { get; set; } = true;
 
+    /// <summary>Whether bots in the person's group chats may decide to text them directly.</summary>
+    public bool AllowBotDirectMessages { get; set; } = true;
+
     public ICollection<Bot> CreatedBots { get; set; } = [];
     public ICollection<Chat> CreatedChats { get; set; } = [];
     public ICollection<ChatMember> ChatMembers { get; set; } = [];

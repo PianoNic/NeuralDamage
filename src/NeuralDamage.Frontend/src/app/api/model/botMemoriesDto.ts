@@ -12,7 +12,6 @@ import { BotMemoryDto } from './botMemoryDto';
 
 export interface BotMemoriesDto { 
     enabled: boolean;
-    notes?: string | null;
     memories: Array<BotMemoryDto>;
     hidden: number;
 }

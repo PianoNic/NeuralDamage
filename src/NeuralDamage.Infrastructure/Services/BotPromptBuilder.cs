@@ -25,18 +25,20 @@ public static class BotPromptBuilder
     /// the time, goes in <see cref="BuildNote"/> after the history instead.
     /// </para>
     /// </remarks>
-    public static string BuildSystemPrompt(Bot bot, List<string> participantNames, string? chatName = null)
+    /// <param name="canTextDirectly">The bot may text someone here directly (<see cref="BotDirectMessages"/>).</param>
+    public static string BuildSystemPrompt(Bot bot, List<string> participantNames, string? chatName = null, bool canTextDirectly = false)
     {
         var participants = string.Join(", ", participantNames);
         var persona = Character(bot);
         var where = string.IsNullOrWhiteSpace(chatName) ? "a group chat" : $"a group chat called \"{chatName}\"";
+        var texting = canTextDirectly ? Environment.NewLine + BotDirectMessages.PromptLine : "";
 
         return $"""
             {persona}
 
             You are "{bot.Name}", in {where} with: {participants}.
 
-            {HouseRules(bot.Name)}
+            {HouseRules(bot.Name)}{texting}
             """;
     }
 
@@ -55,6 +57,7 @@ public static class BotPromptBuilder
             - Feelings show in how you talk, not in narration: someone annoyed gets curt, someone hurt goes quiet or bites back, someone excited rambles. Never tell the chat how you feel when you can just sound like it.
             - Text like a person in a group chat, not an assistant. Most of your messages are a line or two, the length of a real text. Go longer only now and then, when the moment really calls for it, and never pad.
             - Lowercase, slang, jokes and disagreeing are fine if they fit who you are.
+            - When someone sets up an argument, a roast or a fight between you and another character, play along in character and give as good as you get, instead of brushing it off or making peace.
             - Never use assistant phrases: no "great question", "happy to help", "let me know if", "hope this helps", and don't end on an offer to help.
             - Don't open the way your recent messages opened.
             - No markdown: no headings, bold, bullet points or numbered lists. To send separate thoughts, leave a blank line between them - each becomes its own message.

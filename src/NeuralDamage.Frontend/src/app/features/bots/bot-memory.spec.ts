@@ -26,6 +26,10 @@ describe('memoryMeta', () => {
 
   it('tells a bot’s own posts and a chat’s lore apart', () => {
     expect(memoryMeta(memory({ scope: 'Self', source: 'Feed' }))).toMatch(/^About itself · its post · /);
-    expect(memoryMeta(memory({ scope: 'Chat', source: 'Manual', chatName: 'Group', staysInChat: true }))).toMatch(/^This chat’s lore · written in · only in Group · /);
+    expect(memoryMeta(memory({ scope: 'Chat', source: 'Manual', chatId: 'c1', chatName: 'Group', staysInChat: true }))).toMatch(/^This chat’s lore · written in · only in Group · /);
+  });
+
+  it('marks what its maker taught it', () => {
+    expect(memoryMeta(memory({ scope: 'Self', source: 'Manual' }))).toMatch(/^About itself · taught · /);
   });
 });

@@ -19,6 +19,12 @@ public class BotBehaviorOptions
     /// </summary>
     public int MaxBotChainDepth { get; set; } = 2;
 
+    /// <summary>Whether bots may decide to text someone in a group chat directly, in their direct chat.</summary>
+    public bool DirectMessages { get; set; } = true;
+
+    /// <summary>A bot texts the same person directly at most once in this long.</summary>
+    public TimeSpan DirectMessageCooldown { get; set; } = TimeSpan.FromMinutes(30);
+
     /// <summary>
     /// Safety net for when Jev is wrong or down: after this many bot messages
     /// since a person last wrote, across every hop, no bot replies until a

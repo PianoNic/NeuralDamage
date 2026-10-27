@@ -11,6 +11,5 @@
 
 export interface UpdateBotMemorySettingsRequest { 
     enabled: boolean;
-    notes?: string | null;
 }
 

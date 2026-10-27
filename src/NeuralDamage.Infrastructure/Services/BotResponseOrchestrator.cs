@@ -27,6 +27,12 @@ public class BotResponseOrchestrator(
 {
     private readonly MemoryOptions _memory = memory?.Value ?? new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeTasks = new();
+
+    /// <summary>
+    /// One bot posts in a chat at a time: bots answering the same message write side by side, but
+    /// a reply split into parts goes out whole, so another bot's message never lands in the middle of it.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _posting = new();
     private readonly BotBehaviorOptions _options = options?.Value ?? new();
     private readonly HistoryOptions _history = history?.Value ?? new();
     private readonly BotClock _clock = clock ?? BotClock.Default;
@@ -108,10 +114,11 @@ public class BotResponseOrchestrator(
                 .ToListAsync(cts.Token);
             // People with nicknames are listed with them, so a bot that knows "Niclas" mentions "@Niclas" and it reaches PianoNic.
             var participantNames = members.Select(m => m.User is { } user ? PeopleNames.ForPrompt(user) : m.Bot?.Name ?? "Unknown").Order(StringComparer.Ordinal).ToList();
-            var chatName = await db.Chats.Where(c => c.Id == chatId).Select(c => c.Name).FirstOrDefaultAsync(cts.Token);
+            var chat = await db.Chats.AsNoTracking().FirstOrDefaultAsync(c => c.Id == chatId, cts.Token);
+            var chatName = chat?.Name;
             var canSee = await VisionModelsAsync(openRouter, cts.Token);
             var stickers = await StickerCatalog.LoadAsync(db, cts.Token);
-            var round = new Round(chatId, message, roundStart, participantNames, chatName, stickers);
+            var round = new Round(chatId, message, roundStart, participantNames, chatName, stickers, chat);
 
             // Every replying bot starts at once, each with its own read delay,
             // typing, generation and post. Each works in a scope of its own:
@@ -151,7 +158,7 @@ public class BotResponseOrchestrator(
     }
 
     /// <summary>What every bot replying to one message shares.</summary>
-    private sealed record Round(Guid ChatId, Message Message, DateTime Start, List<string> ParticipantNames, string? ChatName, StickerCatalog Stickers)
+    private sealed record Round(Guid ChatId, Message Message, DateTime Start, List<string> ParticipantNames, string? ChatName, StickerCatalog Stickers, Chat? Chat)
     {
         private readonly Lock _gate = new();
 
@@ -298,7 +305,8 @@ public class BotResponseOrchestrator(
             }
 
             var summary = await SummaryAsync(db, chatId, bot.Id, window.Count > 0 ? window[0].CreatedAt : null, historyStart, ct);
-            var systemPrompt = BotPromptBuilder.WithStickers(BotPromptBuilder.BuildSystemPrompt(bot, round.ParticipantNames, round.ChatName), round.Stickers.ForPrompt);
+            var canTextDirectly = round.Chat is { } here && BotDirectMessages.CanSendFrom(bot, here, _options);
+            var systemPrompt = BotPromptBuilder.WithStickers(BotPromptBuilder.BuildSystemPrompt(bot, round.ParticipantNames, round.ChatName, canTextDirectly), round.Stickers.ForPrompt);
             var pictures = images is null ? null : await LoadImagesAsync(images, window, message.Id, ct);
             var history = BotPromptBuilder.BuildHistory(window, bot.Id, message.Id, pictures, summary, budget);
 
@@ -307,7 +315,7 @@ public class BotResponseOrchestrator(
             // the system prompt, which stays the same from one message to the next for the cache.
             var said = string.Join(" ", window.TakeLast(4).Select(m => m.Content));
             var recalled = await BotMemories.RecallForChatAsync(db, bot, chatId, said, _memory, ct);
-            List<ChatMessage> remembered = BotMemories.Note(bot, recalled) is { } note ? [new ChatMessage("user", note)] : [];
+            List<ChatMessage> remembered = BotMemories.Note(recalled) is { } note ? [new ChatMessage("user", note)] : [];
             var responseText = await GenerateAsync(openRouter, bot, systemPrompt, [.. history, .. remembered, BotPromptBuilder.BuildNote(instruction: BotPromptBuilder.ChatLength, clock: _clock, bot: bot, language: language)], ct);
             if (string.IsNullOrWhiteSpace(responseText))
             {
@@ -324,7 +332,15 @@ public class BotResponseOrchestrator(
             // as well as their parts: a reply split into a few messages is
             // never a near-duplicate of any one of them on its own.
             var ownRecent = OwnRecentReplies(recentMessages, bot.Id);
-            var parts = ToParts(responseText, bot.Name, round.Stickers);
+            // A text the bot decided to send someone directly leaves the reply here and goes to their direct chat.
+            var (forChat, textDirectly) = BotDirectMessages.Extract(responseText);
+            var parts = forChat.Length == 0 ? [] : ToParts(forChat, bot.Name, round.Stickers);
+            if (parts.Count == 0 && textDirectly is not null)
+            {
+                await typingCts.CancelAsync();
+                await TextDirectlyAsync(db, notifications, bot, round, textDirectly, ct);
+                return [];
+            }
             if (parts.Count == 0)
             {
                 // Only a stage direction or punctuation: nothing worth posting.
@@ -337,7 +353,8 @@ public class BotResponseOrchestrator(
                 var retry = await GenerateAsync(openRouter, bot, systemPrompt,
                     [.. history, BotPromptBuilder.BuildNote(instruction: $"You were about to say \"{responseText}\", which repeats something you already said. Say something different. {BotPromptBuilder.ChatLength}", clock: _clock, bot: bot, language: language)],
                     ct);
-                parts = string.IsNullOrWhiteSpace(retry) ? [] : ToParts(retry, bot.Name, round.Stickers);
+                (forChat, textDirectly) = BotDirectMessages.Extract(retry ?? "");
+                parts = string.IsNullOrWhiteSpace(forChat) ? [] : ToParts(forChat, bot.Name, round.Stickers);
                 if (parts.Count == 0 || Repeats(parts, ownRecent))
                 {
                     logger.LogInformation("Bot {BotName} repeated itself again; dropping the reply", bot.Name);
@@ -346,59 +363,88 @@ public class BotResponseOrchestrator(
             }
 
             var sent = new List<Message>();
-
-            for (var i = 0; i < parts.Count; i++)
+            var gate = _posting.GetOrAdd(chatId, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(ct);
+            try
             {
-                // Keep typing for about as long as a person would need for this
-                // part. Generating the first one already took a while, and that
-                // counts: a slow model does not then also type slowly.
-                var remaining = _options.TypingTime(parts[i].Text.Length) - (i == 0 ? sinceTypingStarted.Elapsed : TimeSpan.Zero);
-                if (remaining > TimeSpan.Zero)
-                    await Task.Delay(remaining, ct);
-
-                // Stop the indicator before the last part lands, so a late
-                // heartbeat cannot bring it back after the message.
-                if (i == parts.Count - 1)
+                for (var i = 0; i < parts.Count; i++)
                 {
-                    await typingCts.CancelAsync();
-                    await typing;
+                    // Keep typing for about as long as a person would need for this
+                    // part. Generating the first one already took a while, and that
+                    // counts: a slow model does not then also type slowly.
+                    var remaining = _options.TypingTime(parts[i].Text.Length) - (i == 0 ? sinceTypingStarted.Elapsed : TimeSpan.Zero);
+                    if (remaining > TimeSpan.Zero)
+                        await Task.Delay(remaining, ct);
+
+                    // Stop the indicator before the last part lands, so a late
+                    // heartbeat cannot bring it back after the message.
+                    if (i == parts.Count - 1)
+                    {
+                        await typingCts.CancelAsync();
+                        await typing;
+                    }
+
+                    // Only the first part carries the reply link; the rest read as
+                    // the same person carrying on.
+                    var botMessage = new Message
+                    {
+                        ChatId = chatId,
+                        SenderBotId = bot.Id,
+                        Content = parts[i].Text,
+                        StickerId = parts[i].Sticker?.Id,
+                        ReplyToId = i == 0 ? message.Id : null
+                    };
+                    db.Messages.Add(botMessage);
+                    if (parts[i].Sticker is { } sticker && await db.Stickers.FirstOrDefaultAsync(s => s.Id == sticker.Id, ct) is { } used)
+                        used.UseCount++;
+                    await db.SaveChangesAsync(ct);
+                    sent.Add(botMessage);
+
+                    // Broadcast
+                    var loaded = await db.Messages
+                        .Include(m => m.SenderBot)
+                        .Include(m => m.Sticker)
+                        .Include(m => m.Reactions).ThenInclude(r => r.User)
+                        .Include(m => m.Reactions).ThenInclude(r => r.Bot)
+                        .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
+                        .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
+                        .AsNoTracking()
+                        .FirstAsync(m => m.Id == botMessage.Id, ct);
+                    await notifications.NotifyMessageNew(chatId, loaded.ToDto());
                 }
-
-                // Only the first part carries the reply link; the rest read as
-                // the same person carrying on.
-                var botMessage = new Message
-                {
-                    ChatId = chatId,
-                    SenderBotId = bot.Id,
-                    Content = parts[i].Text,
-                    StickerId = parts[i].Sticker?.Id,
-                    ReplyToId = i == 0 ? message.Id : null
-                };
-                db.Messages.Add(botMessage);
-                if (parts[i].Sticker is { } sticker && await db.Stickers.FirstOrDefaultAsync(s => s.Id == sticker.Id, ct) is { } used)
-                    used.UseCount++;
-                await db.SaveChangesAsync(ct);
-                sent.Add(botMessage);
-
-                // Broadcast
-                var loaded = await db.Messages
-                    .Include(m => m.SenderBot)
-                    .Include(m => m.Sticker)
-                    .Include(m => m.Reactions).ThenInclude(r => r.User)
-                    .Include(m => m.Reactions).ThenInclude(r => r.Bot)
-                    .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderUser)
-                    .Include(m => m.ReplyTo!).ThenInclude(r => r.SenderBot)
-                    .AsNoTracking()
-                    .FirstAsync(m => m.Id == botMessage.Id, ct);
-                await notifications.NotifyMessageNew(chatId, loaded.ToDto());
+            }
+            finally
+            {
+                gate.Release();
             }
 
+            if (textDirectly is not null)
+                await TextDirectlyAsync(db, notifications, bot, round, textDirectly, ct);
             return sent;
         }
         finally
         {
             await typingCts.CancelAsync();
             await typing;
+        }
+    }
+
+    /// <summary>Sends the bot's direct text when it may; a refused one is only logged, the chat never hears of it.</summary>
+    private async Task TextDirectlyAsync(NeuralDamageDbContext db, IChatNotificationService notifications, Bot bot, Round round, DirectMessageAsk ask, CancellationToken ct)
+    {
+        if (round.Chat is not { } chat)
+            return;
+        try
+        {
+            var sent = await BotDirectMessages.SendAsync(db, notifications, bot, chat, ask, _options, DateTime.UtcNow, ct);
+            if (sent is null)
+                logger.LogInformation("Bot {BotName} wanted to text {To} directly from chat {ChatId}, but may not", bot.Name, ask.To, chat.Id);
+            else
+                logger.LogInformation("Bot {BotName} texted {To} directly from chat {ChatId}", bot.Name, ask.To, chat.Id);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Bot {BotName} failed to text {To} directly", bot.Name, ask.To);
         }
     }
 

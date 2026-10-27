@@ -19,7 +19,7 @@ import { BotMemoryDto } from '../../api/model/botMemoryDto';
 import { describeApiError } from '../../core/http-errors';
 import { formatAgo } from '../feed/feed-model';
 
-const MAX_NOTES = 1000;
+const MAX_LESSON = 2000;
 
 /** The line under a memory: whom it is about, where it was learned, and when. */
 export function memoryMeta(m: BotMemoryDto): string {
@@ -29,7 +29,7 @@ export function memoryMeta(m: BotMemoryDto): string {
   else parts.push('About itself');
   if (m.source === 'Feed') parts.push('its post');
   else if (m.source === 'Story') parts.push('its story');
-  else if (m.source === 'Manual') parts.push('written in');
+  else if (m.source === 'Manual') parts.push(m.chatId ? 'written in' : 'taught');
   if (m.chatName) parts.push(m.staysInChat ? `only in ${m.chatName}` : `from ${m.chatName}`);
   parts.push(formatAgo(m.createdAt));
   return parts.join(' · ');
@@ -62,8 +62,8 @@ export function memoryMeta(m: BotMemoryDto): string {
         <hlm-dialog-header>
           <h2 hlmDialogTitle>{{ botName() }}’s memory</h2>
           <p hlmDialogDescription>
-            What {{ botName() }} remembers across its chats, posts and stories. It picks things up on its own every few messages; what it
-            learns in a direct chat stays there.
+            What {{ botName() }} remembers across its chats, posts and stories. It picks things up on its own every few messages, and
+            learns what you teach it here. What it learns in a direct chat stays there.
           </p>
         </hlm-dialog-header>
 
@@ -73,31 +73,33 @@ export function memoryMeta(m: BotMemoryDto): string {
             <hlm-switch aria-labelledby="memory-on" [checked]="enabled()" (checkedChange)="setEnabled($event)" />
           </div>
 
-          <div hlmField>
-            <label hlmFieldLabel for="memory-notes">Always remembers</label>
+          <form hlmField (submit)="$event.preventDefault(); teach()">
+            <label hlmFieldLabel for="memory-teach">Teach {{ botName() }}</label>
             <textarea
               hlmTextarea
-              id="memory-notes"
+              id="memory-teach"
               rows="3"
               class="min-h-20"
-              [maxLength]="maxNotes"
-              placeholder="e.g. Grew up in Bern. Calls everyone champ. Is secretly afraid of pigeons."
-              [value]="notes()"
-              (input)="notes.set($any($event.target).value)"
+              [maxLength]="maxLesson"
+              [placeholder]="'Tell ' + botName() + ' something to remember, in your own words. e.g. Grew up in Bern, had an affair with @pianonic.'"
+              [value]="lesson()"
+              (input)="lesson.set($any($event.target).value)"
+              (keydown.control.enter)="teach()"
+              (keydown.meta.enter)="teach()"
             ></textarea>
             <div class="flex items-center justify-between gap-2">
-              <p hlmFieldDescription>Goes into every chat, post and story, next to what it picked up.</p>
-              <button hlmBtn size="sm" variant="secondary" [disabled]="savingNotes() || notes().trim() === (savedNotes() ?? '')" (click)="saveNotes()">
-                @if (savingNotes()) {
+              <p hlmFieldDescription>{{ botName() }} turns it into memories like the ones it picks up from chats, which you can pin, reword or forget below.</p>
+              <button hlmBtn size="sm" type="submit" [disabled]="teaching() || !lesson().trim()">
+                @if (teaching()) {
                   <hlm-spinner />
                 }
-                Save
+                Teach
               </button>
             </div>
-          </div>
+          </form>
 
           <div class="flex flex-col gap-1">
-            <h3 class="text-sm font-semibold">Picked up</h3>
+            <h3 class="text-sm font-semibold">Remembers</h3>
             @if (loading()) {
               @for (row of [0, 1, 2]; track row) {
                 <hlm-skeleton class="h-12 w-full" />
@@ -163,7 +165,7 @@ export function memoryMeta(m: BotMemoryDto): string {
       <hlm-alert-dialog-content *hlmAlertDialogPortal="let ctx">
         <hlm-alert-dialog-header>
           <h2 hlmAlertDialogTitle>Forget everything?</h2>
-          <p hlmAlertDialogDescription>{{ botName() }} forgets all {{ total() }} things it picked up, in every chat. Its notes stay.</p>
+          <p hlmAlertDialogDescription>{{ botName() }} forgets all {{ total() }} things it remembers, in every chat.</p>
         </hlm-alert-dialog-header>
         <hlm-alert-dialog-footer>
           <button hlmAlertDialogCancel (click)="ctx.close()">Cancel</button>
@@ -180,12 +182,11 @@ export class BotMemory {
   readonly botName = input('The bot');
   readonly closed = output();
 
-  protected readonly maxNotes = MAX_NOTES;
+  protected readonly maxLesson = MAX_LESSON;
   protected readonly loading = signal(false);
   protected readonly enabled = signal(true);
-  protected readonly notes = signal('');
-  protected readonly savedNotes = signal<string | null>(null);
-  protected readonly savingNotes = signal(false);
+  protected readonly lesson = signal('');
+  protected readonly teaching = signal(false);
   protected readonly memories = signal<BotMemoryDto[]>([]);
   protected readonly hidden = signal(0);
   protected readonly total = computed(() => this.memories().length + this.hidden());
@@ -207,8 +208,7 @@ export class BotMemory {
     try {
       const memory = await firstValueFrom(this.api.apiBotsBotIdMemoriesGet(botId));
       this.enabled.set(memory.enabled);
-      this.notes.set(memory.notes ?? '');
-      this.savedNotes.set(memory.notes ?? null);
+      this.lesson.set('');
       this.memories.set(memory.memories);
       this.hidden.set(memory.hidden);
     } catch (error) {
@@ -219,29 +219,33 @@ export class BotMemory {
   }
 
   protected async setEnabled(enabled: boolean): Promise<void> {
-    await this.saveSettings(enabled, this.savedNotes());
-    this.enabled.set(enabled);
-  }
-
-  protected async saveNotes(): Promise<void> {
-    this.savingNotes.set(true);
-    try {
-      await this.saveSettings(this.enabled(), this.notes().trim() || null);
-      this.savedNotes.set(this.notes().trim() || null);
-      toast.success('Notes saved.');
-    } finally {
-      this.savingNotes.set(false);
-    }
-  }
-
-  private async saveSettings(enabled: boolean, notes: string | null): Promise<void> {
     const botId = this.botId();
     if (!botId) return;
     try {
-      await firstValueFrom(this.api.apiBotsBotIdMemoryPut(botId, { enabled, notes }));
+      await firstValueFrom(this.api.apiBotsBotIdMemoryPut(botId, { enabled }));
+      this.enabled.set(enabled);
     } catch (error) {
-      toast.error(describeApiError(error, { fallback: 'Could not save the memory settings.' }));
-      throw error;
+      toast.error(describeApiError(error, { fallback: 'Could not change that.' }));
+    }
+  }
+
+  /** What was written, made into memories by the bot's memory model. */
+  protected async teach(): Promise<void> {
+    const botId = this.botId();
+    const text = this.lesson().trim();
+    if (!botId || !text || this.teaching()) return;
+    this.teaching.set(true);
+    try {
+      const learned = await firstValueFrom(this.api.apiBotsBotIdMemoriesTeachPost(botId, { text }));
+      this.memories.update((list) => [...learned, ...list.filter((m) => !learned.some((l) => l.id === m.id))]);
+      this.lesson.set('');
+      toast.success(
+        learned.length ? `${this.botName()} remembers ${learned.length} new ${learned.length === 1 ? 'thing' : 'things'}.` : `${this.botName()} already knew that.`,
+      );
+    } catch (error) {
+      toast.error(describeApiError(error, { fallback: 'Could not teach that.' }));
+    } finally {
+      this.teaching.set(false);
     }
   }
 

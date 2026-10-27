@@ -147,20 +147,16 @@ public class BotMemoryRecallTests
     }
 
     [Test]
-    public async Task TheNote_GroupsByPerson_AfterTheMakersNotes()
+    public async Task TheNote_GroupsByPerson()
     {
-        var bot = new Bot { Name = "Rex", ModelId = "m", SystemPrompt = "x", CreatedById = Guid.NewGuid(), MemoryNotes = "Rex is from Bern." };
-
-        var note = BotMemories.Note(bot, [
+        var note = BotMemories.Note([
             new RecalledMemory(Guid.NewGuid(), MemoryScope.Person, "PianoNic has a cat called Olivia", "PianoNic"),
             new RecalledMemory(Guid.NewGuid(), MemoryScope.Self, "Rex promised a song", null),
         ])!;
 
-        await Assert.That(note).Contains("Rex is from Bern.");
         await Assert.That(note).Contains("About PianoNic: PianoNic has a cat called Olivia.");
         await Assert.That(note).Contains("Rex promised a song.");
-        bot.MemoryNotes = null;
-        await Assert.That(BotMemories.Note(bot, [])).IsNull();
+        await Assert.That(BotMemories.Note([])).IsNull();
     }
 }
 
@@ -290,6 +286,66 @@ public class MemoryExtractorTests
     }
 }
 
+public class BotMemoryTeachingTests
+{
+    private static (MemoryExtractor Extractor, IOpenRouterService OpenRouter, DbContextOptions<NeuralDamageDbContext> Db) Build(string? reply)
+    {
+        var dbOptions = new DbContextOptionsBuilder<NeuralDamageDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var openRouter = Substitute.For<IOpenRouterService>();
+        openRouter.GenerateResponseAsync(default!, default, default!, default!, default).ReturnsForAnyArgs(reply ?? "");
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new NeuralDamageDbContext(dbOptions));
+        services.AddSingleton(openRouter);
+        var provider = services.BuildServiceProvider();
+        var extractor = new MemoryExtractor(provider.GetRequiredService<IServiceScopeFactory>(), new ConfigurationBuilder().Build(), NullLogger<MemoryExtractor>.Instance);
+        return (extractor, openRouter, dbOptions);
+    }
+
+    [Test]
+    public async Task WhatTheMakerSays_BecomesMemories_AboutThePeopleItNames()
+    {
+        var (extractor, openRouter, dbOptions) = Build("""
+            [{"about": "@pianonic", "text": "Rex had an affair with PianoNic", "importance": 8},
+             {"about": "self", "text": "Rex feels guilty about it", "importance": 6}]
+            """);
+        using var w = await MemoryWorld.CreateAsync(new NeuralDamageDbContext(dbOptions));
+
+        var taught = await extractor.TeachAsync(w.Bot.Id, "Had an affair with @pianonic, feels guilty");
+
+        await Assert.That(taught).Count().IsEqualTo(2);
+        await Assert.That(taught.All(m => m.Source == MemorySource.Manual && !m.StaysInChat && m.ChatId == null)).IsTrue();
+        await Assert.That(taught[0].SubjectUserId).IsEqualTo(w.Me.Id);
+        await Assert.That(taught[1].Scope).IsEqualTo(MemoryScope.Self);
+        await openRouter.Received(1).GenerateResponseAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string>(),
+            Arg.Is<List<ChatMessage>>(h => h.Single().Content.Contains("Had an affair with @pianonic") && h.Single().Content.Contains("PianoNic (also called Niclas)")), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WhenTheModelMakesNothingOfIt_ItIsKeptAsWritten()
+    {
+        var (extractor, _, dbOptions) = Build("sorry, I can't help with that");
+        using var w = await MemoryWorld.CreateAsync(new NeuralDamageDbContext(dbOptions));
+
+        var taught = await extractor.TeachAsync(w.Bot.Id, "Grew up in Bern");
+
+        await Assert.That(taught.Single().Text).IsEqualTo("Grew up in Bern");
+        await Assert.That(taught.Single().Scope).IsEqualTo(MemoryScope.Self);
+    }
+
+    [Test]
+    public async Task OnlyTheMaker_TeachesABot()
+    {
+        var (extractor, _, dbOptions) = Build("[]");
+        using var w = await MemoryWorld.CreateAsync(new NeuralDamageDbContext(dbOptions));
+
+        var stranger = await new TeachBotMemoryHandler(w.Db, extractor).Handle(new TeachBotMemoryCommand(w.Bot.Id, w.Friend.Id, "Rex loves Bob"), default);
+        var empty = await new TeachBotMemoryHandler(w.Db, extractor).Handle(new TeachBotMemoryCommand(w.Bot.Id, w.Me.Id, "   "), default);
+
+        await Assert.That(stranger.IsSuccess).IsFalse();
+        await Assert.That(empty.IsSuccess).IsFalse();
+    }
+}
+
 public class BotMemoryAccessTests
 {
     [Test]
@@ -340,20 +396,19 @@ public class BotMemoryAccessTests
     }
 
     [Test]
-    public async Task TheMaker_PinsAndRewordsAMemory_AndSetsTheNotes()
+    public async Task TheMaker_PinsAndRewordsAMemory_AndTurnsMemoryOff()
     {
         using var w = await MemoryWorld.CreateAsync();
         var memory = new BotMemory { BotId = w.Bot.Id, Scope = MemoryScope.Self, Text = "Rex likes jaz" };
         await w.AddAsync(memory);
 
         var updated = await new UpdateBotMemoryHandler(w.Db).Handle(new UpdateBotMemoryCommand(w.Bot.Id, memory.Id, w.Me.Id, "Rex likes jazz", true), default);
-        var settings = await new UpdateBotMemorySettingsHandler(w.Db).Handle(new UpdateBotMemorySettingsCommand(w.Bot.Id, w.Me.Id, false, "  Rex is from Bern. "), default);
+        var settings = await new UpdateBotMemorySettingsHandler(w.Db).Handle(new UpdateBotMemorySettingsCommand(w.Bot.Id, w.Me.Id, false), default);
 
         await Assert.That(updated.Value!.Text).IsEqualTo("Rex likes jazz");
         await Assert.That(updated.Value.Pinned).IsTrue();
         await Assert.That(settings.IsSuccess).IsTrue();
         await Assert.That(w.Bot.MemoryEnabled).IsFalse();
-        await Assert.That(w.Bot.MemoryNotes).IsEqualTo("Rex is from Bern.");
     }
 }
 

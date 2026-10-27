@@ -66,6 +66,16 @@ public class UserController(ISender sender, IUserService userService) : Controll
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    /// <summary>Whether bots in your group chats may decide to text you directly.</summary>
+    [HttpPut("me/bot-direct-messages", Name = "AllowBotDirectMessages")]
+    [ProducesResponseType<UserDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserDto>> AllowBotDirectMessages(AllowBotDirectMessagesRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new AllowBotDirectMessagesCommand(userId, request.Allowed), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     /// <summary>
     /// Other users, for inviting into a chat. Pass <paramref name="chatId"/> to
     /// leave out that chat's current members.

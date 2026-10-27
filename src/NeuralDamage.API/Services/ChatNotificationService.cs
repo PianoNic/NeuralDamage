@@ -47,4 +47,5 @@ public class ChatNotificationService(
     public Task NotifySystemMessage(Guid chatId, string content) => chatHub.Clients.Group(chatId.ToString()).SystemMessage(new SystemMessageDto(chatId, content, DateTimeOffset.UtcNow));
     public Task NotifyAttachmentDescribed(Guid chatId, Guid messageId, Guid attachmentId, string description) => chatHub.Clients.Group(chatId.ToString()).AttachmentDescribed(chatId, messageId, attachmentId, description);
     public Task NotifyUserSystemMessage(Guid chatId, Guid userId, string content) => chatHub.Clients.Group(ChatHub.UserGroup(userId)).SystemMessage(new SystemMessageDto(chatId, content, DateTimeOffset.UtcNow));
+    public Task NotifyUserMessageNew(Guid userId, MessageDto message) => chatHub.Clients.Group(ChatHub.UserGroup(userId)).MessageNew(message);
 }

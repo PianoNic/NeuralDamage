@@ -66,7 +66,7 @@ public class StoryWriter(
         ];
         // What the bot remembers about itself, as for its posts; nothing about people.
         var self = await BotMemories.RecallSelfAsync(db, bot, "", posts.Memory, ct);
-        if (BotMemories.Note(bot, self) is { } remembered)
+        if (BotMemories.Note(self) is { } remembered)
             turns.Insert(0, new ChatMessage("user", remembered));
 
         var reply = await BotResponseOrchestrator.GenerateAsync(openRouter, bot.Name, posts.ModelFor(bot), Math.Min(bot.Temperature, 1.0), system, turns, logger, ct);
