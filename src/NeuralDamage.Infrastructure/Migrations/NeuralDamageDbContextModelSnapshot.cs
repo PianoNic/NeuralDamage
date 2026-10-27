@@ -618,6 +618,12 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<Guid?>("ImageId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("MusicStart")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SongId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("SourceChatId")
                         .HasColumnType("uuid");
 
@@ -635,6 +641,8 @@ namespace NeuralDamage.Infrastructure.Migrations
 
                     b.HasIndex("ImageId")
                         .IsUnique();
+
+                    b.HasIndex("SongId");
 
                     b.HasIndex("SourceChatId");
 
@@ -735,6 +743,63 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.ToTable("Reactions");
                 });
 
+            modelBuilder.Entity("NeuralDamage.Domain.Song", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Album")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Artist")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("CoverUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("DeezerId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FullContentType")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("FullFailedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FullSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("HasPreview")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeezerId")
+                        .IsUnique();
+
+                    b.ToTable("Songs");
+                });
+
             modelBuilder.Entity("NeuralDamage.Domain.Sticker", b =>
                 {
                     b.Property<Guid>("Id")
@@ -822,8 +887,14 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("MusicStart")
+                        .HasColumnType("integer");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SongId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Spec")
                         .IsRequired()
@@ -837,6 +908,8 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.HasIndex("AuthorUserId");
 
                     b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("SongId");
 
                     b.HasIndex("AuthorBotId", "CreatedAt");
 
@@ -1219,6 +1292,11 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasForeignKey("ImageId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("NeuralDamage.Domain.Song", "Song")
+                        .WithMany()
+                        .HasForeignKey("SongId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("NeuralDamage.Domain.Chat", "SourceChat")
                         .WithMany()
                         .HasForeignKey("SourceChatId")
@@ -1234,6 +1312,8 @@ namespace NeuralDamage.Infrastructure.Migrations
                     b.Navigation("AuthorUser");
 
                     b.Navigation("Image");
+
+                    b.Navigation("Song");
 
                     b.Navigation("SourceChat");
 
@@ -1327,9 +1407,16 @@ namespace NeuralDamage.Infrastructure.Migrations
                         .HasForeignKey("AuthorUserId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("NeuralDamage.Domain.Song", "Song")
+                        .WithMany()
+                        .HasForeignKey("SongId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("AuthorBot");
 
                     b.Navigation("AuthorUser");
+
+                    b.Navigation("Song");
                 });
 
             modelBuilder.Entity("NeuralDamage.Domain.StoryImage", b =>

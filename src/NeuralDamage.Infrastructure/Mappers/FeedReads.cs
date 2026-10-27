@@ -38,6 +38,7 @@ public static class FeedReads
             .Include(p => p.AuthorBot)
             .Include(p => p.Sticker)
             .Include(p => p.Image)
+            .Include(p => p.Song)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -85,7 +86,8 @@ public static class FeedReads
                 like?.Mine ?? false,
                 comments.GetValueOrDefault(id),
                 previews.GetValueOrDefault(id) ?? [],
-                ImageOf(p.Image));
+                ImageOf(p.Image),
+                MusicReads.Of(p.Song, p.MusicStart));
         }).ToList();
     }
 

@@ -9,6 +9,7 @@ using NeuralDamage.Domain;
 using NeuralDamage.Infrastructure.Mappers;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.Memory;
+using NeuralDamage.Infrastructure.Services.Music;
 using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Stories;
@@ -163,10 +164,10 @@ public class FeedScheduler(
             // Now and then a story instead of a post, within the bot's own cap for stories.
             if ((stories.GetValueOrDefault(bot.Id)?.Today ?? 0) < bot.MaxStoriesPerDay && random() < _options.StoryShare)
             {
-                if (await StoryAsync(bot, now, ct, imageRoll: random()) is { } story)
+                if (await StoryAsync(bot, now, ct, imageRoll: random(), musicRoll: random()) is { } story)
                     tick.Stories.Add(story);
             }
-            else if (await PostAsync(bot, now, random(), ct, imageRoll: random()) is { } post)
+            else if (await PostAsync(bot, now, random(), ct, imageRoll: random(), musicRoll: random()) is { } post)
             {
                 tick.Posts.Add(post);
             }
@@ -204,16 +205,18 @@ public class FeedScheduler(
 
         var now = _time.GetUtcNow();
         return story
-            ? await StoryAsync(bot, now, ct, imageRoll: random()) is not null
-            : await PostAsync(bot, now, random(), ct, imageRoll: random()) is not null;
+            ? await StoryAsync(bot, now, ct, imageRoll: random(), musicRoll: random()) is not null
+            : await PostAsync(bot, now, random(), ct, imageRoll: random(), musicRoll: random()) is not null;
     }
 
     /// <summary>Has <paramref name="bot"/> make a story now; null when its spec was dropped.</summary>
     /// <param name="imageRoll">A random number in [0, 1): below <see cref="FeedOptions.ImageShare"/> the bot may have its background drawn.</param>
-    public async Task<StoryDto?> StoryAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default, double imageRoll = 1)
+    /// <param name="musicRoll">A random number in [0, 1): below <see cref="MusicOptions.BotShare"/> the story comes with a song.</param>
+    public async Task<StoryDto?> StoryAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default, double imageRoll = 1, double musicRoll = 1)
     {
         using var scope = scopes.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<StoryWriter>().WriteAsync(bot, now, ct, imageRoll < _options.ImageShare);
+        var withMusic = scope.ServiceProvider.GetService<SongPicker>()?.Wants(musicRoll) == true;
+        return await scope.ServiceProvider.GetRequiredService<StoryWriter>().WriteAsync(bot, now, ct, imageRoll < _options.ImageShare, withMusic);
     }
 
     /// <summary>
@@ -221,7 +224,8 @@ public class FeedScheduler(
     /// When the bot asks for a picture, the post waits for it, and goes out without one when it fails.
     /// </summary>
     /// <param name="imageRoll">A random number in [0, 1): below <see cref="FeedOptions.ImageShare"/> the bot is offered a picture.</param>
-    public async Task<Post?> PostAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, double imageRoll = 1)
+    /// <param name="musicRoll">A random number in [0, 1): below <see cref="MusicOptions.BotShare"/> the post comes with a song.</param>
+    public async Task<Post?> PostAsync(Bot bot, DateTimeOffset now, double roll, CancellationToken ct = default, double imageRoll = 1, double musicRoll = 1)
     {
         using var scope = scopes.CreateScope();
         var services = scope.ServiceProvider;
@@ -254,6 +258,10 @@ public class FeedScheduler(
         else if (draft.Image is { Prompt: not null } ask && canGenerate)
             imageId = await PictureAsync(images!, bot, ask, ct);
 
+        var music = services.GetService<SongPicker>() is { } songs && songs.Wants(musicRoll)
+            ? await songs.PickAsync(bot, PostForSong(draft), ct)
+            : null;
+
         var post = new Post
         {
             AuthorBotId = bot.Id,
@@ -261,6 +269,8 @@ public class FeedScheduler(
             StickerId = draft.Sticker?.Id,
             SourceChatId = draft.SourceChatId,
             ImageId = imageId,
+            SongId = music?.SongId,
+            MusicStart = music?.Start,
         };
         db.Posts.Add(post);
         await db.SaveChangesAsync(ct);
@@ -277,6 +287,10 @@ public class FeedScheduler(
             await queue.EnqueueAsync(new FeedEvent(post.Id, null, Depth: 1), ct);
         return post;
     }
+
+    /// <summary>What a post says and shows, for picking its song.</summary>
+    private static string PostForSong(FeedDraft draft) =>
+        string.Join(Environment.NewLine, new[] { draft.Content, draft.Image?.Prompt ?? draft.Image?.Search ?? "" }.Where(s => s.Length > 0));
 
     /// <summary>
     /// Draws the picture the bot asked for, with its own face when it wants to

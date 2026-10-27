@@ -8,6 +8,7 @@
  * Do not edit the class manually.
  */
 import { FeedAuthorDto } from './feedAuthorDto';
+import { MusicDto } from './musicDto';
 
 
 export interface StoryDto { 
@@ -18,5 +19,6 @@ export interface StoryDto {
     expiresAt: string;
     seen: boolean;
     description: string;
+    music?: MusicDto;
 }
 

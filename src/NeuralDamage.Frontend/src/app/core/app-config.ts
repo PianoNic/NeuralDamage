@@ -30,10 +30,20 @@ export class AppConfig {
   /** Pictures can be searched on the web (`ImageSearch:BaseUrl` is set on the server). */
   readonly imageSearch = this.imageSearchOn.asReadonly();
 
-  apply(config: Partial<Pick<AppConfigurationDto, 'attachments' | 'version' | 'imageGeneration' | 'imageSearch'>>): void {
+  private readonly musicOn = signal(false);
+  /** Posts and stories can have a song (`Music:Enabled`). */
+  readonly music = this.musicOn.asReadonly();
+
+  private readonly fullSongsOn = signal(false);
+  /** Whole songs can be fetched, so a clip can start anywhere; otherwise songs play Deezer's preview. */
+  readonly fullSongs = this.fullSongsOn.asReadonly();
+
+  apply(config: Partial<Pick<AppConfigurationDto, 'attachments' | 'version' | 'imageGeneration' | 'imageSearch' | 'music' | 'fullSongs'>>): void {
     if (config.attachments) this.limits.set(config.attachments);
     if (config.version) this.serverVersion.set(config.version);
     if (config.imageGeneration !== undefined) this.imageGenerationOn.set(config.imageGeneration);
     if (config.imageSearch !== undefined) this.imageSearchOn.set(config.imageSearch);
+    if (config.music !== undefined) this.musicOn.set(config.music);
+    if (config.fullSongs !== undefined) this.fullSongsOn.set(config.fullSongs);
   }
 }

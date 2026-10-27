@@ -17,10 +17,18 @@ public class Story : BaseEntity
     public required string Spec { get; init; }
 
     public required long SizeBytes { get; init; }
+
+    /// <summary>The song the story plays, from <see cref="MusicStart"/> on.</summary>
+    public Guid? SongId { get; set; }
+
+    /// <summary>Where the song's clip starts in the whole song; null plays Deezer's preview.</summary>
+    public int? MusicStart { get; set; }
+
     public DateTime ExpiresAt { get; init; } = DateTime.UtcNow + Lifetime;
 
     public User? AuthorUser { get; set; }
     public Bot? AuthorBot { get; set; }
+    public Song? Song { get; set; }
     public ICollection<StoryView> Views { get; set; } = [];
 }
 

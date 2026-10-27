@@ -1,7 +1,7 @@
 import { afterNextRender, Component, computed, DestroyRef, effect, ElementRef, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideTrash2, lucideX } from '@ng-icons/lucide';
+import { lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideTrash2, lucideVolume2, lucideVolumeX, lucideX } from '@ng-icons/lucide';
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmInput } from '@spartan-ng/helm/input';
@@ -11,6 +11,8 @@ import { StoryDto, StoryRingDto } from '../../core/models';
 import { AvatarImages } from '../../shared/avatar-images';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { formatAgo } from '../feed/feed-model';
+import { MusicLine } from '../music/music-line';
+import { clipOf, MusicPlayer } from '../music/music-player';
 import { StoryStore } from './story-store';
 
 /** How long one story stays up before the next. */
@@ -35,8 +37,8 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
  */
 @Component({
   selector: 'app-story-viewer',
-  imports: [NgIcon, HlmButton, HlmInput, MemberAvatar],
-  providers: [provideIcons({ lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideTrash2, lucideX })],
+  imports: [NgIcon, HlmButton, HlmInput, MemberAvatar, MusicLine],
+  providers: [provideIcons({ lucideChevronLeft, lucideChevronRight, lucideHeart, lucideSend, lucideTrash2, lucideVolume2, lucideVolumeX, lucideX })],
   host: {
     class: 'fixed inset-0 z-50 flex items-center justify-center bg-black text-white',
     role: 'dialog',
@@ -75,10 +77,21 @@ export function step(rings: readonly StoryRingDto[], ring: number, story: number
 
           <header class="absolute inset-x-3 top-6 flex items-center gap-2.5 transition-opacity duration-200" [class.opacity-0]="holding()">
             <app-member-avatar [name]="s.author.name" [avatarUrl]="s.author.avatarUrl" [modelId]="s.author.modelId" [px]="34" />
-            <div class="flex min-w-0 flex-1 items-baseline gap-1.5 text-sm drop-shadow">
-              <span class="truncate font-semibold">{{ s.author.name }}</span>
-              <span class="shrink-0 text-white/80">· {{ ago(s.createdAt) }}</span>
+            <div class="flex min-w-0 flex-1 flex-col drop-shadow">
+              <div class="flex min-w-0 items-baseline gap-1.5 text-sm">
+                <span class="truncate font-semibold">{{ s.author.name }}</span>
+                <span class="shrink-0 text-white/80">· {{ ago(s.createdAt) }}</span>
+              </div>
+              @if (s.music; as music) {
+                <app-music-line [music]="music" [key]="'story:' + s.id" />
+              }
             </div>
+            @if (s.music) {
+              <button hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white"
+                [attr.aria-label]="player.muted() ? 'Unmute' : 'Mute'" (click)="player.setMuted(!player.muted())">
+                <ng-icon [name]="player.muted() ? 'lucideVolumeX' : 'lucideVolume2'" size="22" />
+              </button>
+            }
             @if (ring()?.isMine || isAdmin()) {
               <button hlmBtn variant="ghost" size="icon" class="text-white hover:bg-white/10 hover:text-white" aria-label="Delete story" (click)="remove(s)">
                 <ng-icon name="lucideTrash2" />
@@ -136,6 +149,7 @@ export class StoryViewer {
   protected readonly isAdmin = inject(AuthService).isAdmin;
   private readonly images = inject(AvatarImages);
   private readonly router = inject(Router);
+  protected readonly player = inject(MusicPlayer);
   private readonly closeButton = viewChild<ElementRef<HTMLButtonElement>>('closeButton');
 
   readonly rings = input.required<StoryRingDto[]>();
@@ -185,6 +199,25 @@ export class StoryViewer {
       const s = this.story();
       if (s) untracked(() => void this.store.markSeen(s));
     });
+
+    // A story with a song plays it from the start of its clip; one without stops what played.
+    effect(() => {
+      const s = this.story();
+      untracked(() => {
+        if (s?.music) void this.player.play(clipOf(`story:${s.id}`, s.music));
+        else this.player.stop();
+      });
+    });
+    effect(() => {
+      const s = this.story();
+      const held = this.paused() || this.holding();
+      untracked(() => {
+        if (!s?.music) return;
+        if (held) this.player.pause(`story:${s.id}`);
+        else this.player.resume(`story:${s.id}`);
+      });
+    });
+    inject(DestroyRef).onDestroy(() => this.player.stop());
 
     const tick = 100;
     const timer = setInterval(() => {

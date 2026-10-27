@@ -15,6 +15,7 @@ public class StoryConfiguration : IEntityTypeConfiguration<Story>
 
         builder.HasOne(s => s.AuthorUser).WithMany().HasForeignKey(s => s.AuthorUserId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(s => s.AuthorBot).WithMany().HasForeignKey(s => s.AuthorBotId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(s => s.Song).WithMany().HasForeignKey(s => s.SongId).OnDelete(DeleteBehavior.SetNull);
     }
 }
 

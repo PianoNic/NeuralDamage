@@ -34,6 +34,9 @@ RUN bun install --frozen-lockfile
 COPY src/NeuralDamage.Frontend .
 RUN bun run build
 
+# Deno is the JavaScript runtime yt-dlp needs for YouTube.
+FROM denoland/deno:bin-2.9.8 AS deno
+
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
@@ -42,5 +45,10 @@ COPY --from=frontend-build /src/frontend/dist/NeuralDamage.Frontend/browser ./ww
 # volume mounted on it starts out writable.
 USER root
 RUN mkdir -p /app/data/attachments && chown -R $APP_UID /app/data
+# yt-dlp fetches whole songs for music on posts and stories (Music:YtDlpPath); without it songs play
+# Deezer's 30-second preview. Its standalone build needs no Python.
+ARG YTDLP_VERSION=2026.08.19
+ADD --chmod=755 https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux /usr/local/bin/yt-dlp
+COPY --from=deno /deno /usr/local/bin/deno
 USER $APP_UID
 ENTRYPOINT ["dotnet", "NeuralDamage.API.dll"]

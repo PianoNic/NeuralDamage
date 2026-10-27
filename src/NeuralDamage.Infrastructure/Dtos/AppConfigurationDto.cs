@@ -4,6 +4,8 @@ namespace NeuralDamage.Infrastructure.Dtos;
 /// <param name="Version">The release the server was built as, from <c>application.properties</c>, e.g. "0.1.1".</param>
 /// <param name="ImageGeneration">Pictures can be generated (<c>ImageGen:BaseUrl</c> is set).</param>
 /// <param name="ImageSearch">Pictures can be searched on the web (<c>ImageSearch:BaseUrl</c> is set).</param>
+/// <param name="Music">Posts and stories can have a song (<c>Music:Enabled</c>).</param>
+/// <param name="FullSongs">Whole songs can be fetched, so a clip can start anywhere in one; otherwise songs play Deezer's preview.</param>
 public record AppConfigurationDto(
     string Authority,
     string ClientId,
@@ -13,7 +15,9 @@ public record AppConfigurationDto(
     AttachmentLimitsDto Attachments,
     string Version,
     bool ImageGeneration,
-    bool ImageSearch = false);
+    bool ImageSearch = false,
+    bool Music = false,
+    bool FullSongs = false);
 
 /// <summary>What an image upload may be (<c>Attachments:*</c>); the server checks again regardless.</summary>
 public record AttachmentLimitsDto(long MaxBytes, int MaxPerMessage, List<string> ContentTypes);

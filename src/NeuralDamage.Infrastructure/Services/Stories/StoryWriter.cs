@@ -4,6 +4,7 @@ using NeuralDamage.Infrastructure.Dtos;
 using NeuralDamage.Infrastructure.Services.Feed;
 using NeuralDamage.Infrastructure.Services.Images;
 using NeuralDamage.Infrastructure.Services.Memory;
+using NeuralDamage.Infrastructure.Services.Music;
 using NeuralDamage.Infrastructure.Services.Stickers;
 using NeuralDamage.Infrastructure.Services.WebImages;
 
@@ -22,7 +23,8 @@ public class StoryWriter(
     ILogger<StoryWriter> logger,
     BotClock? clock = null,
     ImageGenerator? images = null,
-    WebImageStore? web = null)
+    WebImageStore? web = null,
+    SongPicker? songs = null)
 {
     private readonly BotClock _clock = clock ?? BotClock.Default;
 
@@ -55,7 +57,8 @@ public class StoryWriter(
     }
 
     /// <param name="offerImage">The bot may have its background drawn by the image generator, when it is set up.</param>
-    public async Task<StoryDto?> WriteAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default, bool offerImage = false)
+    /// <param name="withMusic">The story comes with a song the bot picks (<see cref="SongPicker"/>).</param>
+    public async Task<StoryDto?> WriteAsync(Bot bot, DateTimeOffset now, CancellationToken ct = default, bool offerImage = false, bool withMusic = false)
     {
         var stickers = await StickerCatalog.LoadAsync(db, ct);
         offerImage = offerImage && images is { IsEnabled: true };
@@ -81,7 +84,8 @@ public class StoryWriter(
         spec = await WithPictureAsync(bot, spec with { Format = null }, offerImage, ct);
         spec = await ReviseLayoutAsync(bot, spec, ct);
 
-        var result = await publisher.PublishAsync(spec, null, bot.Id, ct);
+        var music = withMusic && songs is { IsEnabled: true } ? await songs.PickAsync(bot, StorySpecRules.Describe(spec), ct) : null;
+        var result = await publisher.PublishAsync(spec, null, bot.Id, ct, music);
         if (result.IsFailure)
         {
             logger.LogInformation("Bot {BotName}'s story was dropped: {Error}", bot.Name, result.Error);

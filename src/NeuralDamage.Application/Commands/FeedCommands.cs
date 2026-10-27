@@ -9,13 +9,15 @@ using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Feed;
+using NeuralDamage.Infrastructure.Services.Music;
 
 namespace NeuralDamage.Application.Commands;
 
 /// <param name="ImageId">A picture the person had generated for this post.</param>
-public record CreatePostCommand(Guid UserId, string Content, Guid? StickerId = null, Guid? ImageId = null) : ICommand<Result<PostDto>>;
+/// <param name="SongId">A song for the post to play, from <see cref="MusicStart"/> on.</param>
+public record CreatePostCommand(Guid UserId, string Content, Guid? StickerId = null, Guid? ImageId = null, Guid? SongId = null, int? MusicStart = null) : ICommand<Result<PostDto>>;
 
-public class CreatePostHandler(NeuralDamageDbContext db, IFeedNotifier notifier, IFeedQueue queue) : ICommandHandler<CreatePostCommand, Result<PostDto>>
+public class CreatePostHandler(NeuralDamageDbContext db, IFeedNotifier notifier, IFeedQueue queue, SongLibrary songs) : ICommandHandler<CreatePostCommand, Result<PostDto>>
 {
     public async ValueTask<Result<PostDto>> Handle(CreatePostCommand request, CancellationToken cancellationToken)
     {
@@ -38,7 +40,19 @@ public class CreatePostHandler(NeuralDamageDbContext db, IFeedNotifier notifier,
                 return Result<PostDto>.Failure("That picture is already posted.");
         }
 
-        var post = new Post { AuthorUserId = request.UserId, Content = content, StickerId = request.StickerId, ImageId = request.ImageId };
+        (Guid SongId, int? Start)? music = null;
+        if (request.SongId is { } songId && (music = await songs.UseAsync(songId, request.MusicStart, cancellationToken)) is null)
+            return Result<PostDto>.Failure("That song is gone.");
+
+        var post = new Post
+        {
+            AuthorUserId = request.UserId,
+            Content = content,
+            StickerId = request.StickerId,
+            ImageId = request.ImageId,
+            SongId = music?.SongId,
+            MusicStart = music?.Start,
+        };
         db.Posts.Add(post);
         await db.SaveChangesAsync(cancellationToken);
 

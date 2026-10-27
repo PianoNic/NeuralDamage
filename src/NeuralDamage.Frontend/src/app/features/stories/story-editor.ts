@@ -6,6 +6,7 @@ import {
   lucideArrowUp,
   lucideChevronLeft,
   lucideImagePlus,
+  lucideMusic,
   lucideSearch,
   lucideSticker,
   lucideTrash2,
@@ -15,6 +16,7 @@ import {
 import { toast } from '@spartan-ng/brain/sonner';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmCardImports } from '@spartan-ng/helm/card';
+import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmInputGroupImports } from '@spartan-ng/helm/input-group';
 import { HlmPopoverImports } from '@spartan-ng/helm/popover';
@@ -28,6 +30,8 @@ import { BotPictureSuggestionDto } from '../../api/model/botPictureSuggestionDto
 import { describeApiError, toastApiError } from '../../core/http-errors';
 import { StickerDto, StorySpec } from '../../core/models';
 import { AvatarImages, isApiAvatar } from '../../shared/avatar-images';
+import { MusicChip } from '../music/music-chip';
+import { MusicPicker, PickedSong } from '../music/music-picker';
 import { StickerImage } from '../stickers/sticker-image';
 import { StickerPicker } from '../stickers/sticker-picker';
 import {
@@ -77,6 +81,7 @@ import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
     NgIcon,
     HlmButton,
     HlmCardImports,
+    HlmDialogImports,
     HlmInput,
     HlmInputGroupImports,
     HlmPopoverImports,
@@ -88,6 +93,8 @@ import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
     StickerPicker,
     GenerateImage,
     WebImageSearch,
+    MusicChip,
+    MusicPicker,
   ],
   providers: [
     ImageDraft,
@@ -96,6 +103,7 @@ import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
       lucideArrowUp,
       lucideChevronLeft,
       lucideImagePlus,
+      lucideMusic,
       lucideSearch,
       lucideSticker,
       lucideTrash2,
@@ -416,6 +424,16 @@ import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
               }
             </div>
           }
+          @if (!isPost() && musicOn()) {
+            @if (music(); as m) {
+              <app-music-chip [picked]="m" (change)="musicOpen.set(true)" (remove)="music.set(null)" />
+            } @else {
+              <button hlmBtn variant="outline" type="button" class="self-start" (click)="musicOpen.set(true)">
+                <ng-icon name="lucideMusic" />
+                Add music
+              </button>
+            }
+          }
           @if (problem(); as message) {
             <p class="text-muted-foreground text-[13px]" role="status">{{ message }}</p>
           }
@@ -434,6 +452,15 @@ import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
         </section>
       </div>
     </div>
+
+    <hlm-dialog [state]="musicOpen() ? 'open' : 'closed'" (closed)="musicOpen.set(false)">
+      <hlm-dialog-content *hlmDialogPortal="let ctx" class="w-[min(96vw,38rem)] max-w-none sm:max-w-none" data-testid="music-dialog">
+        <hlm-dialog-header>
+          <h2 hlmDialogTitle>Add music</h2>
+        </hlm-dialog-header>
+        <app-music-picker [forText]="songWords()" forLabel="For this story" [initial]="music()" (done)="music.set($event); musicOpen.set(false)" />
+      </hlm-dialog-content>
+    </hlm-dialog>
   `,
 })
 export class StoryEditor implements OnInit {
@@ -457,6 +484,17 @@ export class StoryEditor implements OnInit {
   protected readonly botList = inject(BotDirectory);
   protected readonly imageGeneration = inject(AppConfig).imageGeneration;
   protected readonly imageSearch = inject(AppConfig).imageSearch;
+  protected readonly musicOn = inject(AppConfig).music;
+  /** The song the story plays. */
+  protected readonly music = signal<PickedSong | null>(null);
+  protected readonly musicOpen = signal(false);
+  /** The story's words, for the songs that fit them. */
+  protected readonly songWords = computed(() =>
+    this.draft()
+      .layers.map((l) => (l.type === 'text' ? l.text : ''))
+      .join(' ')
+      .trim(),
+  );
   private readonly bots = inject(BotsService);
   private readonly images = inject(AvatarImages);
   private readonly router = inject(Router);
@@ -681,7 +719,7 @@ export class StoryEditor implements OnInit {
     }
     this.busy.set(true);
     try {
-      await this.store.publish(toSpec(this.draft()));
+      await this.store.publish(toSpec(this.draft()), this.music());
       toast.success('Story posted. It stays up for 24 hours.');
       void this.router.navigate(['/']);
     } catch (error) {

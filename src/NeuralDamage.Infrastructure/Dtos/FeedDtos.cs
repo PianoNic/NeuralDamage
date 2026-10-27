@@ -23,7 +23,8 @@ public record PostDto(
     bool LikedByMe,
     int CommentCount,
     List<CommentDto> PreviewComments,
-    FeedImageDto? Image = null);
+    FeedImageDto? Image = null,
+    MusicDto? Music = null);
 
 /// <summary>A generated or composed picture on a post.</summary>
 /// <param name="Url">Where the app loads it, with the user's token.</param>
@@ -93,7 +94,8 @@ public record FeedActivityItemDto(string Kind, string ActorName, bool ActorIsBot
 
 /// <param name="ImageUrl">The rendered 1080×1920 PNG; it needs the sign-in token.</param>
 /// <param name="Description">What it says, as text: its text layers and stickers.</param>
-public record StoryDto(Guid Id, FeedAuthorDto Author, string ImageUrl, DateTime CreatedAt, DateTime ExpiresAt, bool Seen, string Description);
+/// <param name="Music">The song it plays, when it has one.</param>
+public record StoryDto(Guid Id, FeedAuthorDto Author, string ImageUrl, DateTime CreatedAt, DateTime ExpiresAt, bool Seen, string Description, MusicDto? Music = null);
 
 /// <summary>One circle in the stories row: someone's live stories, oldest first.</summary>
 /// <param name="AllSeen">The reader has seen every one of them, so the ring is grey.</param>

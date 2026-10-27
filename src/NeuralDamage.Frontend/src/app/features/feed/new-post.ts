@@ -1,7 +1,7 @@
 import { afterNextRender, Component, computed, inject, OnInit, signal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideLayers, lucideX } from '@ng-icons/lucide';
+import { lucideLayers, lucideMusic, lucideX } from '@ng-icons/lucide';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { HlmTooltipImports } from '@spartan-ng/helm/tooltip';
@@ -11,6 +11,8 @@ import { toastApiError } from '../../core/http-errors';
 import { StickerDto, StorySpec } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
 import { BotDirectory } from '../bots/bot-directory';
+import { MusicChip } from '../music/music-chip';
+import { MusicPicker, PickedSong } from '../music/music-picker';
 import { Composer } from '../chat/composer';
 import { StoryEditor } from '../stories/story-editor';
 import { StoryDraft } from '../stories/story-model';
@@ -35,8 +37,10 @@ import { GenerateImage, GeneratedImageTile, ImageDraft } from './generate-image'
     GenerateImage,
     GeneratedImageTile,
     StoryEditor,
+    MusicChip,
+    MusicPicker,
   ],
-  providers: [ImageDraft, provideIcons({ lucideLayers, lucideX })],
+  providers: [ImageDraft, provideIcons({ lucideLayers, lucideMusic, lucideX })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="flex h-14 shrink-0 items-center gap-2 border-b px-2">
@@ -61,7 +65,11 @@ import { GenerateImage, GeneratedImageTile, ImageDraft } from './generate-image'
           [attachment]="draft.pending() ? 'busy' : draft.ready() ? 'ready' : 'none'"
           (send)="post($event.content)"
           (sendSticker)="postSticker($event)"
+          (input)="caption.set($any($event.target).value ?? caption())"
         >
+          @if (music(); as m) {
+            <app-music-chip composerAttachment [picked]="m" (change)="musicOpen.set(true)" (remove)="music.set(null)" />
+          }
           @if (draft.image(); as image) {
             <app-generated-image-tile
               composerAttachment
@@ -84,6 +92,20 @@ import { GenerateImage, GeneratedImageTile, ImageDraft } from './generate-image'
           >
             <ng-icon name="lucideLayers" />
           </button>
+          @if (musicOn()) {
+            <button
+              composerTool
+              hlmBtn
+              variant="ghost"
+              size="icon-sm"
+              type="button"
+              aria-label="Add music"
+              hlmTooltip="Add music"
+              (click)="musicOpen.set(true)"
+            >
+              <ng-icon name="lucideMusic" />
+            </button>
+          }
           @if (imageGeneration()) {
             <app-generate-image composerTool [bots]="bots.bots()" [busy]="draft.pending()" (generate)="draft.generate($event)" />
           }
@@ -91,6 +113,15 @@ import { GenerateImage, GeneratedImageTile, ImageDraft } from './generate-image'
       </section>
       <p class="text-muted-foreground mx-auto max-w-xl px-4 text-xs">Bots see your post and may comment.</p>
     </div>
+
+    <hlm-dialog [state]="musicOpen() ? 'open' : 'closed'" (closed)="musicOpen.set(false)">
+      <hlm-dialog-content *hlmDialogPortal="let ctx" class="w-[min(96vw,38rem)] max-w-none sm:max-w-none" data-testid="music-dialog">
+        <hlm-dialog-header>
+          <h2 hlmDialogTitle>Add music</h2>
+        </hlm-dialog-header>
+        <app-music-picker [forText]="songWords()" [initial]="music()" (done)="music.set($event); musicOpen.set(false)" />
+      </hlm-dialog-content>
+    </hlm-dialog>
 
     <hlm-dialog [state]="composeOpen() ? 'open' : 'closed'" (closed)="composeOpen.set(false)">
       <hlm-dialog-content
@@ -118,6 +149,13 @@ export class NewPostPage implements OnInit {
   protected readonly bots = inject(BotDirectory);
   protected readonly draft = inject(ImageDraft);
   protected readonly imageGeneration = inject(AppConfig).imageGeneration;
+  protected readonly musicOn = inject(AppConfig).music;
+  /** The song picked for the post. */
+  protected readonly music = signal<PickedSong | null>(null);
+  protected readonly musicOpen = signal(false);
+  /** The caption so far, for the songs that fit it. */
+  protected readonly caption = signal('');
+  protected readonly songWords = computed(() => [this.caption(), this.draft.image()?.prompt ?? ''].join(' ').trim());
 
   protected readonly me = computed(() => this.auth.user()?.id ?? null);
   protected readonly members = computed(() => feedMembers(this.bots.bots(), this.store.posts()));
@@ -154,8 +192,9 @@ export class NewPostPage implements OnInit {
     const image = this.draft.image();
     const imageId = this.draft.take();
     try {
-      await this.store.post(content, null, imageId);
+      await this.store.post(content, null, imageId, this.music());
       if (imageId) this.composed.set(null);
+      this.music.set(null);
       void this.router.navigate(['/']);
     } catch (error) {
       if (imageId && image) this.draft.restore(image);
@@ -165,7 +204,8 @@ export class NewPostPage implements OnInit {
 
   protected async postSticker(sticker: StickerDto): Promise<void> {
     try {
-      await this.store.post('', sticker.id);
+      await this.store.post('', sticker.id, null, this.music());
+      this.music.set(null);
       void this.router.navigate(['/']);
     } catch (error) {
       toastApiError(error, { network: 'Not posted. Check your connection and try again.' });

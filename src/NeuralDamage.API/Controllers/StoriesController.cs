@@ -38,7 +38,7 @@ public class StoriesController(ISender sender, IUserService userService, Attachm
     public async Task<ActionResult<StoryDto>> Create(CreateStoryRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new CreateStoryCommand(userId, request.Spec), ct);
+        var result = await sender.Send(new CreateStoryCommand(userId, request.Spec, request.SongId, request.MusicStart), ct);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

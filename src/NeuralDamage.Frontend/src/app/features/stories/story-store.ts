@@ -4,6 +4,7 @@ import { StoriesService } from '../../api/api/stories.service';
 import { LayoutIssueDto } from '../../api/model/layoutIssueDto';
 import { AuthService } from '../../core/auth/auth.service';
 import { StoryDto, StoryImageUploadDto, StoryRingDto, StorySpec } from '../../core/models';
+import type { PickedSong } from '../music/music-picker';
 import { SignalRService } from '../../core/signalr/signalr.service';
 
 /** A new story joins its author's ring, or starts one; the reader's own ring stays first. */
@@ -84,8 +85,8 @@ export class StoryStore {
     return result.chatId;
   }
 
-  async publish(spec: StorySpec): Promise<StoryDto> {
-    const story = await firstValueFrom(this.api.apiStoriesPost({ spec }));
+  async publish(spec: StorySpec, music: PickedSong | null = null): Promise<StoryDto> {
+    const story = await firstValueFrom(this.api.apiStoriesPost({ spec, songId: music?.song.id ?? null, musicStart: music?.start ?? null }));
     this.rings.update((r) => withStory(r, story, this.me));
     return story;
   }

@@ -12,5 +12,7 @@ import { StorySpec } from './storySpec';
 
 export interface CreateStoryRequest { 
     spec: StorySpec;
+    songId?: string | null;
+    musicStart?: number | null;
 }
 

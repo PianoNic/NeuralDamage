@@ -12,6 +12,7 @@ using NeuralDamage.Infrastructure.BackgroundServices;
 using NeuralDamage.Infrastructure.Extensions;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.Memory;
+using NeuralDamage.Infrastructure.Services.Music;
 using NeuralDamage.Infrastructure.Services.BotDecision;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Stickers;
@@ -112,7 +113,8 @@ builder.Services.AddScoped(sp => new StoryWriter(
     sp.GetRequiredService<ILogger<StoryWriter>>(),
     sp.GetRequiredService<BotClock>(),
     sp.GetRequiredService<ImageGenerator>(),
-    sp.GetRequiredService<WebImageStore>()));
+    sp.GetRequiredService<WebImageStore>(),
+    sp.GetRequiredService<SongPicker>()));
 builder.Services.AddHostedService<StorySweeper>();
 
 // Pictures from the web: searched with a self-hosted SearXNG (ImageSearch:BaseUrl), fetched only from public addresses.
@@ -150,6 +152,17 @@ builder.Services.AddSingleton(sp => new ImageGenerator(
     sp.GetRequiredService<IOptions<ImageGenOptions>>(),
     sp.GetRequiredService<ILogger<ImageGenerator>>(),
     sp.GetRequiredService<BotClock>()));
+
+// Music on posts and stories: songs from Deezer's public API, whole ones fetched with yt-dlp when it is there.
+builder.Services.Configure<MusicOptions>(builder.Configuration.GetSection(MusicOptions.SectionName));
+builder.Services.AddHttpClient<IDeezerClient, DeezerClient>();
+builder.Services.AddSingleton(new SongAudioStore(Path.Combine(
+    Path.GetFullPath(attachmentOptions.Path, builder.Environment.ContentRootPath), "music")));
+builder.Services.AddSingleton<IFullSongFetcher, YtDlpSongFetcher>();
+builder.Services.AddSingleton<SongFetchQueue>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SongFetchQueue>());
+builder.Services.AddScoped<SongLibrary>();
+builder.Services.AddScoped<SongPicker>();
 
 // Picture suggestions for new bots, from Wikimedia. Redirects are followed by hand, only to allowed hosts.
 builder.Services.AddMemoryCache();

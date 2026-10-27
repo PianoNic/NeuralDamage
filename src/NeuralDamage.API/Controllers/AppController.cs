@@ -22,7 +22,9 @@ public class AppController(
     IToamaisutaaClientConfigurationProvider oidc,
     AttachmentOptions attachments,
     IOptions<ImageGenOptions> imageGen,
-    IOptions<NeuralDamage.Infrastructure.Services.WebImages.ImageSearchOptions> imageSearch) : ControllerBase
+    IOptions<NeuralDamage.Infrastructure.Services.WebImages.ImageSearchOptions> imageSearch,
+    IOptions<NeuralDamage.Infrastructure.Services.Music.MusicOptions> music,
+    NeuralDamage.Infrastructure.Services.Music.IFullSongFetcher fullSongs) : ControllerBase
 {
     [HttpGet(Name = "appConfiguration")]
     [ProducesResponseType<AppConfigurationDto>(StatusCodes.Status200OK)]
@@ -38,7 +40,9 @@ public class AppController(
             attachments.Limits(),
             Version,
             imageGen.Value.Enabled,
-            imageSearch.Value.Enabled));
+            imageSearch.Value.Enabled,
+            music.Value.Enabled,
+            music.Value.Enabled && fullSongs.IsAvailable));
     }
 
     /// <summary>

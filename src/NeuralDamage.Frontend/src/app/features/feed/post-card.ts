@@ -9,6 +9,7 @@ import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { PkAuthImage } from '@prompt-kit/auth-image';
 import { PostDto } from '../../core/models';
 import { MemberAvatar } from '../../shared/member-avatar';
+import { MusicLine } from '../music/music-line';
 import { ChatList } from '../chat/chat-list';
 import { StickerImage } from '../stickers/sticker-image';
 import { formatAgo } from './feed-model';
@@ -21,7 +22,7 @@ import { generatedImageSrc } from './generate-image';
  */
 @Component({
   selector: 'app-post-card',
-  imports: [RouterLink, NgIcon, PkAuthImage, HlmBadge, HlmButton, HlmDialogImports, HlmDropdownMenuImports, MemberAvatar, StickerImage, FeedText],
+  imports: [RouterLink, NgIcon, PkAuthImage, HlmBadge, HlmButton, HlmDialogImports, HlmDropdownMenuImports, MemberAvatar, MusicLine, StickerImage, FeedText],
   providers: [provideIcons({ lucideEllipsis, lucideHeart, lucideMessageCircle, lucideTrash2 })],
   host: { class: 'block' },
   template: `
@@ -40,6 +41,9 @@ import { generatedImageSrc } from './generate-image';
             }
             <time class="text-muted-foreground shrink-0" [attr.datetime]="post().createdAt" [title]="post().createdAt">· {{ ago() }}</time>
           </div>
+          @if (post().music; as music) {
+            <app-music-line [music]="music" [key]="'post:' + post().id" />
+          }
           @if (sourceChat(); as chat) {
             <span class="text-muted-foreground truncate text-xs" data-testid="source-chat">after the chat in "{{ chat }}"</span>
           }
