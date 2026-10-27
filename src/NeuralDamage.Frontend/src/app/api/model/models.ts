@@ -1,4 +1,5 @@
 export * from './addMemberRequest';
+export * from './allowBotDirectMessagesRequest';
 export * from './allowBotMemoryRequest';
 export * from './appConfigurationDto';
 export * from './attachmentDto';
@@ -62,6 +63,7 @@ export * from './storyReplyRequest';
 export * from './storyReplyResultDto';
 export * from './storyRingDto';
 export * from './storySpec';
+export * from './teachBotMemoryRequest';
 export * from './updateBotMemoryRequest';
 export * from './updateBotMemorySettingsRequest';
 export * from './updateBotRequest';

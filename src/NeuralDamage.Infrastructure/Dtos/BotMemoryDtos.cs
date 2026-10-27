@@ -25,6 +25,6 @@ public record BotMemoryDto(
     DateTime CreatedAt,
     DateTime? LastUsedAt);
 
-/// <summary>A bot's memory as its maker sees it: whether it is on, the notes it always keeps, and what it picked up.</summary>
+/// <summary>A bot's memory as its maker sees it: whether it is on, and what it remembers.</summary>
 /// <param name="Hidden">Memories from chats the reader is not in, about other people, which they don't get to read.</param>
-public record BotMemoriesDto(bool Enabled, string? Notes, List<BotMemoryDto> Memories, int Hidden);
+public record BotMemoriesDto(bool Enabled, List<BotMemoryDto> Memories, int Hidden);

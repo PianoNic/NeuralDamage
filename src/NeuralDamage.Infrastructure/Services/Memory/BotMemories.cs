@@ -134,15 +134,13 @@ public static partial class BotMemories
     }
 
     /// <summary>
-    /// The note that hands a bot its memories, grouped by whom they are about, after its maker's
-    /// notes; null when there is nothing. Sent as a note before the reply, not in the system prompt,
-    /// so the prompt the provider caches stays the same from one message to the next.
+    /// The note that hands a bot its memories, grouped by whom they are about; null when there are
+    /// none. Sent as a note before the reply, not in the system prompt, so the prompt the provider
+    /// caches stays the same from one message to the next.
     /// </summary>
-    public static string? Note(Bot bot, IReadOnlyList<RecalledMemory> memories)
+    public static string? Note(IReadOnlyList<RecalledMemory> memories)
     {
         var lines = new List<string>();
-        if (!string.IsNullOrWhiteSpace(bot.MemoryNotes))
-            lines.Add(bot.MemoryNotes.Trim());
         foreach (var group in memories.GroupBy(m => m.Scope == MemoryScope.Person ? m.About ?? "someone" : null))
         {
             var items = string.Join(" ", group.Select(m => EndSentence(m.Text)));

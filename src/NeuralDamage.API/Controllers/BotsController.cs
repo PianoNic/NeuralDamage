@@ -204,8 +204,18 @@ public class BotsController(ISender sender, IUserService userService, Attachment
     public async Task<IActionResult> UpdateMemorySettings(Guid botId, UpdateBotMemorySettingsRequest request, CancellationToken ct)
     {
         var userId = await userService.GetCurrentUserIdAsync(ct);
-        var result = await sender.Send(new UpdateBotMemorySettingsCommand(botId, userId, request.Enabled, request.Notes), ct);
+        var result = await sender.Send(new UpdateBotMemorySettingsCommand(botId, userId, request.Enabled), ct);
         return result.IsSuccess ? Accepted() : BadRequest(result.Error);
+    }
+
+    /// <summary>Tells the bot something to remember in plain words; returns the memories it made of it.</summary>
+    [HttpPost("{botId:guid}/memories/teach")]
+    [ProducesResponseType<List<BotMemoryDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<BotMemoryDto>>> TeachMemory(Guid botId, TeachBotMemoryRequest request, CancellationToken ct)
+    {
+        var userId = await userService.GetCurrentUserIdAsync(ct);
+        var result = await sender.Send(new TeachBotMemoryCommand(botId, userId, request.Text), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
     [HttpPatch("{botId:guid}/memories/{memoryId:guid}")]

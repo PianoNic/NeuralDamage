@@ -71,7 +71,7 @@ public partial class FeedPostWriter(
         // What the bot remembers about itself, its earlier posts above all, so it doesn't repeat them.
         // Never what it knows about people: the feed doesn't name them.
         var self = await BotMemories.RecallSelfAsync(db, bot, string.Join(" ", recent.Select(p => p.Content)), Memory, ct);
-        if (BotMemories.Note(bot, self) is { } remembered)
+        if (BotMemories.Note(self) is { } remembered)
             turns = [.. turns[..^1], new ChatMessage("user", remembered), turns[^1]];
         var model = ModelFor(bot);
         var temperature = Math.Min(bot.Temperature, 1.2);

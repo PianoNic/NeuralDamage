@@ -18,6 +18,12 @@ public interface IMemoryExtractor
     /// </summary>
     /// <returns>The background run, for tests; callers do not wait for it.</returns>
     Task BotSpoke(Guid chatId, Guid botId);
+
+    /// <summary>
+    /// What the bot's maker told it, in plain words, made into memories by the same model; kept as
+    /// written when the model makes nothing of it. Returns the memories kept.
+    /// </summary>
+    Task<List<BotMemory>> TeachAsync(Guid botId, string text, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -134,6 +140,62 @@ public class MemoryExtractor(
         return kept;
     }
 
+    public async Task<List<BotMemory>> TeachAsync(Guid botId, string text, CancellationToken ct = default)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NeuralDamageDbContext>();
+        var bot = await db.Bots.AsNoTracking().FirstOrDefaultAsync(b => b.Id == botId && b.IsActive, ct);
+        if (bot is null)
+            return [];
+
+        // Anyone may be named: the maker can tell the bot about any person, by handle or nickname.
+        var people = await db.Users.AsNoTracking().Where(u => u.AllowBotMemory).OrderBy(u => u.DisplayName).Take(500).ToListAsync(ct);
+        string? reply = null;
+        try
+        {
+            reply = await scope.ServiceProvider.GetRequiredService<IOpenRouterService>()
+                .GenerateResponseAsync(Model(), Temperature, TeachPrompt(bot), [new ChatMessage("user", Lesson(bot, text, people))], ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "The memory model could not read what bot {BotName} was taught; keeping it as written", bot.Name);
+        }
+
+        var kept = new List<BotMemory>();
+        foreach (var found in Parse(reply).Take(MaxPerRead))
+        {
+            if (ToMemory(found, bot, null, people, inPrivate: false) is { } memory)
+            {
+                memory.Source = MemorySource.Manual;
+                if (await BotMemories.AddAsync(db, memory, ct))
+                    kept.Add(memory);
+            }
+        }
+        if (kept.Count == 0)
+        {
+            var asWritten = new BotMemory { BotId = bot.Id, Scope = MemoryScope.Self, Source = MemorySource.Manual, Text = text, Importance = 7 };
+            if (await BotMemories.AddAsync(db, asWritten, ct))
+                kept.Add(asWritten);
+        }
+        logger.LogInformation("Bot {BotName} was taught {Count} memories", bot.Name, kept.Count);
+        return kept;
+    }
+
+    /// <summary>What the memory model is asked when the maker teaches the bot.</summary>
+    public static string TeachPrompt(Bot bot) => $$"""
+        You keep the long-term memory of "{{bot.Name}}", a character in a group chat app. Its maker tells you, in their own words, what {{bot.Name}} should remember. Turn it into memories: facts about people (a person named with @ or by name), about {{bot.Name}} itself (its past, what it did, what it feels, who it is close to), or the chat it lives in. Keep what they meant, including anything spicy or made up: it is the character's own story. Split it into separate facts when it has several.
+
+        Answer with a JSON array and nothing else, at most {{MaxPerRead}} items:
+        [{"about": "<a person's name or nickname exactly as in the list, or self>", "text": "<one short sentence in the third person, e.g. {{bot.Name}} had an affair with PianoNic>", "importance": <1 to 10>}]
+        """;
+
+    /// <summary>The maker's words as the memory model reads them, after who can be named.</summary>
+    public static string Lesson(Bot bot, string text, IReadOnlyList<User> people)
+    {
+        var who = people.Count == 0 ? "" : $"People who can be named: {string.Join(", ", people.Select(PeopleNames.ForPrompt))}.{Environment.NewLine}{Environment.NewLine}";
+        return $"{who}What {bot.Name}'s maker says it should remember:{Environment.NewLine}{text}";
+    }
+
     /// <summary>What the extracting model is asked.</summary>
     public static string SystemPrompt(Bot bot) => $$"""
         You keep the long-term memory of "{{bot.Name}}", a character in a group chat app. Read the chat and write down only what is worth remembering for weeks: facts about the people (what they like, their plans, pets, jobs, relationships, things that happened to them), the chat's running jokes, and what {{bot.Name}} said about itself, promised or decided.
@@ -193,23 +255,25 @@ public class MemoryExtractor(
     }
 
     /// <summary>
-    /// A found item as a memory: about the bot, the chat, or a person here by name or nickname who
-    /// allows memories; null for anyone else. Learned in private, it stays in this chat.
+    /// A found item as a memory: about the bot, the chat, or a person by name or nickname who allows
+    /// memories; null for anyone else. Learned in private, it stays in this chat. Without a chat
+    /// (taught by the maker), it is the bot's to use anywhere, and "chat" means the bot itself.
     /// </summary>
-    public static BotMemory? ToMemory(Found found, Bot bot, Chat chat, IReadOnlyList<User> people, bool inPrivate)
+    public static BotMemory? ToMemory(Found found, Bot bot, Chat? chat, IReadOnlyList<User> people, bool inPrivate)
     {
         var about = found.About.TrimStart('@');
-        if (about.Equals("self", StringComparison.OrdinalIgnoreCase) || about.Equals(bot.Name, StringComparison.OrdinalIgnoreCase))
-            return new BotMemory { BotId = bot.Id, Scope = MemoryScope.Self, ChatId = chat.Id, StaysInChat = inPrivate, Source = MemorySource.Chat, Text = found.Text, Importance = found.Importance };
+        if (about.Equals("self", StringComparison.OrdinalIgnoreCase) || about.Equals(bot.Name, StringComparison.OrdinalIgnoreCase)
+            || (chat is null && about.Equals("chat", StringComparison.OrdinalIgnoreCase)))
+            return new BotMemory { BotId = bot.Id, Scope = MemoryScope.Self, ChatId = chat?.Id, StaysInChat = inPrivate, Source = MemorySource.Chat, Text = found.Text, Importance = found.Importance };
         if (about.Equals("chat", StringComparison.OrdinalIgnoreCase))
-            return new BotMemory { BotId = bot.Id, Scope = MemoryScope.Chat, ChatId = chat.Id, StaysInChat = true, Source = MemorySource.Chat, Text = found.Text, Importance = found.Importance };
+            return new BotMemory { BotId = bot.Id, Scope = MemoryScope.Chat, ChatId = chat!.Id, StaysInChat = true, Source = MemorySource.Chat, Text = found.Text, Importance = found.Importance };
 
         var person = people.FirstOrDefault(p =>
             string.Equals(PeopleNames.Handle(p), about, StringComparison.OrdinalIgnoreCase)
             || PeopleNames.Split(p.Nicknames).Any(n => string.Equals(n, about, StringComparison.OrdinalIgnoreCase)));
         if (person is null || !person.AllowBotMemory)
             return null;
-        return new BotMemory { BotId = bot.Id, Scope = MemoryScope.Person, SubjectUserId = person.Id, ChatId = chat.Id, StaysInChat = inPrivate, Source = MemorySource.Chat, Text = found.Text, Importance = found.Importance };
+        return new BotMemory { BotId = bot.Id, Scope = MemoryScope.Person, SubjectUserId = person.Id, ChatId = chat?.Id, StaysInChat = inPrivate, Source = MemorySource.Chat, Text = found.Text, Importance = found.Importance };
     }
 
     /// <summary><c>Memory:Model</c>, then <c>History:SummaryModel</c>, then <c>App:DefaultModel</c>, then the cheap model images are described with.</summary>

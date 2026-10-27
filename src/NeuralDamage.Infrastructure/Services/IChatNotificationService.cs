@@ -26,4 +26,10 @@ public interface IChatNotificationService
 
     /// <summary>A system message in a chat that only this user's open connections see.</summary>
     Task NotifyUserSystemMessage(Guid chatId, Guid userId, string content);
+
+    /// <summary>
+    /// A message straight to one person, besides the chat's group: a bot's first text in a direct
+    /// chat their connection has not joined yet. The web app drops the copy it already has.
+    /// </summary>
+    Task NotifyUserMessageNew(Guid userId, MessageDto message);
 }

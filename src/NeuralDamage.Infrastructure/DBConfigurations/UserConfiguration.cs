@@ -17,5 +17,6 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.AvatarUrl).HasMaxLength(1024);
         builder.Property(u => u.Nicknames).HasMaxLength(256);
         builder.Property(u => u.AllowBotMemory).HasDefaultValue(true).HasSentinel(true);
+        builder.Property(u => u.AllowBotDirectMessages).HasDefaultValue(true).HasSentinel(true);
     }
 }

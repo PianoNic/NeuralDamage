@@ -97,4 +97,9 @@ export class AuthService {
   async allowBotMemory(allowed: boolean): Promise<void> {
     this._user.set(await firstValueFrom(this.users.allowBotMemory({ allowed })));
   }
+
+  /** Whether bots in your group chats may text you directly. */
+  async allowBotDirectMessages(allowed: boolean): Promise<void> {
+    this._user.set(await firstValueFrom(this.users.allowBotDirectMessages({ allowed })));
+  }
 }

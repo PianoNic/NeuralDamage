@@ -23,6 +23,7 @@ encoder.ts
 git_push.sh
 index.ts
 model/addMemberRequest.ts
+model/allowBotDirectMessagesRequest.ts
 model/allowBotMemoryRequest.ts
 model/appConfigurationDto.ts
 model/attachmentDto.ts
@@ -87,6 +88,7 @@ model/storyReplyRequest.ts
 model/storyReplyResultDto.ts
 model/storyRingDto.ts
 model/storySpec.ts
+model/teachBotMemoryRequest.ts
 model/updateBotMemoryRequest.ts
 model/updateBotMemorySettingsRequest.ts
 model/updateBotRequest.ts

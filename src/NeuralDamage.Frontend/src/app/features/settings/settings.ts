@@ -8,6 +8,7 @@ import { toast } from '@spartan-ng/brain/sonner';
 import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInput } from '@spartan-ng/helm/input';
 import { HlmSpinner } from '@spartan-ng/helm/spinner';
+import { HlmSwitch } from '@spartan-ng/helm/switch';
 import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { AuthService } from '../../core/auth/auth.service';
 import { describeApiError } from '../../core/http-errors';
@@ -20,7 +21,7 @@ import { MemoriesAboutMe } from './memories-about-me';
  */
 @Component({
   selector: 'app-settings',
-  imports: [RouterLink, NgIcon, HlmButton, HlmCardImports, HlmFieldImports, HlmInput, HlmSpinner, HlmToggleGroupImports, MemoriesAboutMe],
+  imports: [RouterLink, NgIcon, HlmButton, HlmCardImports, HlmFieldImports, HlmInput, HlmSpinner, HlmSwitch, HlmToggleGroupImports, MemoriesAboutMe],
   providers: [provideIcons({ lucideGithub, lucideLogOut, lucideSticker })],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
@@ -60,6 +61,19 @@ import { MemoriesAboutMe } from './memories-about-me';
               Save
             </button>
           </form>
+        </section>
+        <section hlmCard>
+          <div hlmCardHeader>
+            <h2 hlmCardTitle>Direct messages from bots</h2>
+            <p hlmCardDescription>
+              A bot in one of your group chats can decide to text you privately, like when it says it’ll message you. It lands in your direct
+              chat with that bot, at most once every half hour.
+            </p>
+          </div>
+          <div hlmCardContent class="flex items-center justify-between gap-4">
+            <label id="allow-bot-dms" class="text-sm font-medium">Let bots message me directly</label>
+            <hlm-switch aria-labelledby="allow-bot-dms" [checked]="auth.user()?.allowBotDirectMessages ?? true" [disabled]="savingDms()" (checkedChange)="setBotDms($event)" />
+          </div>
         </section>
         <app-memories-about-me />
         <section hlmCard>
@@ -109,10 +123,22 @@ export class Settings {
   protected readonly githubUrl = 'https://github.com/PianoNic/NeuralDamage';
   protected readonly nicknames = signal('');
   protected readonly saving = signal(false);
+  protected readonly savingDms = signal(false);
 
   constructor() {
     // What is saved, once the account has loaded and after each save.
     effect(() => this.nicknames.set(this.auth.user()?.nicknames ?? ''));
+  }
+
+  protected async setBotDms(allowed: boolean): Promise<void> {
+    this.savingDms.set(true);
+    try {
+      await this.auth.allowBotDirectMessages(allowed);
+    } catch (error) {
+      toast.error(describeApiError(error, { fallback: 'Could not change that.' }));
+    } finally {
+      this.savingDms.set(false);
+    }
   }
 
   protected async saveNicknames(): Promise<void> {
