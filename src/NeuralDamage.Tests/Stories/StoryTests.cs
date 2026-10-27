@@ -133,7 +133,7 @@ public class StoryFlowTests
     {
         using var w = await CreateAsync();
 
-        var result = await new CreateStoryHandler(w.Publisher).Handle(new CreateStoryCommand(w.H.User.Id, Spec()), default);
+        var result = await new CreateStoryHandler(w.Publisher, TestMusic.Library(w.H.Db)).Handle(new CreateStoryCommand(w.H.User.Id, Spec()), default);
 
         await Assert.That(result.IsSuccess).IsTrue();
         var png = w.Storage.StoryFiles[result.Value!.Id];

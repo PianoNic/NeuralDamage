@@ -297,7 +297,7 @@ describe('NewPostPage composing a picture', () => {
 
     (el.querySelector('button[aria-label="Send message"]') as HTMLButtonElement).click();
     await settle(fixture);
-    expect(api.apiFeedPostsPost).toHaveBeenCalledWith({ content: '', stickerId: null, imageId: 'img9' });
+    expect(api.apiFeedPostsPost).toHaveBeenCalledWith({ content: '', stickerId: null, imageId: 'img9', songId: null, musicStart: null });
   });
 });
 

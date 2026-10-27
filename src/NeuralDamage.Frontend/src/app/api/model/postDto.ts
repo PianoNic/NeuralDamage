@@ -11,6 +11,7 @@ import { FeedImageDto } from './feedImageDto';
 import { MessageStickerDto } from './messageStickerDto';
 import { CommentDto } from './commentDto';
 import { FeedAuthorDto } from './feedAuthorDto';
+import { MusicDto } from './musicDto';
 
 
 export interface PostDto { 
@@ -25,5 +26,6 @@ export interface PostDto {
     commentCount: number;
     previewComments: Array<CommentDto>;
     image?: FeedImageDto;
+    music?: MusicDto;
 }
 

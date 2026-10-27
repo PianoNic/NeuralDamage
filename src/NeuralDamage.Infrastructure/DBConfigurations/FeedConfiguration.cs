@@ -23,6 +23,7 @@ public class PostConfiguration : IEntityTypeConfiguration<Post>
         // One picture per post, and a picture on one post only.
         builder.HasOne(p => p.Image).WithMany().HasForeignKey(p => p.ImageId).OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(p => p.ImageId).IsUnique();
+        builder.HasOne(p => p.Song).WithMany().HasForeignKey(p => p.SongId).OnDelete(DeleteBehavior.SetNull);
     }
 }
 

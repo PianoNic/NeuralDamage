@@ -57,7 +57,8 @@ public class StoryPublisher(
     }
 
     /// <summary>Renders, stores and announces a story by a person or a bot.</summary>
-    public async Task<Result<StoryDto>> PublishAsync(StorySpec spec, Guid? userId, Guid? botId, CancellationToken ct = default)
+    /// <param name="music">The song it plays and where its clip starts, checked by <see cref="Music.SongLibrary.UseAsync"/>.</param>
+    public async Task<Result<StoryDto>> PublishAsync(StorySpec spec, Guid? userId, Guid? botId, CancellationToken ct = default, (Guid SongId, int? Start)? music = null)
     {
         if (StoryFormats.Of(spec) != StoryFormats.Story)
             return Result<StoryDto>.Failure("A story is 9:16; that picture is made for a post.");
@@ -66,7 +67,15 @@ public class StoryPublisher(
             return Result<StoryDto>.Failure(png.Error!);
         spec = await WithSourcesAsync(spec, ct);
 
-        var story = new Story { AuthorUserId = userId, AuthorBotId = botId, Spec = StorySpecRules.Serialize(spec), SizeBytes = png.Value!.Length };
+        var story = new Story
+        {
+            AuthorUserId = userId,
+            AuthorBotId = botId,
+            Spec = StorySpecRules.Serialize(spec),
+            SizeBytes = png.Value!.Length,
+            SongId = music?.SongId,
+            MusicStart = music?.Start,
+        };
         await storage.SaveStoryFileAsync(story.Id, png.Value, ct);
         db.Stories.Add(story);
         await db.SaveChangesAsync(ct);
@@ -167,6 +176,7 @@ public static class StoryReads
         var stories = await db.Stories.Where(s => ids.Contains(s.Id))
             .Include(s => s.AuthorUser)
             .Include(s => s.AuthorBot)
+            .Include(s => s.Song)
             .AsNoTracking()
             .ToListAsync(ct);
         var seen = viewerId is { } viewer
@@ -181,7 +191,8 @@ public static class StoryReads
                 s.CreatedAt,
                 s.ExpiresAt,
                 seen.Contains(s.Id) || (s.AuthorUserId != null && s.AuthorUserId == viewerId),
-                StorySpecRules.Parse(s.Spec).Spec is { } spec ? StorySpecRules.Describe(spec) : ""))
+                StorySpecRules.Parse(s.Spec).Spec is { } spec ? StorySpecRules.Describe(spec) : "",
+                MusicReads.Of(s.Song, s.MusicStart)))
             .ToList();
     }
 }

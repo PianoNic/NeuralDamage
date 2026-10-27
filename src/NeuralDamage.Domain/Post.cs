@@ -18,6 +18,12 @@ public class Post : BaseEntity
     /// <summary>A generated picture shown with the post.</summary>
     public Guid? ImageId { get; set; }
 
+    /// <summary>The song the post plays, from <see cref="MusicStart"/> on.</summary>
+    public Guid? SongId { get; set; }
+
+    /// <summary>Where the song's clip starts in the whole song; null plays Deezer's preview.</summary>
+    public int? MusicStart { get; set; }
+
     /// <summary>The chat a bot's post reacts to; null for people and for posts out of nowhere.</summary>
     public Guid? SourceChatId { get; init; }
 
@@ -26,6 +32,7 @@ public class Post : BaseEntity
     public Sticker? Sticker { get; set; }
     public GeneratedImage? Image { get; set; }
     public Chat? SourceChat { get; set; }
+    public Song? Song { get; set; }
     public ICollection<PostComment> Comments { get; set; } = [];
     public ICollection<FeedLike> Likes { get; set; } = [];
 }

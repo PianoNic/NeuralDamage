@@ -201,7 +201,7 @@ public class ImageGeneratorTests
         var other = new User { ExternalId = "ext-2", Email = "bob@example.com", DisplayName = "Bob" };
         h.Db.Users.Add(other);
         await h.Db.SaveChangesAsync();
-        var handler = new CreatePostHandler(h.Db, h.Notifier, h.Queue);
+        var handler = new CreatePostHandler(h.Db, h.Notifier, h.Queue, TestMusic.Library(h.Db));
 
         var stolen = await handler.Handle(new CreatePostCommand(other.Id, "mine now", ImageId: ticket.Image.Id), default);
         var posted = await handler.Handle(new CreatePostCommand(h.User.Id, "", ImageId: ticket.Image.Id), default);
@@ -220,7 +220,7 @@ public class ImageGeneratorTests
         using var h = await FeedHarness.CreateAsync(renderer: new FakeRenderer());
         var ticket = (await h.Images!.StartAsync(new ImageAsk("a red apple", h.User.Id, null))).Value!;
         await ticket.Done;
-        var post = (await new CreatePostHandler(h.Db, h.Notifier, h.Queue).Handle(new CreatePostCommand(h.User.Id, "look", ImageId: ticket.Image.Id), default)).Value!;
+        var post = (await new CreatePostHandler(h.Db, h.Notifier, h.Queue, TestMusic.Library(h.Db)).Handle(new CreatePostCommand(h.User.Id, "look", ImageId: ticket.Image.Id), default)).Value!;
 
         await new DeletePostHandler(h.Db, AppAdmins.None, h.Notifier, h.Storage).Handle(new DeletePostCommand(h.User.Id, post.Id), default);
 

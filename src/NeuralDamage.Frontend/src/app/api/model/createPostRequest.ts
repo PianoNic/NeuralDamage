@@ -13,5 +13,7 @@ export interface CreatePostRequest {
     content: string;
     stickerId?: string | null;
     imageId?: string | null;
+    songId?: string | null;
+    musicStart?: number | null;
 }
 

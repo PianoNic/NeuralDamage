@@ -408,7 +408,7 @@ public class WebImageUseTests
         await Assert.That(gone.IsFailure).IsTrue();
 
         // It goes on the person's post like a generated picture, with its source.
-        var post = await new CreatePostHandler(h.Db, h.Notifier, h.Queue).Handle(new CreatePostCommand(h.User.Id, "", ImageId: picked.Value.Id), default);
+        var post = await new CreatePostHandler(h.Db, h.Notifier, h.Queue, TestMusic.Library(h.Db)).Handle(new CreatePostCommand(h.User.Id, "", ImageId: picked.Value.Id), default);
         await Assert.That(post.Value!.Image!.SourceUrl).IsEqualTo("https://pages.example.com/1");
     }
 

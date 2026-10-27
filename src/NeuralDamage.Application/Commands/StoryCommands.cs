@@ -10,16 +10,23 @@ using NeuralDamage.Infrastructure.Models;
 using NeuralDamage.Infrastructure.Services;
 using NeuralDamage.Infrastructure.Services.Attachments;
 using NeuralDamage.Infrastructure.Services.Feed;
+using NeuralDamage.Infrastructure.Services.Music;
 using NeuralDamage.Infrastructure.Services.Stories;
 
 namespace NeuralDamage.Application.Commands;
 
-public record CreateStoryCommand(Guid UserId, StorySpec Spec) : ICommand<Result<StoryDto>>;
+/// <param name="SongId">A song for the story to play, from <see cref="MusicStart"/> on.</param>
+public record CreateStoryCommand(Guid UserId, StorySpec Spec, Guid? SongId = null, int? MusicStart = null) : ICommand<Result<StoryDto>>;
 
-public class CreateStoryHandler(StoryPublisher publisher) : ICommandHandler<CreateStoryCommand, Result<StoryDto>>
+public class CreateStoryHandler(StoryPublisher publisher, SongLibrary songs) : ICommandHandler<CreateStoryCommand, Result<StoryDto>>
 {
-    public async ValueTask<Result<StoryDto>> Handle(CreateStoryCommand request, CancellationToken cancellationToken) =>
-        await publisher.PublishAsync(request.Spec, request.UserId, null, cancellationToken);
+    public async ValueTask<Result<StoryDto>> Handle(CreateStoryCommand request, CancellationToken cancellationToken)
+    {
+        (Guid SongId, int? Start)? music = null;
+        if (request.SongId is { } songId && (music = await songs.UseAsync(songId, request.MusicStart, cancellationToken)) is null)
+            return Result<StoryDto>.Failure("That song is gone.");
+        return await publisher.PublishAsync(request.Spec, request.UserId, null, cancellationToken, music);
+    }
 }
 
 /// <summary>The PNG a spec would become, without posting it: the editor's exact preview.</summary>

@@ -88,10 +88,10 @@ public class ComposedImageTests
         using (var png = SKBitmap.Decode(h.Storage.Generated[dto.Id]))
             await Assert.That(png.Height).IsEqualTo(1350);
 
-        var post = await new CreatePostHandler(h.Db, h.Notifier, h.Queue).Handle(new CreatePostCommand(h.User.Id, "closing time", ImageId: dto.Id), default);
+        var post = await new CreatePostHandler(h.Db, h.Notifier, h.Queue, TestMusic.Library(h.Db)).Handle(new CreatePostCommand(h.User.Id, "closing time", ImageId: dto.Id), default);
         await Assert.That(post.IsSuccess).IsTrue();
         await Assert.That(post.Value!.Image!.Kind).IsEqualTo(GeneratedImageKind.Composed);
-        var someoneElse = await new CreatePostHandler(h.Db, h.Notifier, h.Queue).Handle(new CreatePostCommand(Guid.NewGuid(), "mine now", ImageId: dto.Id), default);
+        var someoneElse = await new CreatePostHandler(h.Db, h.Notifier, h.Queue, TestMusic.Library(h.Db)).Handle(new CreatePostCommand(Guid.NewGuid(), "mine now", ImageId: dto.Id), default);
         await Assert.That(someoneElse.IsFailure).IsTrue();
     }
 

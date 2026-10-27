@@ -39,7 +39,7 @@ public sealed class FeedHarness : IDisposable
     /// <summary>The picture maker, when the harness was made with a renderer.</summary>
     public ImageGenerator? Images { get; init; }
 
-    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "vllm:free", IImageRenderer? renderer = null, ImageGenOptions? imageGen = null, FakeWeb? web = null)
+    public static async Task<FeedHarness> CreateAsync(int botCount = 2, FakeJev? jev = null, FeedOptions? feed = null, BotBehaviorOptions? behavior = null, BotClock? clock = null, TimeProvider? time = null, string? defaultModel = "vllm:free", IImageRenderer? renderer = null, ImageGenOptions? imageGen = null, FakeWeb? web = null, FakeDeezer? music = null)
     {
         var dbOptions = new DbContextOptionsBuilder<NeuralDamageDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         var db = new NeuralDamageDbContext(dbOptions);
@@ -86,7 +86,19 @@ public sealed class FeedHarness : IDisposable
             sp.GetRequiredService<NeuralDamageDbContext>(), openRouter, sp.GetRequiredService<FeedPostWriter>(),
             sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Stories.StoryPublisher>(),
             NullLogger<NeuralDamage.Infrastructure.Services.Stories.StoryWriter>.Instance, clock, sp.GetService<ImageGenerator>(),
-            sp.GetService<NeuralDamage.Infrastructure.Services.WebImages.WebImageStore>()));
+            sp.GetService<NeuralDamage.Infrastructure.Services.WebImages.WebImageStore>(),
+            sp.GetService<NeuralDamage.Infrastructure.Services.Music.SongPicker>()));
+        if (music is not null)
+        {
+            var musicOptions = Options.Create(new NeuralDamage.Infrastructure.Services.Music.MusicOptions());
+            var songStore = TestMusic.Store();
+            services.AddSingleton(songStore);
+            services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Music.SongLibrary(sp.GetRequiredService<NeuralDamageDbContext>(), music,
+                songStore, musicOptions, NullLogger<NeuralDamage.Infrastructure.Services.Music.SongLibrary>.Instance));
+            services.AddScoped(sp => new NeuralDamage.Infrastructure.Services.Music.SongPicker(music,
+                sp.GetRequiredService<NeuralDamage.Infrastructure.Services.Music.SongLibrary>(), openRouter, sp.GetRequiredService<FeedPostWriter>(),
+                musicOptions, NullLogger<NeuralDamage.Infrastructure.Services.Music.SongPicker>.Instance));
+        }
         if (web is not null)
         {
             services.AddSingleton(web.Search);

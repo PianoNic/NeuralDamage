@@ -7,6 +7,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { CommentDto, FeedActivityDto, FeedLikeDto, PostDto } from '../../core/models';
 import { FeedReplyNoticeDto } from '../../core/signalr/hub-events';
 import { SignalRService } from '../../core/signalr/signalr.service';
+import type { PickedSong } from '../music/music-picker';
 import { mergePosts, withComment, withLike, withoutComment } from './feed-model';
 
 const PAGE = 20;
@@ -121,8 +122,10 @@ export class FeedStore {
     await firstValueFrom(this.api.apiFeedSeenPost()).catch(() => undefined);
   }
 
-  async post(content: string, stickerId: string | null = null, imageId: string | null = null): Promise<void> {
-    const post = await firstValueFrom(this.api.apiFeedPostsPost({ content, stickerId, imageId }));
+  async post(content: string, stickerId: string | null = null, imageId: string | null = null, music: PickedSong | null = null): Promise<void> {
+    const post = await firstValueFrom(
+      this.api.apiFeedPostsPost({ content, stickerId, imageId, songId: music?.song.id ?? null, musicStart: music?.start ?? null }),
+    );
     this.posts.update((list) => mergePosts(list, [post]));
   }
 

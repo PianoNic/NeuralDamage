@@ -20,5 +20,7 @@ export interface AppConfigurationDto {
     version: string;
     imageGeneration: boolean;
     imageSearch: boolean;
+    music: boolean;
+    fullSongs: boolean;
 }
 

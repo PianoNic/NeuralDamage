@@ -25,6 +25,7 @@ public class NeuralDamageDbContext(DbContextOptions<NeuralDamageDbContext> optio
     public DbSet<GeneratedImage> GeneratedImages => Set<GeneratedImage>();
     public DbSet<BotMemory> BotMemories => Set<BotMemory>();
     public DbSet<BotMemoryCursor> BotMemoryCursors => Set<BotMemoryCursor>();
+    public DbSet<Song> Songs => Set<Song>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ApplyConfigurationsFromAssembly(typeof(NeuralDamageDbContext).Assembly);
 
